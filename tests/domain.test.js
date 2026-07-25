@@ -9,6 +9,7 @@ import {
   isManagedDay,
   minutesBetween,
   monthlyComparison,
+  reorderItems,
   summarizeCategories,
   summarizePeriod,
   yearlyComparison,
@@ -89,6 +90,30 @@ test('기간 통계는 총시간, 기록일수, 일평균, 대분류 합계를 �
     dailyAverageMinutes: 135,
     categoryTotals: { 논문: 180, 설교: 90 },
   });
+});
+
+test('독서 1시간 기록은 해당 월 통계에 반영된다', () => {
+  const entries = [
+    { categoryId: 'reading', durationMinutes: 60, date: '2026-07-26' },
+  ];
+  const result = summarizePeriod(entries, new Map([['reading', '독서']]), '2026-07-01', '2026-07-31');
+  assert.deepEqual(result, {
+    totalMinutes: 60,
+    recordDays: 1,
+    dailyAverageMinutes: 60,
+    categoryTotals: { 독서: 60 },
+  });
+});
+
+test('대분류 순서는 저장 전에 화면에서만 위아래로 바꿀 수 있다', () => {
+  const categories = [
+    { id: 'thesis', name: '논문' },
+    { id: 'reading', name: '독서' },
+    { id: 'exercise', name: '운동' },
+  ];
+  assert.deepEqual(reorderItems(categories, 'reading', -1).map((item) => item.id), ['reading', 'thesis', 'exercise']);
+  assert.deepEqual(reorderItems(categories, 'reading', 1).map((item) => item.id), ['thesis', 'exercise', 'reading']);
+  assert.deepEqual(categories.map((item) => item.id), ['thesis', 'reading', 'exercise']);
 });
 
 test('월별과 연도별 비교를 집계한다', () => {

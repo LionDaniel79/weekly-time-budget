@@ -34,6 +34,15 @@ export function getYearRange(year) {
   return { start: `${year}-01-01`, end: `${year}-12-31` };
 }
 
+export function reorderItems(items, itemId, direction) {
+  const reordered = [...items];
+  const currentIndex = reordered.findIndex((item) => item.id === itemId);
+  const targetIndex = currentIndex + Number(direction);
+  if (currentIndex < 0 || targetIndex < 0 || targetIndex >= reordered.length) return reordered;
+  [reordered[currentIndex], reordered[targetIndex]] = [reordered[targetIndex], reordered[currentIndex]];
+  return reordered;
+}
+
 export function calculateAchievement(budgetMinutes, actualMinutes) {
   const percentage = budgetMinutes > 0 ? Math.round((actualMinutes / budgetMinutes) * 100) : 0;
   const differenceMinutes = actualMinutes - budgetMinutes;
