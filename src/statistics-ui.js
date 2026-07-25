@@ -49,18 +49,18 @@ function injectStyles() {
     .stat-card-note{font-size:.78rem;color:#77817d;margin-top:7px}
     .statistics-card{margin-top:18px}
     .statistics-explanation{margin:0 0 14px;color:#68736e;font-size:.9rem;line-height:1.6}
-    .achievement-cell{min-width:210px}
-    .achievement-line{display:grid;grid-template-columns:minmax(110px,1fr) 58px;align-items:center;gap:9px}
+    .achievement-cell{min-width:160px}
+    .achievement-line{display:grid;grid-template-columns:minmax(80px,1fr) 52px;align-items:center;gap:7px}
     .stat-bar-track{height:12px;background:#e7ebe5;border-radius:999px;overflow:hidden}
     .stat-bar-fill{height:100%;background:#2b7665;border-radius:inherit;min-width:0}
     .stat-bar-fill.over{background:#a15f31}
     .stat-bar-fill.unbudgeted{background:#a8afa9}
     .difference.remaining{color:#64716c}.difference.exceeded{color:#9a4d2f}.difference.unbudgeted{color:#876a28}
-    .statistics-table-wrap{overflow-x:auto;margin-top:14px}
-    .statistics-table{width:100%;border-collapse:collapse;min-width:760px}
-    .statistics-table th,.statistics-table td{padding:12px 10px;border-bottom:1px solid #e1e4de;text-align:right;white-space:nowrap;vertical-align:middle}
-    .statistics-table th:first-child,.statistics-table td:first-child{text-align:left;position:sticky;left:0;background:#fffdf7;z-index:1}
-    .statistics-table thead th{font-size:.82rem;color:#68736e;background:#f3f3ed}
+    .statistics-table-wrap{overflow-x:auto;margin-top:14px;max-width:100%}
+    .statistics-table{width:100%;border-collapse:collapse;min-width:620px;table-layout:auto}
+    .statistics-table th,.statistics-table td{padding:9px 7px;border-bottom:1px solid #e1e4de;text-align:right;white-space:normal;vertical-align:middle;font-size:.9rem}
+    .statistics-table th:first-child,.statistics-table td:first-child{text-align:left;position:sticky;left:0;min-width:88px;background:#fffdf7;z-index:1}
+    .statistics-table thead th{font-size:.8rem;color:#68736e;background:#f3f3ed}
     .statistics-table thead th:first-child{background:#f3f3ed}
     .comparison-list{display:grid;gap:18px;margin-top:14px}
     .comparison-row{display:grid;grid-template-columns:64px minmax(220px,1fr) minmax(160px,auto);gap:14px;align-items:center}
@@ -70,14 +70,37 @@ function injectStyles() {
     .comparison-bar-line.budget .stat-bar-fill{background:#8aa49c}
     .comparison-values{display:grid;gap:3px;text-align:right;font-size:.85rem}
     .comparison-change{font-size:.78rem;color:#75827d}.comparison-change.positive{color:#24705f}.comparison-change.negative{color:#9a3c2f}
-    .matrix-cell{display:grid;gap:2px;min-width:145px}.matrix-cell small{color:#75827d}.matrix-cell strong{font-size:.86rem}
+    .matrix-cell{display:grid;gap:2px;min-width:118px}.matrix-cell small{color:#75827d}.matrix-cell strong{font-size:.86rem}
     .empty-statistics{padding:34px 10px;text-align:center;color:#78817d}
     .statistics-note{margin-top:14px;padding:12px 14px;border-radius:12px;background:#f2f3ed;color:#65706b;font-size:.84rem;line-height:1.55}
     @media(max-width:800px){
+      .statistics-tabs{gap:6px}
+      .statistics-tabs .tab-button{flex:1 1 calc(50% - 6px);padding:9px 8px}
       .statistics-controls>*{flex:1;min-width:120px}
+      .statistics-summary{grid-template-columns:1fr 1fr;gap:10px}
+      .statistics-summary .card{padding:14px}
+      .statistics-card{padding:16px}
+      .statistics-explanation,.statistics-note{font-size:.82rem}
       .comparison-row{grid-template-columns:1fr}
       .comparison-values{text-align:left}
-      .statistics-table{min-width:700px}
+      .statistics-table-wrap{overflow-x:visible;margin-top:12px}
+      .statistics-table{display:block;width:100%;min-width:0}
+      .statistics-table thead{display:none}
+      .statistics-table tbody{display:grid;gap:12px;width:100%}
+      .statistics-table tr{display:grid;width:100%;padding:14px;border:1px solid #dde3de;border-radius:14px;background:#fffdf7;box-sizing:border-box}
+      .statistics-table td,.statistics-table td:first-child{position:static;display:grid;grid-template-columns:minmax(92px,38%) minmax(0,1fr);gap:10px;align-items:center;width:100%;min-width:0;padding:8px 0;border:0;border-bottom:1px solid #edf0ec;text-align:right;white-space:normal;font-size:.875rem;background:transparent}
+      .statistics-table td:last-child{border-bottom:0}
+      .statistics-table td::before{content:attr(data-label);color:#6d7873;font-size:.8rem;font-weight:700;text-align:left}
+      .statistics-table .statistics-card-title{display:block;padding:0 0 10px;margin-bottom:2px;border-bottom:1px solid #dfe4df;text-align:left;font-size:1rem}
+      .statistics-table .statistics-card-title::before{display:none}
+      .achievement-cell{min-width:0}
+      .achievement-line{grid-template-columns:minmax(0,1fr) 52px;width:100%}
+      .matrix-cell{min-width:0;text-align:right;white-space:normal}
+      .statistics-matrix-table td:not(.statistics-card-title){align-items:start}
+      .statistics-matrix-total{margin-top:4px;padding-top:11px!important;border-top:1px solid #d7ddd8!important}
+    }
+    @media(max-width:360px){
+      .statistics-summary{grid-template-columns:1fr}
     }
   `;
   document.head.append(style);
@@ -237,11 +260,11 @@ function categoryAchievementTable(summary, title) {
       ${rows.length ? `<div class="statistics-table-wrap"><table class="statistics-table">
         <thead><tr><th>대분류</th><th>기간 예산</th><th>실제 기록</th><th>달성률</th><th>차이</th></tr></thead>
         <tbody>${rows.map((row) => `<tr>
-          <td><strong>${escapeHtml(row.name)}</strong></td>
-          <td>${formatMinutes(row.budgetMinutes)}</td>
-          <td>${formatMinutes(row.actualMinutes)}</td>
-          <td class="achievement-cell"><div class="achievement-line"><div class="stat-bar-track"><div class="stat-bar-fill ${row.status === 'exceeded' ? 'over' : row.status === 'unbudgeted' ? 'unbudgeted' : ''}" style="width:${achievementWidth(row)}%"></div></div><strong>${achievementText(row)}</strong></div></td>
-          <td><span class="difference ${differenceClass(row)}">${differenceText(row)}</span></td>
+          <td data-label="대분류" class="statistics-card-title"><strong>${escapeHtml(row.name)}</strong></td>
+          <td data-label="기간 예산">${formatMinutes(row.budgetMinutes)}</td>
+          <td data-label="실제 기록">${formatMinutes(row.actualMinutes)}</td>
+          <td data-label="달성률" class="achievement-cell"><div class="achievement-line"><div class="stat-bar-track"><div class="stat-bar-fill ${row.status === 'exceeded' ? 'over' : row.status === 'unbudgeted' ? 'unbudgeted' : ''}" style="width:${achievementWidth(row)}%"></div></div><strong>${achievementText(row)}</strong></div></td>
+          <td data-label="차이"><span class="difference ${differenceClass(row)}">${differenceText(row)}</span></td>
         </tr>`).join('')}</tbody>
       </table></div>` : '<div class="empty-statistics">해당 기간에 표시할 대분류가 없습니다.</div>'}
       <div class="statistics-note">월·연도 경계에 걸친 주간 예산은 해당 기간에 포함되는 날짜 수만큼 7일로 나누어 계산합니다. 별도의 주간 예산이 저장되지 않은 주는 대분류의 기본 예산을 사용합니다.</div>
@@ -276,18 +299,23 @@ function comparisonChart(items, labelKey, labelFormatter, changeLabel) {
     }).join('')}</div></div>`;
 }
 
+function comparisonChangeCell(item, changeLabel) {
+  if (changeLabel === '전월 대비') return `<td data-label="전월 대비">${formatChange(item)}</td>`;
+  return `<td data-label="전년 대비">${formatChange(item)}</td>`;
+}
+
 function comparisonDetailTable(items, labelKey, labelFormatter, changeLabel) {
   return `<div class="card statistics-card"><div class="section-title"><h2>기간별 상세 비교</h2></div>
     <div class="statistics-table-wrap"><table class="statistics-table">
       <thead><tr><th>기간</th><th>기간 예산</th><th>실제 기록</th><th>달성률</th><th>기록 일수</th><th>하루 평균</th><th>${changeLabel}</th></tr></thead>
       <tbody>${items.map((item) => `<tr>
-        <td><strong>${labelFormatter(item[labelKey])}</strong></td>
-        <td>${formatMinutes(item.totalBudgetMinutes)}</td>
-        <td>${formatMinutes(item.totalActualMinutes)}</td>
-        <td>${overallAchievementText(item)}</td>
-        <td>${item.recordDays}일</td>
-        <td>${formatMinutes(item.dailyAverageMinutes)}</td>
-        <td>${formatChange(item)}</td>
+        <td data-label="기간" class="statistics-card-title"><strong>${labelFormatter(item[labelKey])}</strong></td>
+        <td data-label="기간 예산">${formatMinutes(item.totalBudgetMinutes)}</td>
+        <td data-label="실제 기록">${formatMinutes(item.totalActualMinutes)}</td>
+        <td data-label="달성률">${overallAchievementText(item)}</td>
+        <td data-label="기록 일수">${item.recordDays}일</td>
+        <td data-label="하루 평균">${formatMinutes(item.dailyAverageMinutes)}</td>
+        ${comparisonChangeCell(item, changeLabel)}
       </tr>`).join('')}</tbody>
     </table></div></div>`;
 }
@@ -303,14 +331,15 @@ function categoryBudgetMatrix(items, labelKey, labelFormatter, title) {
   if (!orderedIds.length) return `<div class="card statistics-card"><div class="section-title"><h2>${title}</h2></div><div class="empty-statistics">비교할 대분류가 없습니다.</div></div>`;
   return `<div class="card statistics-card"><div class="section-title"><h2>${title}</h2></div>
     <p class="statistics-explanation">각 칸은 실제 기록 / 기간 예산과 달성률을 표시합니다.</p>
-    <div class="statistics-table-wrap"><table class="statistics-table">
+    <div class="statistics-table-wrap"><table class="statistics-table statistics-matrix-table">
       <thead><tr><th>기간</th>${orderedIds.map((id) => `<th>${escapeHtml(categoryById.get(id)?.name || '삭제된 대분류')}</th>`).join('')}<th>전체</th></tr></thead>
       <tbody>${items.map((item) => {
         const byId = new Map(item.categorySummaries.map((category) => [category.id, category]));
-        return `<tr><td><strong>${labelFormatter(item[labelKey])}</strong></td>${orderedIds.map((id) => {
+        return `<tr><td data-label="기간" class="statistics-card-title"><strong>${labelFormatter(item[labelKey])}</strong></td>${orderedIds.map((id) => {
           const category = byId.get(id) || { budgetMinutes: 0, actualMinutes: 0, percentage: 0, hasBudget: false };
-          return `<td><div class="matrix-cell"><strong>${formatMinutes(category.actualMinutes)} / ${formatMinutes(category.budgetMinutes)}</strong><small>${achievementText(category)}</small></div></td>`;
-        }).join('')}<td><div class="matrix-cell"><strong>${formatMinutes(item.totalActualMinutes)} / ${formatMinutes(item.totalBudgetMinutes)}</strong><small>${overallAchievementText(item)}</small></div></td></tr>`;
+          const categoryName = escapeHtml(categoryById.get(id)?.name || '삭제된 대분류');
+          return `<td data-label="${categoryName}"><div class="matrix-cell"><strong>${formatMinutes(category.actualMinutes)} / ${formatMinutes(category.budgetMinutes)}</strong><small>${achievementText(category)}</small></div></td>`;
+        }).join('')}<td data-label="전체" class="statistics-matrix-total"><div class="matrix-cell"><strong>${formatMinutes(item.totalActualMinutes)} / ${formatMinutes(item.totalBudgetMinutes)}</strong><small>${overallAchievementText(item)}</small></div></td></tr>`;
       }).join('')}</tbody>
     </table></div></div>`;
 }
