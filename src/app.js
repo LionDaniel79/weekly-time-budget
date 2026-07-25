@@ -69,7 +69,7 @@ async function initFirebase() {
   const authModule = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js');
   const storeModule = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js');
 
-  const app = appModule.initializeApp(firebaseConfig);
+  const app = appModule.getApps().length ? appModule.getApp() : appModule.initializeApp(firebaseConfig);
   auth = authModule.getAuth(app);
   db = storeModule.getFirestore(app);
   firebase = { ...authModule, ...storeModule };
@@ -167,7 +167,7 @@ async function deleteEntry(id) {
 
 function renderAll() {
   const range = getWeekRange();
-  $('#week-label').textContent = `${range.start} — ${range.end} · 월~토`;
+  $('#week-label').textContent = `${range.start} — ${range.end} · 월~주일`;
   renderDashboard();
   renderRecord();
   renderBudget();
@@ -192,12 +192,12 @@ function renderDashboard() {
       <article class="card">
         <p class="muted">이번 주 예산</p>
         <div class="metric">${formatMinutes(totalBudget)}</div>
-        <p class="muted">월요일부터 토요일까지</p>
+        <p class="muted">월요일부터 주일까지</p>
       </article>
       <article class="card">
         <p class="muted">실제 기록</p>
         <div class="metric">${formatMinutes(totalActual)}</div>
-        <p class="muted">주일 기록은 달성률에서 제외</p>
+        <p class="muted">월요일부터 주일까지 모두 포함</p>
       </article>
     </div>
     <div class="card" style="margin-top:18px">
@@ -520,8 +520,17 @@ document.querySelectorAll('.nav-button').forEach((button) => {
 });
 $('#mobile-menu').onclick = () => $('.sidebar').classList.toggle('open');
 $('#google-login').onclick = async () => {
-  const provider = new firebase.GoogleAuthProvider();
-  await firebase.signInWithPopup(auth, provider);
+  if (!firebase || !auth) {
+    alert('로그인 기능을 준비하는 중입니다. 잠시 후 다시 눌러주세요.');
+    return;
+  }
+  try {
+    const provider = new firebase.GoogleAuthProvider();
+    await firebase.signInWithPopup(auth, provider);
+  } catch (error) {
+    console.error(error);
+    alert(`Google 로그인에 실패했습니다: ${error.message}`);
+  }
 };
 $('#logout').onclick = () => firebase.signOut(auth);
 
