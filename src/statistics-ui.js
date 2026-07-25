@@ -73,20 +73,31 @@ function restoreSelect(selector, storageKey) {
   const saved = localStorage.getItem(storageKey);
   if (!saved) return;
   const option = [...select.options].find((item) => item.value === saved);
-  if (option) select.value = saved;
-  else localStorage.removeItem(storageKey);
+  if (option && select.value !== saved) select.value = saved;
+  else if (!option) localStorage.removeItem(storageKey);
+}
+
+function setTextIfChanged(node, text) {
+  if (node && node.textContent !== text) node.textContent = text;
+}
+
+function replaceTextIfChanged(node, replacements) {
+  if (!node) return;
+  const current = node.textContent;
+  const next = replacements.reduce((text, [from, to]) => text.replace(from, to), current);
+  if (next !== current) node.textContent = next;
 }
 
 function patchSundayCopy() {
   const loginText = document.querySelector('#login-view .login-card > p:not(.eyebrow):not(.warning)');
-  if (loginText) loginText.textContent = '월요일부터 주일까지 실제 사용 시간을 기록하고, 삶의 중요한 영역에 시간을 충분히 배정했는지 확인합니다.';
-  const weekLabel = document.querySelector('#week-label');
-  if (weekLabel) weekLabel.textContent = weekLabel.textContent.replace('월~토', '월~주일');
+  setTextIfChanged(loginText, '월요일부터 주일까지 실제 사용 시간을 기록하고, 삶의 중요한 영역에 시간을 충분히 배정했는지 확인합니다.');
+  replaceTextIfChanged(document.querySelector('#week-label'), [['월~토', '월~주일']]);
   document.querySelectorAll('.muted').forEach((node) => {
-    node.textContent = node.textContent
-      .replace('월요일부터 토요일까지', '월요일부터 주일까지')
-      .replace('예산은 월요일부터 토요일까지만 적용됩니다.', '예산은 월요일부터 주일까지 적용됩니다.')
-      .replace('주일 기록은 달성률에서 제외', '월요일부터 주일까지 모두 포함');
+    replaceTextIfChanged(node, [
+      ['월요일부터 토요일까지', '월요일부터 주일까지'],
+      ['예산은 월요일부터 토요일까지만 적용됩니다.', '예산은 월요일부터 주일까지 적용됩니다.'],
+      ['주일 기록은 달성률에서 제외', '월요일부터 주일까지 모두 포함'],
+    ]);
   });
 }
 
