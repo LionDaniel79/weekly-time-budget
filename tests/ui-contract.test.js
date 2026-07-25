@@ -1,8 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
+
+test('통계 모듈은 브라우저에서 읽을 수 있는 올바른 자바스크립트 문법이다', () => {
+  const path = fileURLToPath(new URL('../src/statistics-ui.js', import.meta.url));
+  const result = spawnSync(process.execPath, ['--check', path], { encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+});
 
 test('통계 화면은 기록 내역과 동시에 보이지 않도록 독립 전환된다', async () => {
   const statisticsSource = await read('src/statistics-ui.js');
