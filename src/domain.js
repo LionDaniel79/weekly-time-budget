@@ -100,6 +100,69 @@ export function summarizePeriod(entries, categoryNames, start, end) {
   };
 }
 
+export function categoryBreakdown(summary) {
+  const total = Number(summary?.totalMinutes) || 0;
+  return Object.entries(summary?.categoryTotals || {})
+    .map(([name, minutes]) => ({
+      name,
+      minutes: Number(minutes) || 0,
+      percentage: total ? Math.round((Number(minutes) || 0) / total * 100) : 0,
+    }))
+    .sort((a, b) => b.minutes - a.minutes || a.name.localeCompare(b.name, 'ko'));
+}
+
+export function calculatePeriodChange(currentMinutes, previousMinutes) {
+  const current = Number(currentMinutes) || 0;
+  const previous = Number(previousMinutes) || 0;
+  const minutes = current - previous;
+  if (!previous) {
+    return { minutes, percentage: current ? null : 0 };
+  }
+  return { minutes, percentage: Math.round(minutes / previous * 100) };
+}
+
+export function detailedMonthlyComparison(entries, categoryNames, year) {
+  const rows = Array.from({ length: 12 }, (_, index) => {
+    const month = index + 1;
+    const range = getMonthRange(year, month);
+    return { month, ...summarizePeriod(entries, categoryNames, range.start, range.end) };
+  });
+  return rows.map((row, index) => {
+    const change = index ? calculatePeriodChange(row.totalMinutes, rows[index - 1].totalMinutes) : { minutes: null, percentage: null };
+    return {
+      ...row,
+      changeMinutes: change.minutes,
+      changePercentage: change.percentage,
+    };
+  });
+}
+
+export function detailedYearlyComparison(entries, categoryNames) {
+  const years = [...new Set(entries
+    .map((entry) => Number(String(entry.date || '').slice(0, 4)))
+    .filter(Number.isFinite))]
+    .sort((a, b) => a - b);
+  const rows = years.map((year) => {
+    const range = getYearRange(year);
+    return { year, ...summarizePeriod(entries, categoryNames, range.start, range.end) };
+  });
+  return rows.map((row, index) => {
+    const change = index ? calculatePeriodChange(row.totalMinutes, rows[index - 1].totalMinutes) : { minutes: null, percentage: null };
+    return {
+      ...row,
+      changeMinutes: change.minutes,
+      changePercentage: change.percentage,
+    };
+  });
+}
+
+export function calculateYearMonthlyAverage(totalMinutes, year, referenceDate = new Date()) {
+  const selectedYear = Number(year);
+  const currentYear = referenceDate.getFullYear();
+  const divisor = selectedYear === currentYear ? referenceDate.getMonth() + 1 : 12;
+  return divisor ? Math.round((Number(totalMinutes) || 0) / divisor) : 0;
+}
+
 export function monthlyComparison(entries, year) {
   return Array.from({ length: 12 }, (_, index) => {
     const month = index + 1;
