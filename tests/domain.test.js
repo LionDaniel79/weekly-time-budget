@@ -2,6 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   calculateAchievement,
+  calculatePeriodChange,
+  calculateYearMonthlyAverage,
+  categoryBreakdown,
+  detailedMonthlyComparison,
+  detailedYearlyComparison,
   getBudgetWeekKey,
   getMonthRange,
   getWeekRange,
@@ -90,6 +95,10 @@ test('기간 통계는 총시간, 기록일수, 일평균, 대분류 합계를 �
     dailyAverageMinutes: 135,
     categoryTotals: { 논문: 180, 설교: 90 },
   });
+  assert.deepEqual(categoryBreakdown(result), [
+    { name: '논문', minutes: 180, percentage: 67 },
+    { name: '설교', minutes: 90, percentage: 33 },
+  ]);
 });
 
 test('독서 1시간 기록은 해당 월 통계에 반영된다', () => {
@@ -116,7 +125,76 @@ test('대분류 순서는 저장 전에 화면에서만 위아래로 바꿀 수 
   assert.deepEqual(categories.map((item) => item.id), ['thesis', 'reading', 'exercise']);
 });
 
-test('월별과 연도별 비교를 집계한다', () => {
+test('기간 증감은 시간과 비율을 함께 계산한다', () => {
+  assert.deepEqual(calculatePeriodChange(600, 480), { minutes: 120, percentage: 25 });
+  assert.deepEqual(calculatePeriodChange(420, 600), { minutes: -180, percentage: -30 });
+  assert.deepEqual(calculatePeriodChange(60, 0), { minutes: 60, percentage: null });
+});
+
+test('월간 비교는 12개월의 총시간, 기록일수, 일평균, 대분류 합계와 전월 증감을 계산한다', () => {
+  const entries = [
+    { categoryId: 'reading', durationMinutes: 60, date: '2026-01-02' },
+    { categoryId: 'reading', durationMinutes: 60, date: '2026-01-03' },
+    { categoryId: 'sermon', durationMinutes: 180, date: '2026-02-01' },
+  ];
+  const result = detailedMonthlyComparison(entries, new Map([['reading', '독서'], ['sermon', '설교']]), 2026);
+  assert.equal(result.length, 12);
+  assert.deepEqual(result[0], {
+    month: 1,
+    totalMinutes: 120,
+    recordDays: 2,
+    dailyAverageMinutes: 60,
+    categoryTotals: { 독서: 120 },
+    changeMinutes: null,
+    changePercentage: null,
+  });
+  assert.deepEqual(result[1], {
+    month: 2,
+    totalMinutes: 180,
+    recordDays: 1,
+    dailyAverageMinutes: 180,
+    categoryTotals: { 설교: 180 },
+    changeMinutes: 60,
+    changePercentage: 50,
+  });
+  assert.equal(result[11].totalMinutes, 0);
+});
+
+test('연도별 비교는 총시간, 기록일수, 일평균, 대분류 합계와 전년 증감을 계산한다', () => {
+  const entries = [
+    { categoryId: 'reading', durationMinutes: 120, date: '2025-12-31' },
+    { categoryId: 'reading', durationMinutes: 120, date: '2026-01-01' },
+    { categoryId: 'sermon', durationMinutes: 120, date: '2026-01-02' },
+  ];
+  assert.deepEqual(detailedYearlyComparison(entries, new Map([['reading', '독서'], ['sermon', '설교']])), [
+    {
+      year: 2025,
+      totalMinutes: 120,
+      recordDays: 1,
+      dailyAverageMinutes: 120,
+      categoryTotals: { 독서: 120 },
+      changeMinutes: null,
+      changePercentage: null,
+    },
+    {
+      year: 2026,
+      totalMinutes: 240,
+      recordDays: 2,
+      dailyAverageMinutes: 120,
+      categoryTotals: { 독서: 120, 설교: 120 },
+      changeMinutes: 120,
+      changePercentage: 100,
+    },
+  ]);
+});
+
+test('연간 월평균은 현재 연도는 경과 월수, 과거 연도는 12개월로 나눈다', () => {
+  const reference = new Date('2026-07-26T12:00:00+09:00');
+  assert.equal(calculateYearMonthlyAverage(700, 2026, reference), 100);
+  assert.equal(calculateYearMonthlyAverage(1200, 2025, reference), 100);
+});
+
+test('기존 월별과 연도별 총합 비교도 유지한다', () => {
   const entries = [
     { durationMinutes: 60, date: '2025-12-31' },
     { durationMinutes: 120, date: '2026-01-01' },
