@@ -1,31 +1,34 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
-import { detailedMonthlyBudgetComparison } from '../src/domain.js';
+import { fileURLToPath } from 'node:url';
+import { visibleComparisonMonthCount } from '../src/statistics-period.js';
 
-const categories = [{ id: 'reading', name: '독서', defaultBudgetMinutes: 420 }];
 const referenceDate = new Date('2026-07-26T12:00:00+09:00');
 
-test('현재 연도의 월간 비교는 현재 월까지만 계산한다', () => {
-  const result = detailedMonthlyBudgetComparison([], categories, [], 2026, referenceDate);
-  assert.equal(result.length, 7);
-  assert.deepEqual(result.map((item) => item.month), [1, 2, 3, 4, 5, 6, 7]);
-  assert.equal(result.some((item) => item.month >= 8), false);
+test('현재 연도의 월간 비교는 현재 월까지만 표시한다', () => {
+  assert.equal(visibleComparisonMonthCount(2026, referenceDate), 7);
 });
 
-test('과거 연도의 월간 비교는 12개월 전체를 계산한다', () => {
-  const result = detailedMonthlyBudgetComparison([], categories, [], 2025, referenceDate);
-  assert.equal(result.length, 12);
-  assert.equal(result.at(-1).month, 12);
+test('과거 연도의 월간 비교는 12개월 전체를 표시한다', () => {
+  assert.equal(visibleComparisonMonthCount(2025, referenceDate), 12);
 });
 
-test('미래 연도의 월간 비교는 아직 통계에 포함하지 않는다', () => {
-  const result = detailedMonthlyBudgetComparison([], categories, [], 2027, referenceDate);
-  assert.deepEqual(result, []);
+test('미래 연도의 월간 비교는 아직 표시하지 않는다', () => {
+  assert.equal(visibleComparisonMonthCount(2027, referenceDate), 0);
 });
 
-test('월간 비교 제목은 현재 연도에 12월을 고정 표시하지 않는다', async () => {
-  const source = await readFile(new URL('../src/statistics-ui.js', import.meta.url), 'utf8');
-  assert.doesNotMatch(source, /1월~12월 비교/);
-  assert.match(source, /monthlyComparisonLastMonth/);
+test('현재 월 필터 모듈은 월간 비교의 미래 월 행을 제거하고 제목을 동적으로 바꾼다', async () => {
+  const [indexHtml, source] = await Promise.all([
+    readFile(new URL('../index.html', import.meta.url), 'utf8'),
+    readFile(new URL('../src/current-month-statistics.js', import.meta.url), 'utf8'),
+  ]);
+  assert.match(indexHtml, /current-month-statistics\.js/);
+  assert.match(source, /visibleComparisonMonthCount/);
+  assert.match(source, /remove\(\)/);
+  assert.match(source, /1월~\$\{lastMonth\}월 비교/);
+  const path = fileURLToPath(new URL('../src/current-month-statistics.js', import.meta.url));
+  const result = spawnSync(process.execPath, ['--check', path], { encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
 });
