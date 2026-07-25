@@ -1,13 +1,13 @@
 import { firebaseConfig } from '../firebase-config.js';
 import {
   calculateYearMonthlyAverage,
-  categoryBreakdown,
-  detailedMonthlyComparison,
-  detailedYearlyComparison,
+  detailedMonthlyBudgetComparison,
+  detailedYearlyBudgetComparison,
   formatMinutes,
   getMonthRange,
+  getWeekRange,
   getYearRange,
-  summarizePeriod,
+  summarizeBudgetPeriod,
 } from './domain.js';
 
 const appModule = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js');
@@ -27,6 +27,7 @@ const statisticsState = {
   entries: [],
   activeCategories: [],
   archivedCategories: [],
+  weeklyBudgets: [],
 };
 let renderingStatistics = false;
 let patchScheduled = false;
@@ -44,28 +45,40 @@ function injectStyles() {
     .statistics-controls{display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin-bottom:18px}
     .statistics-controls label{display:grid;gap:6px;font-weight:700}
     .statistics-controls select{border:1px solid #cdd5d0;border-radius:12px;padding:10px 12px;background:#fff;font:inherit}
-    .statistics-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-bottom:18px}
-    .statistics-summary.yearly{grid-template-columns:repeat(4,minmax(0,1fr))}
+    .statistics-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:18px}
     .stat-card-note{font-size:.78rem;color:#77817d;margin-top:7px}
-    .stat-bar-list{display:grid;gap:14px}
-    .stat-bar-row{display:grid;grid-template-columns:minmax(90px,.6fr) minmax(170px,2fr) minmax(150px,auto);gap:12px;align-items:center}
-    .stat-bar-track{height:14px;background:#e7ebe5;border-radius:999px;overflow:hidden}
-    .stat-bar-fill{height:100%;background:#2b7665;border-radius:inherit;min-width:0}
-    .comparison-change{font-size:.82rem;color:#75827d;margin-left:8px;white-space:nowrap}
-    .comparison-change.positive{color:#24705f}.comparison-change.negative{color:#9a3c2f}
     .statistics-card{margin-top:18px}
+    .statistics-explanation{margin:0 0 14px;color:#68736e;font-size:.9rem;line-height:1.6}
+    .achievement-cell{min-width:210px}
+    .achievement-line{display:grid;grid-template-columns:minmax(110px,1fr) 58px;align-items:center;gap:9px}
+    .stat-bar-track{height:12px;background:#e7ebe5;border-radius:999px;overflow:hidden}
+    .stat-bar-fill{height:100%;background:#2b7665;border-radius:inherit;min-width:0}
+    .stat-bar-fill.over{background:#a15f31}
+    .stat-bar-fill.unbudgeted{background:#a8afa9}
+    .difference.remaining{color:#64716c}.difference.exceeded{color:#9a4d2f}.difference.unbudgeted{color:#876a28}
     .statistics-table-wrap{overflow-x:auto;margin-top:14px}
-    .statistics-table{width:100%;border-collapse:collapse;min-width:650px}
-    .statistics-table th,.statistics-table td{padding:12px 10px;border-bottom:1px solid #e1e4de;text-align:right;white-space:nowrap}
+    .statistics-table{width:100%;border-collapse:collapse;min-width:760px}
+    .statistics-table th,.statistics-table td{padding:12px 10px;border-bottom:1px solid #e1e4de;text-align:right;white-space:nowrap;vertical-align:middle}
     .statistics-table th:first-child,.statistics-table td:first-child{text-align:left;position:sticky;left:0;background:#fffdf7;z-index:1}
     .statistics-table thead th{font-size:.82rem;color:#68736e;background:#f3f3ed}
     .statistics-table thead th:first-child{background:#f3f3ed}
-    .category-share-cell{min-width:190px}
-    .category-share{display:grid;grid-template-columns:minmax(100px,1fr) 48px;align-items:center;gap:8px}
-    .category-share .stat-bar-track{height:10px}
+    .comparison-list{display:grid;gap:18px;margin-top:14px}
+    .comparison-row{display:grid;grid-template-columns:64px minmax(220px,1fr) minmax(160px,auto);gap:14px;align-items:center}
+    .comparison-bars{display:grid;gap:7px}
+    .comparison-bar-line{display:grid;grid-template-columns:42px 1fr;gap:8px;align-items:center;font-size:.8rem;color:#68736e}
+    .comparison-bar-line.actual .stat-bar-fill{background:#2b7665}
+    .comparison-bar-line.budget .stat-bar-fill{background:#8aa49c}
+    .comparison-values{display:grid;gap:3px;text-align:right;font-size:.85rem}
+    .comparison-change{font-size:.78rem;color:#75827d}.comparison-change.positive{color:#24705f}.comparison-change.negative{color:#9a3c2f}
+    .matrix-cell{display:grid;gap:2px;min-width:145px}.matrix-cell small{color:#75827d}.matrix-cell strong{font-size:.86rem}
     .empty-statistics{padding:34px 10px;text-align:center;color:#78817d}
-    @media(max-width:1000px){.statistics-summary.yearly{grid-template-columns:repeat(2,minmax(0,1fr))}}
-    @media(max-width:800px){.statistics-summary,.statistics-summary.yearly{grid-template-columns:1fr}.stat-bar-row{grid-template-columns:1fr}.statistics-controls>*{flex:1;min-width:120px}}
+    .statistics-note{margin-top:14px;padding:12px 14px;border-radius:12px;background:#f2f3ed;color:#65706b;font-size:.84rem;line-height:1.55}
+    @media(max-width:800px){
+      .statistics-controls>*{flex:1;min-width:120px}
+      .comparison-row{grid-template-columns:1fr}
+      .comparison-values{text-align:left}
+      .statistics-table{min-width:700px}
+    }
   `;
   document.head.append(style);
 }
@@ -103,6 +116,24 @@ function patchSundayCopy() {
   if (weekLabel?.textContent.includes('월~토')) weekLabel.textContent = weekLabel.textContent.replace('월~토', '월~주일');
 }
 
+function statisticsHeaderText() {
+  if (statisticsState.mode === 'monthly') return `${statisticsState.year}년 ${statisticsState.month}월 · 예산 대비 통계`;
+  if (statisticsState.mode === 'yearly') return `${statisticsState.year}년 · 예산 대비 통계`;
+  if (statisticsState.mode === 'monthly-comparison') return `${statisticsState.year}년 1월~12월 비교 · 예산 대비 통계`;
+  return '전체 연도 비교 · 예산 대비 통계';
+}
+
+function updateStatisticsHeader() {
+  const label = document.querySelector('#week-label');
+  if (label) label.textContent = statisticsHeaderText();
+}
+
+function restoreWeeklyHeader() {
+  const range = getWeekRange();
+  const label = document.querySelector('#week-label');
+  if (label) label.textContent = `${range.start} — ${range.end} · 월~주일`;
+}
+
 function showStatisticsView(button) {
   document.querySelectorAll('.view').forEach((view) => view.classList.add('hidden'));
   document.querySelector('#statistics-view')?.classList.remove('hidden');
@@ -111,6 +142,7 @@ function showStatisticsView(button) {
   const title = document.querySelector('#page-title');
   if (title) title.textContent = '통계';
   document.querySelector('.sidebar')?.classList.remove('open');
+  updateStatisticsHeader();
   renderStatistics();
 }
 
@@ -135,67 +167,84 @@ function ensureStatisticsNavigation() {
   }
 }
 
-// 기록 내역을 포함한 다른 메뉴를 누르면 통계 화면은 반드시 사라진다.
+// 기록 내역을 포함한 다른 메뉴에서는 통계 내용과 통계 기간 제목을 모두 숨긴다.
 document.addEventListener('click', (event) => {
   const navButton = event.target.closest('.nav-button');
   if (!navButton || navButton.dataset.view === 'statistics') return;
   document.querySelector('#statistics-view')?.classList.add('hidden');
+  restoreWeeklyHeader();
 }, true);
 
-function categoryNameMap() {
+function allCategories() {
   const map = new Map();
-  statisticsState.archivedCategories.forEach((category) => map.set(category.id, category.name));
-  statisticsState.activeCategories.forEach((category) => map.set(category.id, category.name));
-  return map;
+  statisticsState.archivedCategories.forEach((category) => map.set(category.id, category));
+  statisticsState.activeCategories.forEach((category) => map.set(category.id, category));
+  return [...map.values()];
 }
 
-function orderedNames(names) {
-  const available = new Set(names);
-  const ordered = [];
-  const append = (category) => {
-    if (available.has(category.name) && !ordered.includes(category.name)) ordered.push(category.name);
-  };
-  statisticsState.activeCategories.forEach(append);
-  [...statisticsState.archivedCategories]
-    .sort((a, b) => (Number(a.order) || 999999) - (Number(b.order) || 999999) || String(a.name).localeCompare(String(b.name), 'ko'))
-    .forEach(append);
-  [...available].sort((a, b) => a.localeCompare(b, 'ko')).forEach((name) => {
-    if (!ordered.includes(name)) ordered.push(name);
-  });
-  return ordered;
+function visibleCategorySummaries(summary) {
+  const activeIds = new Set(statisticsState.activeCategories.map((category) => category.id));
+  return summary.categorySummaries.filter((item) => activeIds.has(item.id) || item.budgetMinutes > 0 || item.actualMinutes > 0);
 }
 
-function orderedBreakdown(summary) {
-  const rows = categoryBreakdown(summary);
-  const byName = new Map(rows.map((row) => [row.name, row]));
-  return orderedNames(rows.map((row) => row.name)).map((name) => byName.get(name));
+function achievementText(item) {
+  if (!item.hasBudget && item.actualMinutes > 0) return '예산 미설정';
+  if (!item.hasBudget) return '—';
+  return `${item.percentage}%`;
+}
+
+function achievementWidth(item) {
+  if (!item.hasBudget) return item.actualMinutes > 0 ? 100 : 0;
+  return Math.min(Math.max(Number(item.percentage) || 0, 0), 100);
+}
+
+function differenceText(item) {
+  if (item.status === 'unbudgeted') return `예산 미설정 · ${formatMinutes(item.actualMinutes)} 기록`;
+  if (item.differenceMinutes > 0) return `${formatMinutes(item.differenceMinutes)} 초과`;
+  if (item.differenceMinutes < 0) return `${formatMinutes(Math.abs(item.differenceMinutes))} 남음`;
+  return '예산과 일치';
+}
+
+function differenceClass(item) {
+  if (item.status === 'unbudgeted') return 'unbudgeted';
+  return item.differenceMinutes > 0 ? 'exceeded' : 'remaining';
+}
+
+function overallAchievementText(summary) {
+  if (summary.totalBudgetMinutes <= 0 && summary.totalActualMinutes > 0) return '예산 미설정';
+  return `${summary.percentage ?? 0}%`;
 }
 
 function summaryCards(summary, yearly = false) {
-  const monthlyAverage = yearly ? calculateYearMonthlyAverage(summary.totalMinutes, statisticsState.year, now) : null;
+  const monthlyAverage = yearly ? calculateYearMonthlyAverage(summary.totalActualMinutes, statisticsState.year, now) : null;
   return `
-    <div class="statistics-summary ${yearly ? 'yearly' : ''}">
-      <article class="card"><p class="muted">${yearly ? '연간 총 기록 시간' : '총 기록 시간'}</p><div class="metric">${formatMinutes(summary.totalMinutes)}</div></article>
+    <div class="statistics-summary">
+      <article class="card"><p class="muted">기간 예산</p><div class="metric">${formatMinutes(summary.totalBudgetMinutes)}</div></article>
+      <article class="card"><p class="muted">실제 기록</p><div class="metric">${formatMinutes(summary.totalActualMinutes)}</div></article>
+      <article class="card"><p class="muted">전체 달성률</p><div class="metric">${overallAchievementText(summary)}</div><p class="stat-card-note">${differenceText({ ...summary, actualMinutes: summary.totalActualMinutes, hasBudget: summary.totalBudgetMinutes > 0 })}</p></article>
       <article class="card"><p class="muted">기록 일수</p><div class="metric">${summary.recordDays}일</div></article>
       <article class="card"><p class="muted">기록한 날 기준 하루 평균</p><div class="metric">${formatMinutes(summary.dailyAverageMinutes)}</div></article>
       ${yearly ? `<article class="card"><p class="muted">월평균 기록 시간</p><div class="metric">${formatMinutes(monthlyAverage)}</div><p class="stat-card-note">${statisticsState.year === now.getFullYear() ? `1월~${now.getMonth() + 1}월 기준` : '12개월 기준'}</p></article>` : ''}
     </div>`;
 }
 
-function categorySummaryTable(summary, title) {
-  const rows = orderedBreakdown(summary);
+function categoryAchievementTable(summary, title) {
+  const rows = visibleCategorySummaries(summary);
   return `
     <div class="card statistics-card">
       <div class="section-title"><h2>${title}</h2><span class="badge">${rows.length}개</span></div>
+      <p class="statistics-explanation">각 대분류에 배정된 기간 예산과 실제 기록을 비교합니다. 100%는 계획한 예산만큼 시간을 사용했다는 뜻입니다.</p>
       ${rows.length ? `<div class="statistics-table-wrap"><table class="statistics-table">
-        <thead><tr><th>대분류</th><th>기록 시간</th><th>전체 비율</th><th>그래프</th></tr></thead>
+        <thead><tr><th>대분류</th><th>기간 예산</th><th>실제 기록</th><th>달성률</th><th>차이</th></tr></thead>
         <tbody>${rows.map((row) => `<tr>
           <td><strong>${escapeHtml(row.name)}</strong></td>
-          <td>${formatMinutes(row.minutes)}</td>
-          <td>${row.percentage}%</td>
-          <td class="category-share-cell"><div class="category-share"><div class="stat-bar-track"><div class="stat-bar-fill" style="width:${Math.min(row.percentage, 100)}%"></div></div><span>${row.percentage}%</span></div></td>
+          <td>${formatMinutes(row.budgetMinutes)}</td>
+          <td>${formatMinutes(row.actualMinutes)}</td>
+          <td class="achievement-cell"><div class="achievement-line"><div class="stat-bar-track"><div class="stat-bar-fill ${row.status === 'exceeded' ? 'over' : row.status === 'unbudgeted' ? 'unbudgeted' : ''}" style="width:${achievementWidth(row)}%"></div></div><strong>${achievementText(row)}</strong></div></td>
+          <td><span class="difference ${differenceClass(row)}">${differenceText(row)}</span></td>
         </tr>`).join('')}</tbody>
-      </table></div>` : '<div class="empty-statistics">해당 기간의 기록이 없습니다.</div>'}
+      </table></div>` : '<div class="empty-statistics">해당 기간에 표시할 대분류가 없습니다.</div>'}
+      <div class="statistics-note">월·연도 경계에 걸친 주간 예산은 해당 기간에 포함되는 날짜 수만큼 7일로 나누어 계산합니다. 별도의 주간 예산이 저장되지 않은 주는 대분류의 기본 예산을 사용합니다.</div>
     </div>`;
 }
 
@@ -209,30 +258,61 @@ function formatChange(item) {
 }
 
 function comparisonChart(items, labelKey, labelFormatter, changeLabel) {
-  const max = Math.max(1, ...items.map((item) => item.totalMinutes));
-  return `<div class="card statistics-card"><div class="section-title"><h2>기간별 총 기록 시간</h2></div>
-    <div class="stat-bar-list">${items.map((item) => {
+  const max = Math.max(1, ...items.flatMap((item) => [item.totalBudgetMinutes, item.totalActualMinutes]));
+  const hasData = items.some((item) => item.totalBudgetMinutes > 0 || item.totalActualMinutes > 0);
+  if (!hasData) return '<div class="card statistics-card"><div class="empty-statistics">비교할 예산과 기록이 없습니다.</div></div>';
+  return `<div class="card statistics-card"><div class="section-title"><h2>기간별 예산과 실제 기록</h2></div>
+    <p class="statistics-explanation">회색 막대는 기간 예산, 초록 막대는 실제 기록입니다.</p>
+    <div class="comparison-list">${items.map((item) => {
       const changeClass = Number(item.changeMinutes) > 0 ? 'positive' : Number(item.changeMinutes) < 0 ? 'negative' : '';
-      return `<div class="stat-bar-row"><strong>${labelFormatter(item[labelKey])}</strong><div class="stat-bar-track"><div class="stat-bar-fill" style="width:${item.totalMinutes / max * 100}%"></div></div><span>${formatMinutes(item.totalMinutes)}<span class="comparison-change ${changeClass}">${changeLabel}: ${formatChange(item)}</span></span></div>`;
+      return `<div class="comparison-row">
+        <strong>${labelFormatter(item[labelKey])}</strong>
+        <div class="comparison-bars">
+          <div class="comparison-bar-line budget"><span>예산</span><div class="stat-bar-track"><div class="stat-bar-fill" style="width:${item.totalBudgetMinutes / max * 100}%"></div></div></div>
+          <div class="comparison-bar-line actual"><span>실제</span><div class="stat-bar-track"><div class="stat-bar-fill" style="width:${item.totalActualMinutes / max * 100}%"></div></div></div>
+        </div>
+        <div class="comparison-values"><span>예산 ${formatMinutes(item.totalBudgetMinutes)}</span><strong>실제 ${formatMinutes(item.totalActualMinutes)} · ${overallAchievementText(item)}</strong><span class="comparison-change ${changeClass}">${changeLabel} ${formatChange(item)}</span></div>
+      </div>`;
     }).join('')}</div></div>`;
 }
 
 function comparisonDetailTable(items, labelKey, labelFormatter, changeLabel) {
   return `<div class="card statistics-card"><div class="section-title"><h2>기간별 상세 비교</h2></div>
     <div class="statistics-table-wrap"><table class="statistics-table">
-      <thead><tr><th>기간</th><th>총 기록 시간</th><th>기록 일수</th><th>하루 평균</th><th>${changeLabel}</th></tr></thead>
-      <tbody>${items.map((item) => `<tr><td><strong>${labelFormatter(item[labelKey])}</strong></td><td>${formatMinutes(item.totalMinutes)}</td><td>${item.recordDays}일</td><td>${formatMinutes(item.dailyAverageMinutes)}</td><td>${formatChange(item)}</td></tr>`).join('')}</tbody>
+      <thead><tr><th>기간</th><th>기간 예산</th><th>실제 기록</th><th>달성률</th><th>기록 일수</th><th>하루 평균</th><th>${changeLabel}</th></tr></thead>
+      <tbody>${items.map((item) => `<tr>
+        <td><strong>${labelFormatter(item[labelKey])}</strong></td>
+        <td>${formatMinutes(item.totalBudgetMinutes)}</td>
+        <td>${formatMinutes(item.totalActualMinutes)}</td>
+        <td>${overallAchievementText(item)}</td>
+        <td>${item.recordDays}일</td>
+        <td>${formatMinutes(item.dailyAverageMinutes)}</td>
+        <td>${formatChange(item)}</td>
+      </tr>`).join('')}</tbody>
     </table></div></div>`;
 }
 
-function categoryMatrix(items, labelKey, labelFormatter, title) {
-  const names = orderedNames([...new Set(items.flatMap((item) => Object.keys(item.categoryTotals || {})))]);
+function categoryBudgetMatrix(items, labelKey, labelFormatter, title) {
+  const activeOrder = statisticsState.activeCategories.map((category) => category.id);
+  const allIds = new Set(items.flatMap((item) => item.categorySummaries.map((category) => category.id)));
+  const orderedIds = [
+    ...activeOrder.filter((id) => allIds.has(id)),
+    ...[...allIds].filter((id) => !activeOrder.includes(id)),
+  ];
+  const categoryById = new Map(allCategories().map((category) => [category.id, category]));
+  if (!orderedIds.length) return `<div class="card statistics-card"><div class="section-title"><h2>${title}</h2></div><div class="empty-statistics">비교할 대분류가 없습니다.</div></div>`;
   return `<div class="card statistics-card"><div class="section-title"><h2>${title}</h2></div>
-    ${names.length ? `<div class="statistics-table-wrap"><table class="statistics-table">
-      <thead><tr><th>기간</th>${names.map((name) => `<th>${escapeHtml(name)}</th>`).join('')}<th>합계</th></tr></thead>
-      <tbody>${items.map((item) => `<tr><td><strong>${labelFormatter(item[labelKey])}</strong></td>${names.map((name) => `<td>${formatMinutes(item.categoryTotals?.[name] || 0)}</td>`).join('')}<td><strong>${formatMinutes(item.totalMinutes)}</strong></td></tr>`).join('')}</tbody>
-    </table></div>` : '<div class="empty-statistics">비교할 대분류 기록이 없습니다.</div>'}
-  </div>`;
+    <p class="statistics-explanation">각 칸은 실제 기록 / 기간 예산과 달성률을 표시합니다.</p>
+    <div class="statistics-table-wrap"><table class="statistics-table">
+      <thead><tr><th>기간</th>${orderedIds.map((id) => `<th>${escapeHtml(categoryById.get(id)?.name || '삭제된 대분류')}</th>`).join('')}<th>전체</th></tr></thead>
+      <tbody>${items.map((item) => {
+        const byId = new Map(item.categorySummaries.map((category) => [category.id, category]));
+        return `<tr><td><strong>${labelFormatter(item[labelKey])}</strong></td>${orderedIds.map((id) => {
+          const category = byId.get(id) || { budgetMinutes: 0, actualMinutes: 0, percentage: 0, hasBudget: false };
+          return `<td><div class="matrix-cell"><strong>${formatMinutes(category.actualMinutes)} / ${formatMinutes(category.budgetMinutes)}</strong><small>${achievementText(category)}</small></div></td>`;
+        }).join('')}<td><div class="matrix-cell"><strong>${formatMinutes(item.totalActualMinutes)} / ${formatMinutes(item.totalBudgetMinutes)}</strong><small>${overallAchievementText(item)}</small></div></td></tr>`;
+      }).join('')}</tbody>
+    </table></div></div>`;
 }
 
 function yearOptions() {
@@ -241,52 +321,59 @@ function yearOptions() {
     const year = Number(String(entry.date || '').slice(0, 4));
     if (Number.isFinite(year)) years.add(year);
   });
+  statisticsState.weeklyBudgets.forEach((week) => {
+    const year = Number(String(week.weekStart || week.id || '').slice(0, 4));
+    if (Number.isFinite(year)) years.add(year);
+  });
   return [...years].sort((a, b) => b - a).map((year) => `<option value="${year}" ${year === statisticsState.year ? 'selected' : ''}>${year}년</option>`).join('');
 }
 
 async function loadStatisticsData() {
   const user = auth.currentUser;
   if (!user) return false;
-  const [entrySnapshot, activeSnapshot, archivedSnapshot] = await Promise.all([
+  const [entrySnapshot, activeSnapshot, archivedSnapshot, weeklyBudgetSnapshot] = await Promise.all([
     storeModule.getDocs(storeModule.query(storeModule.collection(db, 'users', user.uid, 'entries'), storeModule.orderBy('date', 'desc'))),
     storeModule.getDocs(storeModule.collection(db, 'users', user.uid, 'categories')),
     storeModule.getDocs(storeModule.collection(db, 'users', user.uid, 'archivedCategories')),
+    storeModule.getDocs(storeModule.collection(db, 'users', user.uid, 'weeklyBudgets')),
   ]);
   statisticsState.entries = entrySnapshot.docs.map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }));
   statisticsState.activeCategories = activeSnapshot.docs
     .map((docSnapshot, index) => ({ id: docSnapshot.id, sourceIndex: index, ...docSnapshot.data() }))
     .sort((a, b) => (Number(a.order) || 999999) - (Number(b.order) || 999999) || a.sourceIndex - b.sourceIndex);
   statisticsState.archivedCategories = archivedSnapshot.docs.map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }));
+  statisticsState.weeklyBudgets = weeklyBudgetSnapshot.docs.map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }));
   return true;
 }
 
 function monthlyStatisticsHtml() {
   const range = getMonthRange(statisticsState.year, statisticsState.month);
-  const summary = summarizePeriod(statisticsState.entries, categoryNameMap(), range.start, range.end);
-  return `${summaryCards(summary)}${categorySummaryTable(summary, '대분류별 월간 기록')}`;
+  const summary = summarizeBudgetPeriod(statisticsState.entries, allCategories(), statisticsState.weeklyBudgets, range.start, range.end);
+  return `${summaryCards(summary)}${categoryAchievementTable(summary, '대분류별 월간 예산 달성')}`;
 }
 
 function yearlyStatisticsHtml() {
   const range = getYearRange(statisticsState.year);
-  const summary = summarizePeriod(statisticsState.entries, categoryNameMap(), range.start, range.end);
-  return `${summaryCards(summary, true)}${categorySummaryTable(summary, '대분류별 연간 기록')}`;
+  const summary = summarizeBudgetPeriod(statisticsState.entries, allCategories(), statisticsState.weeklyBudgets, range.start, range.end);
+  return `${summaryCards(summary, true)}${categoryAchievementTable(summary, '대분류별 연간 예산 달성')}`;
 }
 
 function monthlyComparisonHtml() {
-  const items = detailedMonthlyComparison(statisticsState.entries, categoryNameMap(), statisticsState.year);
-  return `${comparisonChart(items, 'month', (month) => `${month}월`, '전월 대비')}${comparisonDetailTable(items, 'month', (month) => `${month}월`, '전월 대비')}${categoryMatrix(items, 'month', (month) => `${month}월`, '월별 대분류 합계')}`;
+  const items = detailedMonthlyBudgetComparison(statisticsState.entries, allCategories(), statisticsState.weeklyBudgets, statisticsState.year);
+  return `${comparisonChart(items, 'month', (month) => `${month}월`, '전월 대비')}${comparisonDetailTable(items, 'month', (month) => `${month}월`, '전월 대비')}${categoryBudgetMatrix(items, 'month', (month) => `${month}월`, '월별 대분류 예산·실제')}`;
 }
 
 function yearlyComparisonHtml() {
-  const items = detailedYearlyComparison(statisticsState.entries, categoryNameMap());
-  if (!items.length) return '<div class="card"><div class="empty-statistics">비교할 연도별 기록이 없습니다.</div></div>';
-  return `${comparisonChart(items, 'year', (year) => `${year}년`, '전년 대비')}${comparisonDetailTable(items, 'year', (year) => `${year}년`, '전년 대비')}${categoryMatrix(items, 'year', (year) => `${year}년`, '연도별 대분류 합계')}`;
+  const items = detailedYearlyBudgetComparison(statisticsState.entries, allCategories(), statisticsState.weeklyBudgets);
+  if (!items.length) return '<div class="card"><div class="empty-statistics">비교할 연도별 예산과 기록이 없습니다.</div></div>';
+  return `${comparisonChart(items, 'year', (year) => `${year}년`, '전년 대비')}${comparisonDetailTable(items, 'year', (year) => `${year}년`, '전년 대비')}${categoryBudgetMatrix(items, 'year', (year) => `${year}년`, '연도별 대분류 예산·실제')}`;
 }
 
 async function renderStatistics() {
   const view = document.querySelector('#statistics-view');
   if (!view || renderingStatistics || !auth.currentUser) return;
   renderingStatistics = true;
+  updateStatisticsHeader();
   view.innerHTML = '<div class="card"><h2>통계를 불러오는 중…</h2></div>';
   try {
     await loadStatisticsData();
@@ -309,10 +396,22 @@ async function renderStatistics() {
       ${body}`;
 
     view.querySelectorAll('[data-stat-mode]').forEach((button) => {
-      button.onclick = () => { statisticsState.mode = button.dataset.statMode; renderStatistics(); };
+      button.onclick = () => {
+        statisticsState.mode = button.dataset.statMode;
+        updateStatisticsHeader();
+        renderStatistics();
+      };
     });
-    view.querySelector('#statistics-year')?.addEventListener('change', (event) => { statisticsState.year = Number(event.target.value); renderStatistics(); });
-    view.querySelector('#statistics-month')?.addEventListener('change', (event) => { statisticsState.month = Number(event.target.value); renderStatistics(); });
+    view.querySelector('#statistics-year')?.addEventListener('change', (event) => {
+      statisticsState.year = Number(event.target.value);
+      updateStatisticsHeader();
+      renderStatistics();
+    });
+    view.querySelector('#statistics-month')?.addEventListener('change', (event) => {
+      statisticsState.month = Number(event.target.value);
+      updateStatisticsHeader();
+      renderStatistics();
+    });
   } catch (error) {
     console.error(error);
     view.innerHTML = `<div class="card"><h2>통계를 불러오지 못했습니다.</h2><p class="warning">${escapeHtml(error.message)}</p></div>`;
@@ -346,5 +445,8 @@ authModule.onAuthStateChanged(auth, (user) => {
     patchUi();
     if (!document.querySelector('#statistics-view')?.classList.contains('hidden')) renderStatistics();
   }
+});
+document.addEventListener('weekly-time-budget:data-changed', () => {
+  if (!document.querySelector('#statistics-view')?.classList.contains('hidden')) renderStatistics();
 });
 patchUi();
