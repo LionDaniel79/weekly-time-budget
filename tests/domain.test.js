@@ -5,7 +5,9 @@ import {
   calculatePeriodChange,
   calculateYearMonthlyAverage,
   categoryBreakdown,
+  detailedMonthlyBudgetComparison,
   detailedMonthlyComparison,
+  detailedYearlyBudgetComparison,
   detailedYearlyComparison,
   getBudgetWeekKey,
   getMonthRange,
@@ -15,6 +17,7 @@ import {
   minutesBetween,
   monthlyComparison,
   reorderItems,
+  summarizeBudgetPeriod,
   summarizeCategories,
   summarizePeriod,
   yearlyComparison,
@@ -101,6 +104,58 @@ test('기간 통계는 총시간, 기록일수, 일평균, 대분류 합계를 �
   ]);
 });
 
+test('월 경계에 걸친 주간 예산은 해당 월의 날짜 수만큼 나누어 배정한다', () => {
+  const categories = [
+    { id: 'reading', name: '독서', defaultBudgetMinutes: 420, order: 1 },
+  ];
+  const weeklyBudgets = [
+    { id: '2026-06-29', weekStart: '2026-06-29', budgets: { reading: 700 } },
+  ];
+  const entries = [
+    { categoryId: 'reading', durationMinutes: 600, date: '2026-07-10' },
+  ];
+  const result = summarizeBudgetPeriod(entries, categories, weeklyBudgets, '2026-07-01', '2026-07-31');
+  assert.equal(result.totalBudgetMinutes, 2060);
+  assert.equal(result.totalActualMinutes, 600);
+  assert.equal(result.percentage, 29);
+  assert.equal(result.differenceMinutes, -1460);
+  assert.equal(result.status, 'remaining');
+  assert.equal(result.recordDays, 1);
+  assert.equal(result.dailyAverageMinutes, 600);
+  assert.deepEqual(result.categorySummaries, [
+    {
+      id: 'reading',
+      name: '독서',
+      budgetMinutes: 2060,
+      actualMinutes: 600,
+      percentage: 29,
+      differenceMinutes: -1460,
+      status: 'remaining',
+      hasBudget: true,
+    },
+  ]);
+});
+
+test('예산이 없는 대분류의 실제 기록은 예산 미설정 상태로 구분한다', () => {
+  const result = summarizeBudgetPeriod(
+    [{ categoryId: 'reading', durationMinutes: 60, date: '2026-07-10' }],
+    [{ id: 'reading', name: '독서', defaultBudgetMinutes: 0 }],
+    [],
+    '2026-07-01',
+    '2026-07-31',
+  );
+  assert.deepEqual(result.categorySummaries[0], {
+    id: 'reading',
+    name: '독서',
+    budgetMinutes: 0,
+    actualMinutes: 60,
+    percentage: null,
+    differenceMinutes: 60,
+    status: 'unbudgeted',
+    hasBudget: false,
+  });
+});
+
 test('독서 1시간 기록은 해당 월 통계에 반영된다', () => {
   const entries = [
     { categoryId: 'reading', durationMinutes: 60, date: '2026-07-26' },
@@ -131,7 +186,48 @@ test('기간 증감은 시간과 비율을 함께 계산한다', () => {
   assert.deepEqual(calculatePeriodChange(60, 0), { minutes: 60, percentage: null });
 });
 
-test('월간 비교는 12개월의 총시간, 기록일수, 일평균, 대분류 합계와 전월 증감을 계산한다', () => {
+test('월간 비교는 12개월의 예산, 실제, 달성률과 기존 상세 통계를 함께 계산한다', () => {
+  const entries = [
+    { categoryId: 'reading', durationMinutes: 60, date: '2026-01-02' },
+    { categoryId: 'reading', durationMinutes: 60, date: '2026-01-03' },
+    { categoryId: 'reading', durationMinutes: 180, date: '2026-02-01' },
+  ];
+  const categories = [{ id: 'reading', name: '독서', defaultBudgetMinutes: 420 }];
+  const result = detailedMonthlyBudgetComparison(entries, categories, [], 2026);
+  assert.equal(result.length, 12);
+  assert.equal(result[0].totalBudgetMinutes, 1860);
+  assert.equal(result[0].totalActualMinutes, 120);
+  assert.equal(result[0].percentage, 6);
+  assert.equal(result[0].recordDays, 2);
+  assert.equal(result[0].dailyAverageMinutes, 60);
+  assert.equal(result[0].categorySummaries[0].budgetMinutes, 1860);
+  assert.equal(result[1].totalBudgetMinutes, 1680);
+  assert.equal(result[1].totalActualMinutes, 180);
+  assert.equal(result[1].changeMinutes, 60);
+  assert.equal(result[1].changePercentage, 50);
+  assert.equal(result[11].totalActualMinutes, 0);
+});
+
+test('연도별 비교는 연도별 예산과 실제 달성률을 계산한다', () => {
+  const entries = [
+    { categoryId: 'reading', durationMinutes: 120, date: '2025-12-31' },
+    { categoryId: 'reading', durationMinutes: 120, date: '2026-01-01' },
+    { categoryId: 'reading', durationMinutes: 120, date: '2026-01-02' },
+  ];
+  const categories = [{ id: 'reading', name: '독서', defaultBudgetMinutes: 420 }];
+  const result = detailedYearlyBudgetComparison(entries, categories, []);
+  assert.equal(result.length, 2);
+  assert.equal(result[0].year, 2025);
+  assert.equal(result[0].totalBudgetMinutes, 21900);
+  assert.equal(result[0].totalActualMinutes, 120);
+  assert.equal(result[1].year, 2026);
+  assert.equal(result[1].totalBudgetMinutes, 21900);
+  assert.equal(result[1].totalActualMinutes, 240);
+  assert.equal(result[1].changeMinutes, 120);
+  assert.equal(result[1].changePercentage, 100);
+});
+
+test('기존 월간 비교는 12개월의 총시간, 기록일수, 일평균, 대분류 합계와 전월 증감을 계산한다', () => {
   const entries = [
     { categoryId: 'reading', durationMinutes: 60, date: '2026-01-02' },
     { categoryId: 'reading', durationMinutes: 60, date: '2026-01-03' },
@@ -160,7 +256,7 @@ test('월간 비교는 12개월의 총시간, 기록일수, 일평균, 대분류
   assert.equal(result[11].totalMinutes, 0);
 });
 
-test('연도별 비교는 총시간, 기록일수, 일평균, 대분류 합계와 전년 증감을 계산한다', () => {
+test('기존 연도별 비교는 총시간, 기록일수, 일평균, 대분류 합계와 전년 증감을 계산한다', () => {
   const entries = [
     { categoryId: 'reading', durationMinutes: 120, date: '2025-12-31' },
     { categoryId: 'reading', durationMinutes: 120, date: '2026-01-01' },
