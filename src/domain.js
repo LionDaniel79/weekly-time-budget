@@ -4,6 +4,36 @@ export function toDateKey(date) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
+function fromDateKey(value) {
+  const [year, month, day] = String(value || '').slice(0, 10).split('-').map(Number);
+  const date = new Date(year, month - 1, day);
+  date.setHours(12, 0, 0, 0);
+  return date;
+}
+
+function addDays(value, amount) {
+  const date = typeof value === 'string' ? fromDateKey(value) : new Date(value);
+  date.setDate(date.getDate() + amount);
+  return date;
+}
+
+function dateKeys(start, end) {
+  const values = [];
+  for (let current = fromDateKey(start); toDateKey(current) <= end; current = addDays(current, 1)) {
+    values.push(toDateKey(current));
+  }
+  return values;
+}
+
+function normalizedTimestampDate(value) {
+  if (!value) return null;
+  if (typeof value === 'string') return value.slice(0, 10);
+  if (value instanceof Date) return toDateKey(value);
+  if (typeof value.toDate === 'function') return toDateKey(value.toDate());
+  if (Number.isFinite(value.seconds)) return toDateKey(new Date(value.seconds * 1000));
+  return null;
+}
+
 export function isManagedDay() {
   return true;
 }
@@ -50,6 +80,23 @@ export function calculateAchievement(budgetMinutes, actualMinutes) {
     percentage,
     differenceMinutes,
     status: differenceMinutes >= 0 ? 'exceeded' : 'remaining',
+  };
+}
+
+function calculateBudgetAchievement(budgetMinutes, actualMinutes) {
+  const budget = Number(budgetMinutes) || 0;
+  const actual = Number(actualMinutes) || 0;
+  if (budget <= 0) {
+    return {
+      percentage: actual > 0 ? null : 0,
+      differenceMinutes: actual,
+      status: actual > 0 ? 'unbudgeted' : 'remaining',
+      hasBudget: false,
+    };
+  }
+  return {
+    ...calculateAchievement(budget, actual),
+    hasBudget: true,
   };
 }
 
@@ -111,6 +158,85 @@ export function categoryBreakdown(summary) {
     .sort((a, b) => b.minutes - a.minutes || a.name.localeCompare(b.name, 'ko'));
 }
 
+function defaultBudgetMinutes(category) {
+  return Number(category?.defaultBudgetMinutes ?? category?.budgetMinutes ?? 0) || 0;
+}
+
+function weeklyBudgetMap(weeklyBudgets) {
+  return new Map((weeklyBudgets || []).map((week) => [week.weekStart || week.id, week]));
+}
+
+function effectiveWeeklyBudget(category, week, dateKey) {
+  const archivedDate = normalizedTimestampDate(category.archivedAt);
+  if (archivedDate && dateKey > archivedDate) return 0;
+  const override = week?.budgets?.[category.id];
+  return override === undefined ? defaultBudgetMinutes(category) : Number(override) || 0;
+}
+
+export function summarizeBudgetPeriod(entries, categories, weeklyBudgets, start, end) {
+  const categoryList = [...(categories || [])]
+    .sort((a, b) => (Number(a.order) || 999999) - (Number(b.order) || 999999) || String(a.name).localeCompare(String(b.name), 'ko'));
+  const categoryById = new Map(categoryList.map((category) => [category.id, category]));
+  const weeks = weeklyBudgetMap(weeklyBudgets);
+  const budgetById = new Map(categoryList.map((category) => [category.id, 0]));
+
+  dateKeys(start, end).forEach((dateKey) => {
+    const weekKey = getBudgetWeekKey(fromDateKey(dateKey));
+    const week = weeks.get(weekKey);
+    categoryList.forEach((category) => {
+      const weeklyMinutes = effectiveWeeklyBudget(category, week, dateKey);
+      budgetById.set(category.id, (budgetById.get(category.id) || 0) + weeklyMinutes / 7);
+    });
+  });
+
+  const filteredEntries = (entries || []).filter((entry) => entry.date >= start && entry.date <= end);
+  const actualById = new Map();
+  const days = new Set();
+  filteredEntries.forEach((entry) => {
+    const minutes = Number(entry.durationMinutes || 0);
+    actualById.set(entry.categoryId, (actualById.get(entry.categoryId) || 0) + minutes);
+    if (entry.date) days.add(entry.date);
+  });
+
+  const categorySummaries = categoryList.map((category) => {
+    const budgetMinutes = Math.round(budgetById.get(category.id) || 0);
+    const actualMinutes = Math.round(actualById.get(category.id) || 0);
+    return {
+      id: category.id,
+      name: category.name,
+      budgetMinutes,
+      actualMinutes,
+      ...calculateBudgetAchievement(budgetMinutes, actualMinutes),
+    };
+  });
+
+  actualById.forEach((actualMinutes, categoryId) => {
+    if (categoryById.has(categoryId)) return;
+    categorySummaries.push({
+      id: categoryId,
+      name: '삭제된 대분류',
+      budgetMinutes: 0,
+      actualMinutes: Math.round(actualMinutes),
+      ...calculateBudgetAchievement(0, actualMinutes),
+    });
+  });
+
+  const totalBudgetMinutes = categorySummaries.reduce((sum, item) => sum + item.budgetMinutes, 0);
+  const totalActualMinutes = categorySummaries.reduce((sum, item) => sum + item.actualMinutes, 0);
+  const achievement = calculateBudgetAchievement(totalBudgetMinutes, totalActualMinutes);
+  const recordDays = days.size;
+  return {
+    totalBudgetMinutes,
+    totalActualMinutes,
+    percentage: achievement.percentage,
+    differenceMinutes: achievement.differenceMinutes,
+    status: achievement.status,
+    recordDays,
+    dailyAverageMinutes: recordDays ? Math.round(totalActualMinutes / recordDays) : 0,
+    categorySummaries,
+  };
+}
+
 export function calculatePeriodChange(currentMinutes, previousMinutes) {
   const current = Number(currentMinutes) || 0;
   const previous = Number(previousMinutes) || 0;
@@ -119,6 +245,48 @@ export function calculatePeriodChange(currentMinutes, previousMinutes) {
     return { minutes, percentage: current ? null : 0 };
   }
   return { minutes, percentage: Math.round(minutes / previous * 100) };
+}
+
+export function detailedMonthlyBudgetComparison(entries, categories, weeklyBudgets, year) {
+  const rows = Array.from({ length: 12 }, (_, index) => {
+    const month = index + 1;
+    const range = getMonthRange(year, month);
+    return { month, ...summarizeBudgetPeriod(entries, categories, weeklyBudgets, range.start, range.end) };
+  });
+  return rows.map((row, index) => {
+    const change = index
+      ? calculatePeriodChange(row.totalActualMinutes, rows[index - 1].totalActualMinutes)
+      : { minutes: null, percentage: null };
+    return { ...row, changeMinutes: change.minutes, changePercentage: change.percentage };
+  });
+}
+
+function yearsRepresented(entries, weeklyBudgets) {
+  const years = new Set();
+  (entries || []).forEach((entry) => {
+    const year = Number(String(entry.date || '').slice(0, 4));
+    if (Number.isFinite(year)) years.add(year);
+  });
+  (weeklyBudgets || []).forEach((week) => {
+    const start = week.weekStart || week.id;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(start || ''))) return;
+    years.add(Number(start.slice(0, 4)));
+    years.add(addDays(start, 6).getFullYear());
+  });
+  return [...years].sort((a, b) => a - b);
+}
+
+export function detailedYearlyBudgetComparison(entries, categories, weeklyBudgets) {
+  const rows = yearsRepresented(entries, weeklyBudgets).map((year) => {
+    const range = getYearRange(year);
+    return { year, ...summarizeBudgetPeriod(entries, categories, weeklyBudgets, range.start, range.end) };
+  });
+  return rows.map((row, index) => {
+    const change = index
+      ? calculatePeriodChange(row.totalActualMinutes, rows[index - 1].totalActualMinutes)
+      : { minutes: null, percentage: null };
+    return { ...row, changeMinutes: change.minutes, changePercentage: change.percentage };
+  });
 }
 
 export function detailedMonthlyComparison(entries, categoryNames, year) {
