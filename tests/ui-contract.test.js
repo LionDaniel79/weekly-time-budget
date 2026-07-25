@@ -4,17 +4,13 @@ import { readFile } from 'node:fs/promises';
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
-test('통계 탭은 기본 화면 전환 체계에 포함되어 기록 내역과 동시에 보이지 않는다', async () => {
-  const [indexHtml, appSource, statisticsSource] = await Promise.all([
-    read('index.html'),
-    read('src/app.js'),
-    read('src/statistics-ui.js'),
-  ]);
-  assert.match(indexHtml, /data-view="statistics"/);
-  assert.match(appSource, /views\s*=\s*\[[^\]]*['"]statistics['"]/s);
-  assert.match(appSource, /statistics:\s*['"]통계['"]/);
+test('통계 화면은 기록 내역과 동시에 보이지 않도록 독립 전환된다', async () => {
+  const statisticsSource = await read('src/statistics-ui.js');
+  assert.match(statisticsSource, /dataset\.view\s*=\s*['"]statistics['"]/);
+  assert.match(statisticsSource, /closest\(\s*['"]\.nav-button['"]\s*\)/);
   assert.match(statisticsSource, /#statistics-view/);
-  assert.doesNotMatch(statisticsSource, /#history-view/);
+  assert.match(statisticsSource, /classList\.add\(['"]hidden['"]\)/);
+  assert.doesNotMatch(statisticsSource, /#history-view[^\n]*innerHTML/);
 });
 
 test('확정된 통계 표시 항목을 모두 제공한다', async () => {
