@@ -37,6 +37,9 @@ test('기능 모듈은 일간·주간 예산 문서와 기본 비율을 읽고 �
   assert.match(feature, /async function saveDaily/);
   assert.match(feature, /async function saveWeekly/);
   assert.match(feature, /writeBatch/);
+  for (const token of ['ensureCurrentWeekSnapshot', 'preservedOverrides', 'preservedBudgets', 'async function switchOwnedView']) {
+    assert.ok(feature.includes(token), token);
+  }
   const start = feature.indexOf('async function saveWeekly');
   const end = feature.indexOf('function updateHeader', start);
   assert.doesNotMatch(feature.slice(start, end), /dailyBudgets/);
