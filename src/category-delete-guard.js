@@ -1,4 +1,5 @@
 import { firebaseConfig } from '../firebase-config.js';
+import { removeUnknownCategoryReferences } from './time-budget-domain.js';
 
 const appModule = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js');
 const authModule = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js');
@@ -40,6 +41,69 @@ function showDialog(html) {
   backdrop.addEventListener('click', (event) => { if (event.target === backdrop) closeDialog(); });
   document.body.append(backdrop);
   return backdrop;
+}
+
+function valuesChanged(original = {}, cleaned = {}) {
+  return JSON.stringify(original || {}) !== JSON.stringify(cleaned || {});
+}
+
+async function commitOperations(operations) {
+  for (let index = 0; index < operations.length; index += 450) {
+    const batch = store.writeBatch(db);
+    operations.slice(index, index + 450).forEach((operation) => {
+      if (operation.type === 'delete') batch.delete(operation.ref);
+      else batch.update(operation.ref, operation.data);
+    });
+    await batch.commit();
+  }
+}
+
+async function cleanupOrphanCategoryReferences(user) {
+  const root = ['users', user.uid];
+  const [categories, archived, weeks, days] = await Promise.all([
+    store.getDocs(store.collection(db, ...root, 'categories')),
+    store.getDocs(store.collection(db, ...root, 'archivedCategories')),
+    store.getDocs(store.collection(db, ...root, 'weeklyBudgets')),
+    store.getDocs(store.collection(db, ...root, 'dailyBudgets')),
+  ]);
+  const knownCategoryIds = new Set([
+    ...categories.docs.map((item) => item.id),
+    ...archived.docs.map((item) => item.id),
+  ]);
+  const operations = [];
+
+  weeks.docs.forEach((week) => {
+    const data = week.data();
+    const budgets = removeUnknownCategoryReferences(data.budgets || {}, knownCategoryIds);
+    const explicitBudgetIds = Array.isArray(data.explicitBudgetIds)
+      ? data.explicitBudgetIds.filter((categoryId) => knownCategoryIds.has(categoryId))
+      : undefined;
+    const explicitChanged = Array.isArray(data.explicitBudgetIds)
+      && JSON.stringify(data.explicitBudgetIds) !== JSON.stringify(explicitBudgetIds);
+    if (!valuesChanged(data.budgets || {}, budgets) && !explicitChanged) return;
+    operations.push({
+      type: 'update',
+      ref: week.ref,
+      data: {
+        budgets,
+        ...(explicitBudgetIds === undefined ? {} : { explicitBudgetIds }),
+      },
+    });
+  });
+
+  days.docs.forEach((day) => {
+    const data = day.data();
+    const overrides = removeUnknownCategoryReferences(data.overrides || {}, knownCategoryIds);
+    if (!valuesChanged(data.overrides || {}, overrides)) return;
+    operations.push(Object.keys(overrides).length
+      ? { type: 'update', ref: day.ref, data: { overrides } }
+      : { type: 'delete', ref: day.ref });
+  });
+
+  if (!operations.length) return false;
+  await commitOperations(operations);
+  document.dispatchEvent(new CustomEvent('weekly-time-budget:data-changed'));
+  return true;
 }
 
 async function entryCount(user, categoryId) {
@@ -88,7 +152,7 @@ async function permanentlyDelete(user, categoryId) {
     if (!hasBudget && explicitBudgetIds === undefined) return;
     const budgets = { ...(data.budgets || {}) };
     delete budgets[categoryId];
-    operations.push({ type: 'set', ref: week.ref, data: {
+    operations.push({ type: 'update', ref: week.ref, data: {
       budgets,
       ...(explicitBudgetIds === undefined ? {} : { explicitBudgetIds }),
     } });
@@ -100,7 +164,7 @@ async function permanentlyDelete(user, categoryId) {
     const overrides = { ...(data.overrides || {}) };
     delete overrides[categoryId];
     operations.push(Object.keys(overrides).length
-      ? { type: 'set', ref: day.ref, data: { overrides } }
+      ? { type: 'update', ref: day.ref, data: { overrides } }
       : { type: 'delete', ref: day.ref });
   });
 
@@ -108,14 +172,7 @@ async function permanentlyDelete(user, categoryId) {
     operations.push({ type: 'delete', ref: activeTimer.ref });
   }
 
-  for (let index = 0; index < operations.length; index += 450) {
-    const batch = store.writeBatch(db);
-    operations.slice(index, index + 450).forEach((operation) => {
-      if (operation.type === 'delete') batch.delete(operation.ref);
-      else batch.set(operation.ref, operation.data, { merge: true });
-    });
-    await batch.commit();
-  }
+  await commitOperations(operations);
 }
 
 async function openChoice(categoryId, categoryName) {
@@ -174,6 +231,13 @@ async function executeDelete(user, categoryId, categoryName, count) {
 }
 
 ensureStyles();
+authModule.onAuthStateChanged(auth, (user) => {
+  if (!user) return;
+  cleanupOrphanCategoryReferences(user).catch((error) => {
+    console.error('고아 대분류 참조 정리 실패', error);
+  });
+});
+
 document.addEventListener('click', (event) => {
   const button = event.target.closest('.category-delete');
   if (!button) return;
