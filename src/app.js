@@ -6,6 +6,11 @@ import {
   summarizeCategories,
   toDateKey,
 } from './domain.js';
+import {
+  MANUAL_INPUT_MODES,
+  createManualDurationEntry,
+  manualEntryTimeLabel,
+} from './manual-entry.js';
 
 const configured = !Object.values(firebaseConfig).some((value) => String(value).includes('REPLACE_ME'));
 const views = ['dashboard', 'record', 'budget', 'history', 'categories'];
@@ -24,6 +29,8 @@ const state = {
   timer: null,
   timerInterval: null,
   activeRecordTab: 'timer',
+  manualInputMode: MANUAL_INPUT_MODES.TIME_RANGE,
+  manualCategoryId: '',
 };
 
 let auth;
@@ -317,40 +324,94 @@ function manualForm() {
   const end = now.toTimeString().slice(0, 5);
   const startDate = new Date(now.getTime() - 60 * 60 * 1000);
   const start = startDate.toTimeString().slice(0, 5);
+  const durationMode = state.manualInputMode === MANUAL_INPUT_MODES.DURATION;
 
   return `
-    <form id="manual-form" class="form-grid">
+    <form id="manual-form" class="form-grid" novalidate>
+      <div class="manual-mode-switch" role="group" aria-label="수동 입력 방식">
+        <button type="button" class="tab-button ${durationMode ? '' : 'active'}"
+          data-manual-mode="time-range" aria-pressed="${durationMode ? 'false' : 'true'}">
+          시작·종료 시각
+        </button>
+        <button type="button" class="tab-button ${durationMode ? 'active' : ''}"
+          data-manual-mode="duration" aria-pressed="${durationMode ? 'true' : 'false'}">
+          분 직접 입력
+        </button>
+      </div>
       <label>대분류
         <select id="manual-category" required>
           <option value="">선택하세요</option>
-          ${optionHtml()}
+          ${optionHtml(state.manualCategoryId)}
         </select>
       </label>
       <label>날짜
         <input id="manual-date" type="date" value="${toDateKey(now)}" required>
       </label>
-      <div class="time-fields">
-        <label>시작<input id="manual-start" type="time" value="${start}" required></label>
-        <label>종료<input id="manual-end" type="time" value="${end}" required></label>
-      </div>
+      ${durationMode
+        ? `<label>직접 기록할 시간
+            <div class="duration-input-row">
+              <input id="manual-duration" type="number" min="1" max="1440"
+                step="1" inputmode="numeric" autocomplete="off" required>
+              <span aria-hidden="true">분</span>
+            </div>
+          </label>`
+        : `<div class="time-fields">
+            <label>시작<input id="manual-start" type="time" value="${start}" required></label>
+            <label>종료<input id="manual-end" type="time" value="${end}" required></label>
+          </div>`}
       <label>메모(선택)<textarea id="manual-note" rows="2"></textarea></label>
       <button class="primary-button" type="submit">기록 저장</button>
     </form>`;
 }
 
 function bindManual() {
+  document.querySelectorAll('[data-manual-mode]').forEach((button) => {
+    button.onclick = () => {
+      state.manualCategoryId = $('#manual-category')?.value || state.manualCategoryId;
+      state.manualInputMode = button.dataset.manualMode;
+      renderRecord();
+    };
+  });
+
   $('#manual-form').onsubmit = async (event) => {
     event.preventDefault();
-    const durationMinutes = minutesBetween($('#manual-start').value, $('#manual-end').value);
+
+    const categoryId = $('#manual-category').value;
+    if (!categoryId) return alert('대분류를 선택하세요.');
+
+    const date = $('#manual-date').value;
+    if (!date) return alert('날짜를 선택하세요.');
+
+    state.manualCategoryId = categoryId;
+
+    if (state.manualInputMode === MANUAL_INPUT_MODES.DURATION) {
+      try {
+        await saveEntry(createManualDurationEntry({
+          categoryId,
+          date,
+          note: $('#manual-note').value,
+          durationMinutes: $('#manual-duration').value,
+        }));
+      } catch (error) {
+        alert(error instanceof Error ? error.message : String(error));
+      }
+      return;
+    }
+
+    const startTime = $('#manual-start').value;
+    const endTime = $('#manual-end').value;
+    if (!startTime || !endTime) return alert('시간 범위를 확인하세요.');
+
+    const durationMinutes = minutesBetween(startTime, endTime);
     if (durationMinutes <= 0 || durationMinutes > 1440) return alert('시간 범위를 확인하세요.');
 
     await saveEntry({
-      categoryId: $('#manual-category').value,
+      categoryId,
       note: $('#manual-note').value.trim(),
-      date: $('#manual-date').value,
+      date,
       durationMinutes,
-      startTime: $('#manual-start').value,
-      endTime: $('#manual-end').value,
+      startTime,
+      endTime,
       source: 'manual',
     });
   };
@@ -413,12 +474,13 @@ function renderHistory() {
       ${state.entries.length
         ? state.entries.map((entry) => {
             const category = state.categories.find((item) => item.id === entry.categoryId);
+            const timeDescription = manualEntryTimeLabel(entry, formatMinutes);
             return `
               <div class="entry">
                 <strong>${entry.date}</strong>
                 <div>
                   <strong>${escapeHtml(category?.name || '삭제된 대분류')}</strong>
-                  <div>${entry.startTime || ''}–${entry.endTime || ''} · ${formatMinutes(entry.durationMinutes)}</div>
+                  <div>${escapeHtml(timeDescription)}</div>
                   ${entry.note ? `<p class="muted">${escapeHtml(entry.note)}</p>` : ''}
                 </div>
                 <div class="entry-actions">
