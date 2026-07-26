@@ -24,9 +24,10 @@ export function distributeWeeklyMinutes(totalMinutes, rawWeights = EQUAL_DAY_WEI
   const weights = normalizeDayWeights(rawWeights);
   let assigned = 0;
   return Object.fromEntries(DAY_KEYS.map((key, index) => {
+    const remaining = Math.max(0, total - assigned);
     const minutes = index === DAY_KEYS.length - 1
-      ? Math.max(0, total - assigned)
-      : Math.max(0, Math.round(total * weights[key]));
+      ? remaining
+      : Math.min(remaining, Math.max(0, Math.round(total * weights[key])));
     assigned += minutes;
     return [key, minutes];
   }));
