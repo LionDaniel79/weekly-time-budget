@@ -3,9 +3,11 @@ import assert from 'node:assert/strict';
 import { access, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   REQUIRED_FIREBASE_VARIABLES,
   createFirebaseConfigSource,
+  materializeWebAppIcons,
   preparePagesSite,
 } from '../scripts/prepare-pages-site.mjs';
 
@@ -35,6 +37,12 @@ function pngSize(buffer) {
     width: buffer.readUInt32BE(16),
     height: buffer.readUInt32BE(20),
   };
+}
+
+async function writeIconSource(rootDir, sourceName, content) {
+  const sourceDir = path.join(rootDir, 'icon-assets', sourceName);
+  await mkdir(sourceDir, { recursive: true });
+  await writeFile(path.join(sourceDir, '001.b64'), Buffer.from(content).toString('base64'));
 }
 
 test('Firebase 필수 변수 목록은 여섯 값을 고정한다', () => {
@@ -75,7 +83,6 @@ test('Pages 준비는 실행 파일만 _site에 복사하고 배포 설정을 �
   const rootDir = await mkdtemp(path.join(tmpdir(), 'weekly-time-budget-pages-'));
   const outputDir = path.join(rootDir, '_site');
   await mkdir(path.join(rootDir, 'src'), { recursive: true });
-  await mkdir(path.join(rootDir, 'icons'), { recursive: true });
   await mkdir(path.join(rootDir, 'tests'), { recursive: true });
   await mkdir(path.join(rootDir, 'docs'), { recursive: true });
   await mkdir(path.join(rootDir, '.github'), { recursive: true });
@@ -83,9 +90,9 @@ test('Pages 준비는 실행 파일만 _site에 복사하고 배포 설정을 �
   await writeFile(path.join(rootDir, 'styles.css'), 'body{}');
   await writeFile(path.join(rootDir, 'src', 'app.js'), "import { firebaseConfig } from '../firebase-config.js';");
   await writeFile(path.join(rootDir, 'manifest.webmanifest'), '{"start_url":"./"}');
-  await writeFile(path.join(rootDir, 'icons', 'apple-touch-icon.png'), 'apple icon');
-  await writeFile(path.join(rootDir, 'icons', 'icon-192.png'), '192 icon');
-  await writeFile(path.join(rootDir, 'icons', 'icon-512.png'), '512 icon');
+  await writeIconSource(rootDir, 'apple-touch-icon', 'apple icon');
+  await writeIconSource(rootDir, 'icon-192', '192 icon');
+  await writeIconSource(rootDir, 'icon-512', '512 icon');
   await writeFile(path.join(rootDir, 'firebase-config.js'), 'export const firebaseConfig = { apiKey: "REPLACE_ME" };');
   await writeFile(path.join(rootDir, 'tests', 'not-deployed.test.js'), 'not deployed');
   await writeFile(path.join(rootDir, 'docs', 'design.md'), 'not deployed');
@@ -109,7 +116,7 @@ test('Pages 준비는 실행 파일만 _site에 복사하고 배포 설정을 �
   ]) {
     assert.equal(await exists(path.join(outputDir, relativePath)), true, `${relativePath} should exist`);
   }
-  for (const relativePath of ['tests', 'docs', '.github', 'package.json', 'firestore.rules']) {
+  for (const relativePath of ['icon-assets', 'tests', 'docs', '.github', 'package.json', 'firestore.rules']) {
     assert.equal(await exists(path.join(outputDir, relativePath)), false, `${relativePath} should not exist`);
   }
 
@@ -122,15 +129,14 @@ test('Pages 준비는 이전 _site 내용을 삭제해 오래된 파일을 남�
   const rootDir = await mkdtemp(path.join(tmpdir(), 'weekly-time-budget-pages-clean-'));
   const outputDir = path.join(rootDir, '_site');
   await mkdir(path.join(rootDir, 'src'), { recursive: true });
-  await mkdir(path.join(rootDir, 'icons'), { recursive: true });
   await mkdir(outputDir, { recursive: true });
   await writeFile(path.join(rootDir, 'index.html'), '<main>app</main>');
   await writeFile(path.join(rootDir, 'styles.css'), 'body{}');
   await writeFile(path.join(rootDir, 'src', 'app.js'), 'export {};');
   await writeFile(path.join(rootDir, 'manifest.webmanifest'), '{}');
-  await writeFile(path.join(rootDir, 'icons', 'apple-touch-icon.png'), 'apple icon');
-  await writeFile(path.join(rootDir, 'icons', 'icon-192.png'), '192 icon');
-  await writeFile(path.join(rootDir, 'icons', 'icon-512.png'), '512 icon');
+  await writeIconSource(rootDir, 'apple-touch-icon', 'apple icon');
+  await writeIconSource(rootDir, 'icon-192', '192 icon');
+  await writeIconSource(rootDir, 'icon-512', '512 icon');
   await writeFile(path.join(outputDir, 'obsolete.js'), 'old');
 
   await preparePagesSite({ rootDir, outputDir, env: completeEnv });
@@ -168,7 +174,14 @@ test('웹앱 manifest는 GitHub Pages 하위 경로에서 독립 실행되도록
   );
 });
 
-test('운영 아이콘 세 개는 이름에 맞는 정사각형 PNG 크기다', async () => {
+test('업로드한 아이콘 세 개는 이름에 맞는 정사각형 PNG로 복원된다', async () => {
+  const rootDir = fileURLToPath(new URL('..', import.meta.url));
+  const outputDir = await mkdtemp(path.join(tmpdir(), 'weekly-time-budget-icons-'));
+  await materializeWebAppIcons({
+    sourceDir: path.join(rootDir, 'icon-assets'),
+    outputDir,
+  });
+
   const expected = new Map([
     ['apple-touch-icon.png', 180],
     ['icon-192.png', 192],
@@ -176,7 +189,7 @@ test('운영 아이콘 세 개는 이름에 맞는 정사각형 PNG 크기다', 
   ]);
 
   for (const [filename, size] of expected) {
-    const buffer = await readFile(new URL(`../icons/${filename}`, import.meta.url));
+    const buffer = await readFile(path.join(outputDir, filename));
     assert.deepEqual(pngSize(buffer), { width: size, height: size }, filename);
   }
 });
