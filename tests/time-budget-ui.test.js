@@ -51,6 +51,23 @@ test('일간 달력은 기록 날짜만 활성화하고 미래를 막는다', ()
   assert.match(html, /75%/);
 });
 
+test('예산 0시간에 실제 기록이 있으면 예산 미설정으로 표시한다', () => {
+  const html = renderDashboardHtml({
+    mode: 'daily', selectedDate: '2026-07-26', today: '2026-07-26', previousDate: null,
+    calendarYear: 2026, calendarMonth: 7, recordDates: ['2026-07-26'],
+    dailySummary: {
+      totalBudgetMinutes: 0,
+      totalActualMinutes: 60,
+      percentage: null,
+      categorySummaries: [{
+        id: 'reading', name: '독서', budgetMinutes: 0, actualMinutes: 60,
+        percentage: null, status: 'unbudgeted', budgetSource: 'direct',
+      }],
+    },
+  });
+  assert.match(html, /예산 미설정/);
+});
+
 test('이번 주에서는 다음 주 버튼이 비활성화된다', () => {
   const html = renderDashboardHtml({
     mode: 'weekly', selectedWeekStart: '2026-07-20', currentWeekStart: '2026-07-20', weekRangeLabel: '7월 20일–7월 26일',
