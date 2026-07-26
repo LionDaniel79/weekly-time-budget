@@ -37,7 +37,8 @@ test('Pages workflow는 테스트 후 Firebase 변수로 _site를 준비한다',
     'FIREBASE_APP_ID',
     'FIREBASE_MEASUREMENT_ID',
   ]) {
-    assert.match(source, new RegExp(`${name}: \\${{ vars\\.${name} }}`));
+    const expected = `${name}: \${{ vars.${name} }}`;
+    assert.equal(source.includes(expected), true, `${expected} should exist`);
   }
 });
 
