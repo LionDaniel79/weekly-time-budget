@@ -23,12 +23,24 @@ test('모든 통계 표 셀은 모바일 항목명을 위한 data-label을 가�
 test('800px 이하에서는 통계 표가 가로 스크롤 없는 카드형으로 전환된다', async () => {
   const code = await source();
   assert.match(code, /@media\(max-width:800px\)/);
-  assert.match(code, /\.statistics-table-wrap\s*\{[^}]*overflow-x\s*:\s*visible/s);
+  assert.match(code, /\.statistics-table-wrap\s*\{[^}]*overflow-x\s*:\s*hidden/s);
+  assert.match(code, /\.statistics-table-wrap\s*\{[^}]*width\s*:\s*100%/s);
   assert.match(code, /\.statistics-table\s*\{[^}]*min-width\s*:\s*0/s);
+  assert.match(code, /\.statistics-table\s*\{[^}]*max-width\s*:\s*100%/s);
   assert.match(code, /\.statistics-table thead\s*\{[^}]*display\s*:\s*none/s);
   assert.match(code, /\.statistics-table tbody\s*\{[^}]*display\s*:\s*grid/s);
   assert.match(code, /\.statistics-table tr\s*\{[^}]*display\s*:\s*grid/s);
   assert.match(code, /\.statistics-table td::before\s*\{[^}]*content\s*:\s*attr\(data-label\)/s);
+});
+
+test('월간·연도별 비교 카드는 내부 내용이 화면 폭을 넓히지 않는다', async () => {
+  const code = await source();
+  assert.match(code, /\.statistics-card\s*\{[^}]*min-width\s*:\s*0/s);
+  assert.match(code, /\.statistics-card\s*\{[^}]*max-width\s*:\s*100%/s);
+  assert.match(code, /\.comparison-row\s*\{[^}]*min-width\s*:\s*0/s);
+  assert.match(code, /\.comparison-bars\s*\{[^}]*min-width\s*:\s*0/s);
+  assert.match(code, /\.statistics-table td[^}]*overflow-wrap\s*:\s*anywhere/s);
+  assert.match(code, /\.matrix-cell strong\s*\{[^}]*overflow-wrap\s*:\s*anywhere/s);
 });
 
 test('데스크톱 통계 표는 기존 760px보다 작은 최소 폭과 압축된 셀 여백을 사용한다', async () => {
