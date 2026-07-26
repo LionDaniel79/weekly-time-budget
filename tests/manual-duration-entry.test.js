@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import {
   MANUAL_DURATION_ERROR,
   MANUAL_INPUT_MODES,
@@ -74,4 +76,12 @@ test('manual duration controls stay within the mobile viewport', async () => {
   assert.match(css, /\.duration-input-row\s*\{[^}]*display\s*:\s*grid/s);
   assert.match(css, /\.duration-input-row\s*\{[^}]*grid-template-columns\s*:\s*minmax\(0,1fr\) auto/s);
   assert.match(css, /@media\(max-width:360px\)/);
+});
+
+test('manual entry JavaScript files have valid syntax', () => {
+  for (const relativePath of ['../src/manual-entry.js', '../src/app.js']) {
+    const path = fileURLToPath(new URL(relativePath, import.meta.url));
+    const result = spawnSync(process.execPath, ['--check', path], { encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+  }
 });
