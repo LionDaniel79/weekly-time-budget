@@ -48,6 +48,11 @@ export async function preparePagesSite({
   await cp(path.join(rootDir, 'index.html'), path.join(outputDir, 'index.html'));
   await cp(path.join(rootDir, 'styles.css'), path.join(outputDir, 'styles.css'));
   await cp(path.join(rootDir, 'src'), path.join(outputDir, 'src'), { recursive: true });
+  await cp(
+    path.join(rootDir, 'manifest.webmanifest'),
+    path.join(outputDir, 'manifest.webmanifest'),
+  );
+  await cp(path.join(rootDir, 'icons'), path.join(outputDir, 'icons'), { recursive: true });
   await writeFile(path.join(outputDir, 'firebase-config.js'), firebaseConfigSource, 'utf8');
   await writeFile(path.join(outputDir, '.nojekyll'), '', 'utf8');
 
