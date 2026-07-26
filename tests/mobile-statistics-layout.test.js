@@ -4,10 +4,15 @@ import { spawnSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
-const sourceUrl = new URL('../src/statistics-ui.js', import.meta.url);
+const statisticsUrl = new URL('../src/statistics-ui.js', import.meta.url);
+const overflowFixUrl = new URL('../src/statistics-mobile-overflow.js', import.meta.url);
 
 async function source() {
-  return readFile(sourceUrl, 'utf8');
+  const [statistics, overflowFix] = await Promise.all([
+    readFile(statisticsUrl, 'utf8'),
+    readFile(overflowFixUrl, 'utf8'),
+  ]);
+  return `${statistics}\n${overflowFix}`;
 }
 
 test('모든 통계 표 셀은 모바일 항목명을 위한 data-label을 가진다', async () => {
@@ -43,6 +48,14 @@ test('월간·연도별 비교 카드는 내부 내용이 화면 폭을 넓히�
   assert.match(code, /\.matrix-cell strong\s*\{[^}]*overflow-wrap\s*:\s*anywhere/s);
 });
 
+test('모바일 가로 스크롤 보정 모듈이 통계 모듈 다음에 로드된다', async () => {
+  const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
+  const statisticsPosition = html.indexOf('statistics-ui.js');
+  const overflowPosition = html.indexOf('statistics-mobile-overflow.js');
+  assert.ok(statisticsPosition >= 0);
+  assert.ok(overflowPosition > statisticsPosition);
+});
+
 test('데스크톱 통계 표는 기존 760px보다 작은 최소 폭과 압축된 셀 여백을 사용한다', async () => {
   const code = await source();
   assert.doesNotMatch(code, /min-width\s*:\s*760px/);
@@ -51,7 +64,9 @@ test('데스크톱 통계 표는 기존 760px보다 작은 최소 폭과 압축�
 });
 
 test('모바일 통계 스타일 변경 후에도 자바스크립트 문법이 유효하다', () => {
-  const path = fileURLToPath(sourceUrl);
-  const result = spawnSync(process.execPath, ['--check', path], { encoding: 'utf8' });
-  assert.equal(result.status, 0, result.stderr || result.stdout);
+  for (const url of [statisticsUrl, overflowFixUrl]) {
+    const path = fileURLToPath(url);
+    const result = spawnSync(process.execPath, ['--check', path], { encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+  }
 });
