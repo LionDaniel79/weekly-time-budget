@@ -29,7 +29,7 @@ test('통계는 기록 구성비 대신 예산 대비 달성률을 표시한다'
     '달성률',
     '남음',
     '초과',
-    '월평균 기록 시간',
+    '기록이 있는 달 기준 월평균 기록 시간',
     '기록 일수',
     '하루 평균',
     '전월 대비',
@@ -41,16 +41,27 @@ test('통계는 기록 구성비 대신 예산 대비 달성률을 표시한다'
   }
   assert.doesNotMatch(statisticsSource, /전체 비율/);
   assert.doesNotMatch(statisticsSource, /categoryBreakdown/);
-  assert.match(statisticsSource, /summarizeBudgetPeriod/);
-  assert.match(statisticsSource, /detailedMonthlyBudgetComparison/);
-  assert.match(statisticsSource, /detailedYearlyBudgetComparison/);
+  assert.match(statisticsSource, /summarizeWeeklyBudgetPeriod/);
+  assert.match(statisticsSource, /summarizeRecordedMonthlyBudgetPeriod/);
+  assert.match(statisticsSource, /summarizeRecordedYearlyBudgetPeriod/);
+  assert.match(statisticsSource, /detailedRecordedMonthlyBudgetComparison/);
+  assert.match(statisticsSource, /detailedRecordedYearlyBudgetComparison/);
   assert.match(statisticsSource, /weeklyBudgets/);
 });
 
-test('통계 화면의 기간 제목은 주간 범위 대신 선택한 통계 기간을 표시한다', async () => {
+test('통계 탭은 주별 통계를 첫 항목으로 제공한다', async () => {
+  const statisticsSource = await read('src/statistics-ui.js');
+  assert.match(statisticsSource, /\[\['weekly','주별 통계'\]/);
+  assert.match(statisticsSource, /이전 주/);
+  assert.match(statisticsSource, /다음 주/);
+  assert.match(statisticsSource, /data-week-offset/);
+  assert.match(statisticsSource, /moveWeekStart/);
+});
+
+test('통계 화면의 기간 제목은 선택한 통계 기간을 표시한다', async () => {
   const statisticsSource = await read('src/statistics-ui.js');
   assert.match(statisticsSource, /예산 대비 통계/);
-  assert.match(statisticsSource, /1월~12월 비교/);
+  assert.match(statisticsSource, /기록 월 비교/);
   assert.match(statisticsSource, /전체 연도 비교/);
   assert.match(statisticsSource, /restoreWeeklyHeader/);
 });
