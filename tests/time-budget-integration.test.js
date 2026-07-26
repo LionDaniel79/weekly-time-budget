@@ -60,6 +60,12 @@ test('완전 삭제는 일간·주간 예산과 진행 중 타이머 참조를 �
   for (const token of ['weeklyBudgets', 'dailyBudgets', 'explicitBudgetIds', 'overrides', 'activeTimer', 'categoryId']) assert.ok(source.includes(token), token);
 });
 
+test('완전 삭제는 예산 맵을 merge하지 않고 교체하여 삭제 키를 제거한다', async () => {
+  const source = await read('src/category-delete-guard.js');
+  assert.match(source, /else batch\.update\(operation\.ref, operation\.data\)/);
+  assert.doesNotMatch(source, /batch\.set\(operation\.ref, operation\.data, \{ merge: true \}\)/);
+});
+
 test('신규 경로는 사용자 하위 wildcard 보안 규칙으로 보호된다', async () => {
   const rules = await read('firestore.rules');
   assert.match(rules, /match \/users\/\{userId\}\/\{document=\*\*\}/);
