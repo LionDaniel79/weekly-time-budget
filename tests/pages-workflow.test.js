@@ -47,6 +47,7 @@ test('Pages workflow는 공식 Pages actions로 _site만 배포한다', async ()
   assert.match(source, /actions\/configure-pages@v5/);
   assert.match(source, /actions\/upload-pages-artifact@v4/);
   assert.match(source, /path:\s*_site/);
+  assert.match(source, /include-hidden-files:\s*true/);
   assert.match(source, /actions\/deploy-pages@v4/);
   assert.match(source, /environment:\s*\n\s*name:\s*github-pages/);
 });
