@@ -38,6 +38,7 @@ const state = {
   loading: false,
 };
 let patchQueued = false;
+let loadingPromise = null;
 
 const activeCategories = () => state.categories;
 const defaultBudget = (category) => Number(category.defaultBudgetMinutes ?? category.budgetMinutes ?? 0) || 0;
@@ -87,33 +88,41 @@ function periodCategories({ start, end, weekDocument, dailyDocument = null }) {
 }
 
 async function loadData() {
-  if (!state.user || state.loading) return;
-  state.loading = true;
+  if (!state.user) return;
+  if (loadingPromise) return loadingPromise;
+  loadingPromise = (async () => {
+    state.loading = true;
+    try {
+      const root = ['users', state.user.uid];
+      const [categories, archived, entries, weekly, daily, settings] = await Promise.all([
+        store.getDocs(store.query(store.collection(db, ...root, 'categories'), store.orderBy('order'))),
+        store.getDocs(store.collection(db, ...root, 'archivedCategories')),
+        store.getDocs(store.query(store.collection(db, ...root, 'entries'), store.orderBy('date', 'desc'))),
+        store.getDocs(store.collection(db, ...root, 'weeklyBudgets')),
+        store.getDocs(store.collection(db, ...root, 'dailyBudgets')),
+        store.getDoc(store.doc(db, ...root, 'settings', 'timeBudget')),
+      ]);
+      state.categories = categories.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      state.archived = archived.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      state.entries = entries.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      state.weekly = weekly.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      state.daily = daily.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      state.defaultDayWeights = effectiveDayWeights(null, settings.exists() ? settings.data().defaultDayWeights : EQUAL_DAY_WEIGHTS);
+      const now = today();
+      const week = currentWeekStart();
+      state.dashboard.today = now;
+      state.dashboard.currentWeekStart = week;
+      state.budget.today = now;
+      if (state.dashboard.selectedDate > now) state.dashboard.selectedDate = now;
+      if (state.dashboard.selectedWeekStart > week) state.dashboard.selectedWeekStart = week;
+    } finally {
+      state.loading = false;
+    }
+  })();
   try {
-    const root = ['users', state.user.uid];
-    const [categories, archived, entries, weekly, daily, settings] = await Promise.all([
-      store.getDocs(store.query(store.collection(db, ...root, 'categories'), store.orderBy('order'))),
-      store.getDocs(store.collection(db, ...root, 'archivedCategories')),
-      store.getDocs(store.query(store.collection(db, ...root, 'entries'), store.orderBy('date', 'desc'))),
-      store.getDocs(store.collection(db, ...root, 'weeklyBudgets')),
-      store.getDocs(store.collection(db, ...root, 'dailyBudgets')),
-      store.getDoc(store.doc(db, ...root, 'settings', 'timeBudget')),
-    ]);
-    state.categories = categories.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-    state.archived = archived.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-    state.entries = entries.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-    state.weekly = weekly.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-    state.daily = daily.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-    state.defaultDayWeights = effectiveDayWeights(null, settings.exists() ? settings.data().defaultDayWeights : EQUAL_DAY_WEIGHTS);
-    const now = today();
-    const week = currentWeekStart();
-    state.dashboard.today = now;
-    state.dashboard.currentWeekStart = week;
-    state.budget.today = now;
-    if (state.dashboard.selectedDate > now) state.dashboard.selectedDate = now;
-    if (state.dashboard.selectedWeekStart > week) state.dashboard.selectedWeekStart = week;
+    await loadingPromise;
   } finally {
-    state.loading = false;
+    loadingPromise = null;
   }
 }
 
