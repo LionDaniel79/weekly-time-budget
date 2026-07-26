@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "test": "node --test",
-    "start": "npx serve .",
+    "prepare:icons": "node scripts/materialize-icons.mjs",
+    "start": "npm run prepare:icons && npx serve .",
     "prepare:pages": "node scripts/prepare-pages-site.mjs"
   },
   "devDependencies": {
