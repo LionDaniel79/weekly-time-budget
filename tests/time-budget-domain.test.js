@@ -20,6 +20,8 @@ test('상대 비율을 100%로 환산하고 총분을 보정한다', () => {
   const days = distributeWeeklyMinutes(421, weights);
   assert.deepEqual(DAY_KEYS.map((key) => days[key]), [84, 84, 42, 42, 42, 84, 43]);
   assert.equal(Object.values(days).reduce((sum, value) => sum + value, 0), 421);
+  const tiny = distributeWeeklyMinutes(1, normalizeDayWeights({ mon: 1, tue: 1, wed: 1, thu: 1, fri: 1, sat: 1, sun: 1 }));
+  assert.equal(Object.values(tiny).reduce((sum, value) => sum + value, 0), 1);
 });
 
 test('요일 값이 없거나 모두 0이면 균등 배분한다', () => {
