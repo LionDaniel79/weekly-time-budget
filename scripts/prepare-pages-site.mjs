@@ -1,4 +1,4 @@
-import { cp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -10,6 +10,12 @@ export const REQUIRED_FIREBASE_VARIABLES = Object.freeze([
   'FIREBASE_MESSAGING_SENDER_ID',
   'FIREBASE_APP_ID',
 ]);
+
+const WEB_APP_ICONS = Object.freeze({
+  'apple-touch-icon': 'apple-touch-icon.png',
+  'icon-192': 'icon-192.png',
+  'icon-512': 'icon-512.png',
+});
 
 function valueOf(env, name) {
   return String(env?.[name] ?? '').trim();
@@ -36,6 +42,30 @@ export function createFirebaseConfigSource(env = process.env) {
   return `export const firebaseConfig = ${JSON.stringify(config, null, 2)};\n`;
 }
 
+export async function materializeWebAppIcons({
+  sourceDir = path.join(process.cwd(), 'icon-assets'),
+  outputDir = path.join(process.cwd(), 'icons'),
+} = {}) {
+  await rm(outputDir, { recursive: true, force: true });
+  await mkdir(outputDir, { recursive: true });
+
+  for (const [sourceName, filename] of Object.entries(WEB_APP_ICONS)) {
+    const partsDir = path.join(sourceDir, sourceName);
+    const partNames = (await readdir(partsDir))
+      .filter((name) => name.endsWith('.b64'))
+      .sort();
+    if (!partNames.length) throw new Error(`Missing icon source parts: ${sourceName}`);
+
+    const parts = await Promise.all(
+      partNames.map((name) => readFile(path.join(partsDir, name), 'utf8')),
+    );
+    const bytes = Buffer.from(parts.join('').replace(/\s+/g, ''), 'base64');
+    await writeFile(path.join(outputDir, filename), bytes);
+  }
+
+  return outputDir;
+}
+
 export async function preparePagesSite({
   rootDir = process.cwd(),
   outputDir = path.join(rootDir, '_site'),
@@ -52,7 +82,10 @@ export async function preparePagesSite({
     path.join(rootDir, 'manifest.webmanifest'),
     path.join(outputDir, 'manifest.webmanifest'),
   );
-  await cp(path.join(rootDir, 'icons'), path.join(outputDir, 'icons'), { recursive: true });
+  await materializeWebAppIcons({
+    sourceDir: path.join(rootDir, 'icon-assets'),
+    outputDir: path.join(outputDir, 'icons'),
+  });
   await writeFile(path.join(outputDir, 'firebase-config.js'), firebaseConfigSource, 'utf8');
   await writeFile(path.join(outputDir, '.nojekyll'), '', 'utf8');
 
