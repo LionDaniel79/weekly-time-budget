@@ -77,3 +77,46 @@ test('대분류는 이름·기본예산·순서를 한 번에 적용한다', asy
   assert.match(editorSource, /defaultBudgetMinutes/);
   assert.match(editorSource, /order:\s*index\s*\+\s*1/);
 });
+
+test('수동 입력은 시각 범위와 분 직접 입력 방식을 제공한다', async () => {
+  const appSource = await read('src/app.js');
+  assert.match(appSource, /manualInputMode:\s*MANUAL_INPUT_MODES\.TIME_RANGE/);
+  assert.match(appSource, /manualCategoryId:\s*''/);
+  assert.match(appSource, /data-manual-mode="time-range"/);
+  assert.match(appSource, /data-manual-mode="duration"/);
+  assert.match(appSource, /시작·종료 시각/);
+  assert.match(appSource, /분 직접 입력/);
+  assert.match(appSource, /id="manual-duration"/);
+  assert.match(appSource, /<form id="manual-form" class="form-grid" novalidate>/);
+});
+
+test('방식 변경은 대분류를 유지하고 선택한 필드만 다시 그린다', async () => {
+  const appSource = await read('src/app.js');
+  assert.match(appSource, /state\.manualCategoryId\s*=\s*\$\('#manual-category'\)\?\.value/);
+  assert.match(appSource, /state\.manualInputMode\s*=\s*button\.dataset\.manualMode/);
+  assert.match(appSource, /state\.manualInputMode\s*===\s*MANUAL_INPUT_MODES\.DURATION/);
+  assert.match(appSource, /class="time-fields"/);
+  assert.match(appSource, /class="duration-input-row"/);
+  assert.match(appSource, /renderRecord\(\)/);
+});
+
+test('분 직접 입력은 별도 source로 저장하고 오류 문구를 표시한다', async () => {
+  const appSource = await read('src/app.js');
+  assert.match(appSource, /createManualDurationEntry\(\{/);
+  assert.match(appSource, /durationMinutes:\s*\$\('#manual-duration'\)\.value/);
+  assert.match(appSource, /state\.manualCategoryId\s*=\s*categoryId/);
+  assert.match(appSource, /alert\(error instanceof Error \? error\.message : String\(error\)\)/);
+});
+
+test('기존 시각 방식은 빈 시각과 잘못된 범위를 검사한다', async () => {
+  const appSource = await read('src/app.js');
+  assert.match(appSource, /if \(!startTime \|\| !endTime\)/);
+  assert.match(appSource, /minutesBetween\(startTime, endTime\)/);
+  assert.match(appSource, /시간 범위를 확인하세요/);
+});
+
+test('기록 내역은 공통 formatter를 사용한다', async () => {
+  const appSource = await read('src/app.js');
+  assert.match(appSource, /manualEntryTimeLabel\(entry,\s*formatMinutes\)/);
+  assert.doesNotMatch(appSource, /\$\{entry\.startTime \|\| ''\}–\$\{entry\.endTime \|\| ''\}/);
+});
