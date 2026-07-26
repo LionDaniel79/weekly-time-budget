@@ -25,6 +25,12 @@ function dateKeys(start, end) {
   return values;
 }
 
+function isDateKey(value) {
+  const text = String(value || '');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return false;
+  return toDateKey(fromDateKey(text)) === text;
+}
+
 function normalizedTimestampDate(value) {
   if (!value) return null;
   if (typeof value === 'string') return value.slice(0, 10);
@@ -62,6 +68,35 @@ export function getMonthRange(year, month) {
 
 export function getYearRange(year) {
   return { start: `${year}-01-01`, end: `${year}-12-31` };
+}
+
+export function recordedWeekKeysForMonth(entries, year, month) {
+  const { start, end } = getMonthRange(year, month);
+  const keys = new Set();
+  (entries || []).forEach((entry) => {
+    if (!isDateKey(entry.date) || entry.date < start || entry.date > end) return;
+    keys.add(getBudgetWeekKey(fromDateKey(entry.date)));
+  });
+  return [...keys].sort();
+}
+
+export function recordedMonthsForYear(entries, year) {
+  const prefix = `${Number(year)}-`;
+  const months = new Set();
+  (entries || []).forEach((entry) => {
+    if (!isDateKey(entry.date) || !entry.date.startsWith(prefix)) return;
+    months.add(Number(entry.date.slice(5, 7)));
+  });
+  return [...months].sort((a, b) => a - b);
+}
+
+export function moveWeekStart(weekStart, offsetWeeks, referenceDate = new Date()) {
+  const currentWeekStart = getWeekRange(referenceDate).start;
+  const normalizedStart = isDateKey(weekStart)
+    ? getWeekRange(fromDateKey(weekStart)).start
+    : currentWeekStart;
+  const candidate = toDateKey(addDays(normalizedStart, Number(offsetWeeks) * 7));
+  return candidate > currentWeekStart ? currentWeekStart : candidate;
 }
 
 export function reorderItems(items, itemId, direction) {
@@ -173,29 +208,22 @@ function effectiveWeeklyBudget(category, week, dateKey) {
   return override === undefined ? defaultBudgetMinutes(category) : Number(override) || 0;
 }
 
-export function summarizeBudgetPeriod(entries, categories, weeklyBudgets, start, end) {
-  const categoryList = [...(categories || [])]
-    .sort((a, b) => (Number(a.order) || 999999) - (Number(b.order) || 999999) || String(a.name).localeCompare(String(b.name), 'ko'));
-  const categoryById = new Map(categoryList.map((category) => [category.id, category]));
-  const weeks = weeklyBudgetMap(weeklyBudgets);
-  const budgetById = new Map(categoryList.map((category) => [category.id, 0]));
+function sortedCategories(categories) {
+  return [...(categories || [])]
+    .sort((a, b) => (Number(a.order) || 999999) - (Number(b.order) || 999999)
+      || String(a.name).localeCompare(String(b.name), 'ko'));
+}
 
-  dateKeys(start, end).forEach((dateKey) => {
-    const weekKey = getBudgetWeekKey(fromDateKey(dateKey));
-    const week = weeks.get(weekKey);
-    categoryList.forEach((category) => {
-      const weeklyMinutes = effectiveWeeklyBudget(category, week, dateKey);
-      budgetById.set(category.id, (budgetById.get(category.id) || 0) + weeklyMinutes / 7);
-    });
-  });
-
-  const filteredEntries = (entries || []).filter((entry) => entry.date >= start && entry.date <= end);
+function finalizeBudgetSummary(entries, categoryList, categoryById, budgetById, start, end) {
+  const filteredEntries = (entries || []).filter((entry) => (
+    isDateKey(entry.date) && entry.date >= start && entry.date <= end
+  ));
   const actualById = new Map();
   const days = new Set();
   filteredEntries.forEach((entry) => {
     const minutes = Number(entry.durationMinutes || 0);
     actualById.set(entry.categoryId, (actualById.get(entry.categoryId) || 0) + minutes);
-    if (entry.date) days.add(entry.date);
+    days.add(entry.date);
   });
 
   const categorySummaries = categoryList.map((category) => {
@@ -237,6 +265,118 @@ export function summarizeBudgetPeriod(entries, categories, weeklyBudgets, start,
   };
 }
 
+function summarizeBudgetRange(entries, categories, weeklyBudgets, start, end, includedWeekKeys = null) {
+  const categoryList = sortedCategories(categories);
+  const categoryById = new Map(categoryList.map((category) => [category.id, category]));
+  const weeks = weeklyBudgetMap(weeklyBudgets);
+  const budgetById = new Map(categoryList.map((category) => [category.id, 0]));
+
+  dateKeys(start, end).forEach((dateKey) => {
+    const weekKey = getBudgetWeekKey(fromDateKey(dateKey));
+    if (includedWeekKeys && !includedWeekKeys.has(weekKey)) return;
+    const week = weeks.get(weekKey);
+    categoryList.forEach((category) => {
+      const weeklyMinutes = effectiveWeeklyBudget(category, week, dateKey);
+      budgetById.set(category.id, (budgetById.get(category.id) || 0) + weeklyMinutes / 7);
+    });
+  });
+
+  return finalizeBudgetSummary(entries, categoryList, categoryById, budgetById, start, end);
+}
+
+export function summarizeBudgetPeriod(entries, categories, weeklyBudgets, start, end) {
+  return summarizeBudgetRange(entries, categories, weeklyBudgets, start, end);
+}
+
+export function summarizeWeeklyBudgetPeriod(entries, categories, weeklyBudgets, weekStart) {
+  const normalizedStart = isDateKey(weekStart)
+    ? getWeekRange(fromDateKey(weekStart)).start
+    : getWeekRange().start;
+  const end = toDateKey(addDays(normalizedStart, 6));
+  return summarizeBudgetRange(entries, categories, weeklyBudgets, normalizedStart, end);
+}
+
+export function summarizeRecordedMonthlyBudgetPeriod(entries, categories, weeklyBudgets, year, month) {
+  const range = getMonthRange(year, month);
+  const weekKeys = recordedWeekKeysForMonth(entries, year, month);
+  const summary = summarizeBudgetRange(
+    entries,
+    categories,
+    weeklyBudgets,
+    range.start,
+    range.end,
+    new Set(weekKeys),
+  );
+  return { ...summary, recordWeekCount: weekKeys.length };
+}
+
+function combineBudgetSummaries(summaries, categories, recordDates) {
+  const categoryList = sortedCategories(categories);
+  const totals = new Map(categoryList.map((category) => [category.id, {
+    id: category.id,
+    name: category.name,
+    budgetMinutes: 0,
+    actualMinutes: 0,
+  }]));
+
+  summaries.forEach((summary) => {
+    summary.categorySummaries.forEach((item) => {
+      const current = totals.get(item.id) || {
+        id: item.id,
+        name: item.name,
+        budgetMinutes: 0,
+        actualMinutes: 0,
+      };
+      current.budgetMinutes += Number(item.budgetMinutes) || 0;
+      current.actualMinutes += Number(item.actualMinutes) || 0;
+      totals.set(item.id, current);
+    });
+  });
+
+  const categorySummaries = [...totals.values()].map((item) => ({
+    ...item,
+    ...calculateBudgetAchievement(item.budgetMinutes, item.actualMinutes),
+  }));
+  const totalBudgetMinutes = categorySummaries.reduce((sum, item) => sum + item.budgetMinutes, 0);
+  const totalActualMinutes = categorySummaries.reduce((sum, item) => sum + item.actualMinutes, 0);
+  const achievement = calculateBudgetAchievement(totalBudgetMinutes, totalActualMinutes);
+  const recordDays = recordDates.size;
+  return {
+    totalBudgetMinutes,
+    totalActualMinutes,
+    percentage: achievement.percentage,
+    differenceMinutes: achievement.differenceMinutes,
+    status: achievement.status,
+    recordDays,
+    dailyAverageMinutes: recordDays ? Math.round(totalActualMinutes / recordDays) : 0,
+    categorySummaries,
+  };
+}
+
+export function summarizeRecordedYearlyBudgetPeriod(entries, categories, weeklyBudgets, year) {
+  const months = recordedMonthsForYear(entries, year);
+  const summaries = months.map((month) => summarizeRecordedMonthlyBudgetPeriod(
+    entries,
+    categories,
+    weeklyBudgets,
+    year,
+    month,
+  ));
+  const prefix = `${Number(year)}-`;
+  const recordDates = new Set((entries || [])
+    .filter((entry) => isDateKey(entry.date) && entry.date.startsWith(prefix))
+    .map((entry) => entry.date));
+  return {
+    ...combineBudgetSummaries(summaries, categories, recordDates),
+    recordMonthCount: months.length,
+  };
+}
+
+export function calculateRecordedMonthAverage(totalMinutes, recordMonthCount) {
+  const divisor = Number(recordMonthCount) || 0;
+  return divisor ? Math.round((Number(totalMinutes) || 0) / divisor) : 0;
+}
+
 export function calculatePeriodChange(currentMinutes, previousMinutes) {
   const current = Number(currentMinutes) || 0;
   const previous = Number(previousMinutes) || 0;
@@ -261,6 +401,19 @@ export function detailedMonthlyBudgetComparison(entries, categories, weeklyBudge
   });
 }
 
+export function detailedRecordedMonthlyBudgetComparison(entries, categories, weeklyBudgets, year) {
+  const rows = recordedMonthsForYear(entries, year).map((month) => ({
+    month,
+    ...summarizeRecordedMonthlyBudgetPeriod(entries, categories, weeklyBudgets, year, month),
+  }));
+  return rows.map((row, index) => {
+    const change = index
+      ? calculatePeriodChange(row.totalActualMinutes, rows[index - 1].totalActualMinutes)
+      : { minutes: null, percentage: null };
+    return { ...row, changeMinutes: change.minutes, changePercentage: change.percentage };
+  });
+}
+
 function yearsRepresented(entries, weeklyBudgets) {
   const years = new Set();
   (entries || []).forEach((entry) => {
@@ -276,11 +429,33 @@ function yearsRepresented(entries, weeklyBudgets) {
   return [...years].sort((a, b) => a - b);
 }
 
+function recordedYears(entries) {
+  const years = new Set();
+  (entries || []).forEach((entry) => {
+    if (!isDateKey(entry.date)) return;
+    years.add(Number(entry.date.slice(0, 4)));
+  });
+  return [...years].sort((a, b) => a - b);
+}
+
 export function detailedYearlyBudgetComparison(entries, categories, weeklyBudgets) {
   const rows = yearsRepresented(entries, weeklyBudgets).map((year) => {
     const range = getYearRange(year);
     return { year, ...summarizeBudgetPeriod(entries, categories, weeklyBudgets, range.start, range.end) };
   });
+  return rows.map((row, index) => {
+    const change = index
+      ? calculatePeriodChange(row.totalActualMinutes, rows[index - 1].totalActualMinutes)
+      : { minutes: null, percentage: null };
+    return { ...row, changeMinutes: change.minutes, changePercentage: change.percentage };
+  });
+}
+
+export function detailedRecordedYearlyBudgetComparison(entries, categories, weeklyBudgets) {
+  const rows = recordedYears(entries).map((year) => ({
+    year,
+    ...summarizeRecordedYearlyBudgetPeriod(entries, categories, weeklyBudgets, year),
+  }));
   return rows.map((row, index) => {
     const change = index
       ? calculatePeriodChange(row.totalActualMinutes, rows[index - 1].totalActualMinutes)

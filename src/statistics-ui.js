@@ -1,13 +1,14 @@
 import { firebaseConfig } from '../firebase-config.js';
 import {
-  calculateYearMonthlyAverage,
-  detailedMonthlyBudgetComparison,
-  detailedYearlyBudgetComparison,
+  calculateRecordedMonthAverage,
+  detailedRecordedMonthlyBudgetComparison,
+  detailedRecordedYearlyBudgetComparison,
   formatMinutes,
-  getMonthRange,
   getWeekRange,
-  getYearRange,
-  summarizeBudgetPeriod,
+  moveWeekStart,
+  summarizeRecordedMonthlyBudgetPeriod,
+  summarizeRecordedYearlyBudgetPeriod,
+  summarizeWeeklyBudgetPeriod,
 } from './domain.js';
 
 const appModule = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js');
@@ -20,8 +21,10 @@ const db = storeModule.getFirestore(app);
 const TIMER_KEY = 'weekly-time-budget:last-timer-category';
 const MANUAL_KEY = 'weekly-time-budget:last-manual-category';
 const now = new Date();
+const currentWeekStart = getWeekRange(now).start;
 const statisticsState = {
-  mode: 'monthly',
+  mode: 'weekly',
+  weekStart: currentWeekStart,
   year: now.getFullYear(),
   month: now.getMonth() + 1,
   entries: [],
@@ -36,6 +39,10 @@ const escapeHtml = (value = '') => String(value).replace(/[&<>'"]/g, (char) => (
   '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;',
 }[char]));
 
+function selectedWeekRange() {
+  return getWeekRange(new Date(`${statisticsState.weekStart}T12:00:00`));
+}
+
 function injectStyles() {
   if (document.querySelector('#statistics-ui-styles')) return;
   const style = document.createElement('style');
@@ -45,6 +52,9 @@ function injectStyles() {
     .statistics-controls{display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin-bottom:18px}
     .statistics-controls label{display:grid;gap:6px;font-weight:700}
     .statistics-controls select{border:1px solid #cdd5d0;border-radius:12px;padding:10px 12px;background:#fff;font:inherit}
+    .week-navigation{display:grid;grid-template-columns:auto minmax(210px,1fr) auto;gap:12px;align-items:center;margin-bottom:18px}
+    .week-navigation .week-range{padding:11px 14px;border:1px solid #d7ddd8;border-radius:12px;background:#fffdf7;text-align:center}
+    .week-navigation button{white-space:nowrap}
     .statistics-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:18px}
     .stat-card-note{font-size:.78rem;color:#77817d;margin-top:7px}
     .statistics-card{margin-top:18px}
@@ -77,6 +87,8 @@ function injectStyles() {
       .statistics-tabs{gap:6px}
       .statistics-tabs .tab-button{flex:1 1 calc(50% - 6px);padding:9px 8px}
       .statistics-controls>*{flex:1;min-width:120px}
+      .week-navigation{grid-template-columns:1fr 1fr}
+      .week-navigation .week-range{grid-column:1/-1;grid-row:1}
       .statistics-summary{grid-template-columns:1fr 1fr;gap:10px}
       .statistics-summary .card{padding:14px}
       .statistics-card{padding:16px}
@@ -140,9 +152,13 @@ function patchSundayCopy() {
 }
 
 function statisticsHeaderText() {
+  if (statisticsState.mode === 'weekly') {
+    const range = selectedWeekRange();
+    return `${range.start} — ${range.end} · 주별 예산 대비 통계`;
+  }
   if (statisticsState.mode === 'monthly') return `${statisticsState.year}년 ${statisticsState.month}월 · 예산 대비 통계`;
   if (statisticsState.mode === 'yearly') return `${statisticsState.year}년 · 예산 대비 통계`;
-  if (statisticsState.mode === 'monthly-comparison') return `${statisticsState.year}년 1월~12월 비교 · 예산 대비 통계`;
+  if (statisticsState.mode === 'monthly-comparison') return `${statisticsState.year}년 기록 월 비교 · 예산 대비 통계`;
   return '전체 연도 비교 · 예산 대비 통계';
 }
 
@@ -239,7 +255,9 @@ function overallAchievementText(summary) {
 }
 
 function summaryCards(summary, yearly = false) {
-  const monthlyAverage = yearly ? calculateYearMonthlyAverage(summary.totalActualMinutes, statisticsState.year, now) : null;
+  const monthlyAverage = yearly
+    ? calculateRecordedMonthAverage(summary.totalActualMinutes, summary.recordMonthCount)
+    : null;
   return `
     <div class="statistics-summary">
       <article class="card"><p class="muted">기간 예산</p><div class="metric">${formatMinutes(summary.totalBudgetMinutes)}</div></article>
@@ -247,11 +265,11 @@ function summaryCards(summary, yearly = false) {
       <article class="card"><p class="muted">전체 달성률</p><div class="metric">${overallAchievementText(summary)}</div><p class="stat-card-note">${differenceText({ ...summary, actualMinutes: summary.totalActualMinutes, hasBudget: summary.totalBudgetMinutes > 0 })}</p></article>
       <article class="card"><p class="muted">기록 일수</p><div class="metric">${summary.recordDays}일</div></article>
       <article class="card"><p class="muted">기록한 날 기준 하루 평균</p><div class="metric">${formatMinutes(summary.dailyAverageMinutes)}</div></article>
-      ${yearly ? `<article class="card"><p class="muted">월평균 기록 시간</p><div class="metric">${formatMinutes(monthlyAverage)}</div><p class="stat-card-note">${statisticsState.year === now.getFullYear() ? `1월~${now.getMonth() + 1}월 기준` : '12개월 기준'}</p></article>` : ''}
+      ${yearly ? `<article class="card"><p class="muted">기록이 있는 달 기준 월평균 기록 시간</p><div class="metric">${formatMinutes(monthlyAverage)}</div><p class="stat-card-note">${summary.recordMonthCount || 0}개월 기록 기준</p></article>` : ''}
     </div>`;
 }
 
-function categoryAchievementTable(summary, title) {
+function categoryAchievementTable(summary, title, note) {
   const rows = visibleCategorySummaries(summary);
   return `
     <div class="card statistics-card">
@@ -267,8 +285,12 @@ function categoryAchievementTable(summary, title) {
           <td data-label="차이"><span class="difference ${differenceClass(row)}">${differenceText(row)}</span></td>
         </tr>`).join('')}</tbody>
       </table></div>` : '<div class="empty-statistics">해당 기간에 표시할 대분류가 없습니다.</div>'}
-      <div class="statistics-note">월·연도 경계에 걸친 주간 예산은 해당 기간에 포함되는 날짜 수만큼 7일로 나누어 계산합니다. 별도의 주간 예산이 저장되지 않은 주는 대분류의 기본 예산을 사용합니다.</div>
+      <div class="statistics-note">${note}</div>
     </div>`;
+}
+
+function emptyPeriodNotice(message) {
+  return `<div class="card statistics-card"><div class="empty-statistics">${message}</div></div>`;
 }
 
 function formatChange(item) {
@@ -283,7 +305,7 @@ function formatChange(item) {
 function comparisonChart(items, labelKey, labelFormatter, changeLabel) {
   const max = Math.max(1, ...items.flatMap((item) => [item.totalBudgetMinutes, item.totalActualMinutes]));
   const hasData = items.some((item) => item.totalBudgetMinutes > 0 || item.totalActualMinutes > 0);
-  if (!hasData) return '<div class="card statistics-card"><div class="empty-statistics">비교할 예산과 기록이 없습니다.</div></div>';
+  if (!hasData) return emptyPeriodNotice('비교할 예산과 기록이 없습니다.');
   return `<div class="card statistics-card"><div class="section-title"><h2>기간별 예산과 실제 기록</h2></div>
     <p class="statistics-explanation">회색 막대는 기간 예산, 초록 막대는 실제 기록입니다.</p>
     <div class="comparison-list">${items.map((item) => {
@@ -305,6 +327,7 @@ function comparisonChangeCell(item, changeLabel) {
 }
 
 function comparisonDetailTable(items, labelKey, labelFormatter, changeLabel) {
+  if (!items.length) return '';
   return `<div class="card statistics-card"><div class="section-title"><h2>기간별 상세 비교</h2></div>
     <div class="statistics-table-wrap"><table class="statistics-table">
       <thead><tr><th>기간</th><th>기간 예산</th><th>실제 기록</th><th>달성률</th><th>기록 일수</th><th>하루 평균</th><th>${changeLabel}</th></tr></thead>
@@ -328,7 +351,7 @@ function categoryBudgetMatrix(items, labelKey, labelFormatter, title) {
     ...[...allIds].filter((id) => !activeOrder.includes(id)),
   ];
   const categoryById = new Map(allCategories().map((category) => [category.id, category]));
-  if (!orderedIds.length) return `<div class="card statistics-card"><div class="section-title"><h2>${title}</h2></div><div class="empty-statistics">비교할 대분류가 없습니다.</div></div>`;
+  if (!orderedIds.length) return '';
   return `<div class="card statistics-card"><div class="section-title"><h2>${title}</h2></div>
     <p class="statistics-explanation">각 칸은 실제 기록 / 기간 예산과 달성률을 표시합니다.</p>
     <div class="statistics-table-wrap"><table class="statistics-table statistics-matrix-table">
@@ -348,10 +371,6 @@ function yearOptions() {
   const years = new Set([now.getFullYear(), statisticsState.year]);
   statisticsState.entries.forEach((entry) => {
     const year = Number(String(entry.date || '').slice(0, 4));
-    if (Number.isFinite(year)) years.add(year);
-  });
-  statisticsState.weeklyBudgets.forEach((week) => {
-    const year = Number(String(week.weekStart || week.id || '').slice(0, 4));
     if (Number.isFinite(year)) years.add(year);
   });
   return [...years].sort((a, b) => b - a).map((year) => `<option value="${year}" ${year === statisticsState.year ? 'selected' : ''}>${year}년</option>`).join('');
@@ -375,27 +394,91 @@ async function loadStatisticsData() {
   return true;
 }
 
+function weeklyStatisticsHtml() {
+  const summary = summarizeWeeklyBudgetPeriod(
+    statisticsState.entries,
+    allCategories(),
+    statisticsState.weeklyBudgets,
+    statisticsState.weekStart,
+  );
+  return `${summaryCards(summary)}${categoryAchievementTable(
+    summary,
+    '대분류별 주간 예산 달성',
+    '선택한 주는 기록 여부와 관계없이 월요일부터 주일까지의 전체 주간 예산을 사용합니다. 별도의 주간 예산이 저장되지 않았다면 대분류의 기본 예산을 사용합니다.',
+  )}`;
+}
+
 function monthlyStatisticsHtml() {
-  const range = getMonthRange(statisticsState.year, statisticsState.month);
-  const summary = summarizeBudgetPeriod(statisticsState.entries, allCategories(), statisticsState.weeklyBudgets, range.start, range.end);
-  return `${summaryCards(summary)}${categoryAchievementTable(summary, '대분류별 월간 예산 달성')}`;
+  const summary = summarizeRecordedMonthlyBudgetPeriod(
+    statisticsState.entries,
+    allCategories(),
+    statisticsState.weeklyBudgets,
+    statisticsState.year,
+    statisticsState.month,
+  );
+  const empty = summary.recordWeekCount
+    ? ''
+    : emptyPeriodNotice('이 달에는 시간 기록이 없어 월간 예산 계산에서 포함할 주가 없습니다.');
+  return `${summaryCards(summary)}${empty}${categoryAchievementTable(
+    summary,
+    '대분류별 월간 예산 달성',
+    '이 달에 실제 기록이 있는 주의 예산만 합산합니다. 월 경계에 걸친 주는 해당 월 날짜 수만큼 7일로 나누며, 해당 월에 기록이 없으면 그 달의 배정 예산도 제외합니다.',
+  )}`;
 }
 
 function yearlyStatisticsHtml() {
-  const range = getYearRange(statisticsState.year);
-  const summary = summarizeBudgetPeriod(statisticsState.entries, allCategories(), statisticsState.weeklyBudgets, range.start, range.end);
-  return `${summaryCards(summary, true)}${categoryAchievementTable(summary, '대분류별 연간 예산 달성')}`;
+  const summary = summarizeRecordedYearlyBudgetPeriod(
+    statisticsState.entries,
+    allCategories(),
+    statisticsState.weeklyBudgets,
+    statisticsState.year,
+  );
+  const empty = summary.recordMonthCount
+    ? ''
+    : emptyPeriodNotice('이 연도에는 시간 기록이 없어 연간 예산 계산에서 포함할 달이 없습니다.');
+  return `${summaryCards(summary, true)}${empty}${categoryAchievementTable(
+    summary,
+    '대분류별 연간 예산 달성',
+    '실제 기록이 있는 달들의 월간 예산만 합산합니다. 각 월간 예산은 다시 그 달에 기록이 있는 주들의 실제 주간 예산을 합산한 값입니다.',
+  )}`;
 }
 
 function monthlyComparisonHtml() {
-  const items = detailedMonthlyBudgetComparison(statisticsState.entries, allCategories(), statisticsState.weeklyBudgets, statisticsState.year);
+  const items = detailedRecordedMonthlyBudgetComparison(
+    statisticsState.entries,
+    allCategories(),
+    statisticsState.weeklyBudgets,
+    statisticsState.year,
+  );
+  if (!items.length) return emptyPeriodNotice('선택한 연도에는 비교할 기록 월이 없습니다.');
   return `${comparisonChart(items, 'month', (month) => `${month}월`, '전월 대비')}${comparisonDetailTable(items, 'month', (month) => `${month}월`, '전월 대비')}${categoryBudgetMatrix(items, 'month', (month) => `${month}월`, '월별 대분류 예산·실제')}`;
 }
 
 function yearlyComparisonHtml() {
-  const items = detailedYearlyBudgetComparison(statisticsState.entries, allCategories(), statisticsState.weeklyBudgets);
-  if (!items.length) return '<div class="card"><div class="empty-statistics">비교할 연도별 예산과 기록이 없습니다.</div></div>';
+  const items = detailedRecordedYearlyBudgetComparison(
+    statisticsState.entries,
+    allCategories(),
+    statisticsState.weeklyBudgets,
+  );
+  if (!items.length) return emptyPeriodNotice('비교할 연도별 기록이 없습니다.');
   return `${comparisonChart(items, 'year', (year) => `${year}년`, '전년 대비')}${comparisonDetailTable(items, 'year', (year) => `${year}년`, '전년 대비')}${categoryBudgetMatrix(items, 'year', (year) => `${year}년`, '연도별 대분류 예산·실제')}`;
+}
+
+function weeklyNavigationHtml() {
+  const range = selectedWeekRange();
+  const atCurrentWeek = statisticsState.weekStart >= currentWeekStart;
+  return `<div class="week-navigation">
+    <button type="button" class="secondary-button" data-week-offset="-1">← 이전 주</button>
+    <strong class="week-range">${range.start} ~ ${range.end}</strong>
+    <button type="button" class="secondary-button" data-week-offset="1" ${atCurrentWeek ? 'disabled' : ''}>다음 주 →</button>
+  </div>`;
+}
+
+function statisticsControlsHtml(mode) {
+  if (mode === 'weekly') return weeklyNavigationHtml();
+  if (mode === 'yearly-comparison') return '';
+  const needsMonth = mode === 'monthly';
+  return `<div class="statistics-controls"><label>연도<select id="statistics-year">${yearOptions()}</select></label>${needsMonth ? `<label>월<select id="statistics-month">${Array.from({ length: 12 }, (_, index) => `<option value="${index + 1}" ${index + 1 === statisticsState.month ? 'selected' : ''}>${index + 1}월</option>`).join('')}</select></label>` : ''}</div>`;
 }
 
 async function renderStatistics() {
@@ -407,26 +490,37 @@ async function renderStatistics() {
   try {
     await loadStatisticsData();
     const mode = statisticsState.mode;
-    const needsYear = mode !== 'yearly-comparison';
-    const needsMonth = mode === 'monthly';
-    const body = mode === 'monthly'
-      ? monthlyStatisticsHtml()
-      : mode === 'yearly'
-        ? yearlyStatisticsHtml()
-        : mode === 'monthly-comparison'
-          ? monthlyComparisonHtml()
-          : yearlyComparisonHtml();
+    const body = mode === 'weekly'
+      ? weeklyStatisticsHtml()
+      : mode === 'monthly'
+        ? monthlyStatisticsHtml()
+        : mode === 'yearly'
+          ? yearlyStatisticsHtml()
+          : mode === 'monthly-comparison'
+            ? monthlyComparisonHtml()
+            : yearlyComparisonHtml();
 
     view.innerHTML = `
       <div class="statistics-tabs">
-        ${[['monthly','월간 통계'],['yearly','연간 통계'],['monthly-comparison','월간 비교'],['yearly-comparison','연도별 비교']].map(([value, label]) => `<button class="tab-button ${mode === value ? 'active' : ''}" data-stat-mode="${value}">${label}</button>`).join('')}
+        ${[['weekly','주별 통계'],['monthly','월간 통계'],['yearly','연간 통계'],['monthly-comparison','월간 비교'],['yearly-comparison','연도별 비교']].map(([value, label]) => `<button class="tab-button ${mode === value ? 'active' : ''}" data-stat-mode="${value}">${label}</button>`).join('')}
       </div>
-      ${needsYear ? `<div class="statistics-controls"><label>연도<select id="statistics-year">${yearOptions()}</select></label>${needsMonth ? `<label>월<select id="statistics-month">${Array.from({ length: 12 }, (_, index) => `<option value="${index + 1}" ${index + 1 === statisticsState.month ? 'selected' : ''}>${index + 1}월</option>`).join('')}</select></label>` : ''}</div>` : ''}
+      ${statisticsControlsHtml(mode)}
       ${body}`;
 
     view.querySelectorAll('[data-stat-mode]').forEach((button) => {
       button.onclick = () => {
         statisticsState.mode = button.dataset.statMode;
+        updateStatisticsHeader();
+        renderStatistics();
+      };
+    });
+    view.querySelectorAll('[data-week-offset]').forEach((button) => {
+      button.onclick = () => {
+        statisticsState.weekStart = moveWeekStart(
+          statisticsState.weekStart,
+          Number(button.dataset.weekOffset),
+          now,
+        );
         updateStatisticsHeader();
         renderStatistics();
       };
