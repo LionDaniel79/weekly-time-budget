@@ -47,7 +47,7 @@ test('기능 모듈은 일간·주간 예산 문서와 기본 비율을 읽고 �
 
 test('타이머는 Firestore와 localStorage에서 복구하고 절대 시각으로 표시한다', async () => {
   const timerUi = await read('src/persistent-timer-ui.js');
-  for (const token of ['activeTimer', 'localStorage', 'createPersistentTimerController', 'visibilitychange', 'timer-${Math.round(timer.startedAt)}']) {
+  for (const token of ['activeTimer', 'localStorage', 'createPersistentTimerController', 'visibilitychange', 'timer-${Math.round(timer.startedAt)}', 'runTransaction']) {
     assert.ok(timerUi.includes(token), token);
   }
   assert.match(timerUi, /batch\.delete\(activeRef\)/);
