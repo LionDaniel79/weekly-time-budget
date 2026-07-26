@@ -42,6 +42,11 @@ export function createPersistentTimerController({
   const writeLocal = (timer) => storage.setItem(storageKey, JSON.stringify(timer));
   const clearLocal = () => storage.removeItem(storageKey);
   const readLocal = () => safeParse(storage.getItem(storageKey));
+  const useRemoteTimer = (timer) => {
+    active = timer;
+    writeLocal(timer);
+    return { timer: active, recovered: true };
+  };
 
   return {
     get active() { return active; },
@@ -69,13 +74,15 @@ export function createPersistentTimerController({
 
     async start(input) {
       const existing = await remote.get();
-      if (existing) {
-        active = existing;
-        writeLocal(existing);
-        return { timer: active, recovered: true };
-      }
+      if (existing) return useRemoteTimer(existing);
       const timer = createTimerSnapshot({ ...input, startedAt: input.startedAt ?? now() });
-      await remote.set(timer);
+      try {
+        await remote.set(timer);
+      } catch (error) {
+        const racedTimer = await remote.get().catch(() => null);
+        if (racedTimer) return useRemoteTimer(racedTimer);
+        throw error;
+      }
       active = timer;
       writeLocal(timer);
       return { timer, recovered: false };
