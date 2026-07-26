@@ -56,8 +56,10 @@ function allKnownCategories() {
   return [...map.values()].sort((a, b) => Number(a.order || 9999) - Number(b.order || 9999));
 }
 
+const findWeekDocument = (weekStart) => state.weekly.find((week) => (week.weekStart || week.id) === weekStart) || null;
+
 function normalizeWeek(weekStart) {
-  const source = state.weekly.find((week) => (week.weekStart || week.id) === weekStart);
+  const source = findWeekDocument(weekStart);
   const budgets = { ...(source?.budgets || {}) };
   state.categories.forEach((category) => {
     if (budgets[category.id] === undefined) budgets[category.id] = defaultBudget(category);
@@ -69,7 +71,10 @@ function normalizeWeek(weekStart) {
     explicitBudgetIds: Array.isArray(source?.explicitBudgetIds)
       ? [...source.explicitBudgetIds]
       : Object.keys(source?.budgets || {}),
-    dayWeights: effectiveDayWeights(source, state.defaultDayWeights),
+    dayWeights: effectiveDayWeights(
+      source,
+      source ? EQUAL_DAY_WEIGHTS : (weekStart === currentWeekStart() ? state.defaultDayWeights : EQUAL_DAY_WEIGHTS),
+    ),
   };
 }
 
@@ -85,6 +90,37 @@ function periodCategories({ start, end, weekDocument, dailyDocument = null }) {
   return allKnownCategories()
     .filter((category) => activeIds.has(category.id) || budgetIds.has(category.id) || overrideIds.has(category.id) || entryIds.has(category.id))
     .map((category) => activeIds.has(category.id) ? category : { ...category, defaultBudgetMinutes: 0, budgetMinutes: 0 });
+}
+
+async function ensureCurrentWeekSnapshot() {
+  const weekStart = currentWeekStart();
+  const source = findWeekDocument(weekStart);
+  const budgets = { ...(source?.budgets || {}) };
+  let changed = !source;
+  for (const category of state.categories) {
+    if (budgets[category.id] !== undefined) continue;
+    budgets[category.id] = defaultBudget(category);
+    changed = true;
+  }
+  const explicitBudgetIds = Array.isArray(source?.explicitBudgetIds)
+    ? [...source.explicitBudgetIds]
+    : Object.keys(source?.budgets || {});
+  if (source && !Array.isArray(source.explicitBudgetIds)) changed = true;
+  const dayWeights = source?.dayWeights
+    ? effectiveDayWeights(source, EQUAL_DAY_WEIGHTS)
+    : (source ? { ...EQUAL_DAY_WEIGHTS } : { ...state.defaultDayWeights });
+  if (!source?.dayWeights) changed = true;
+  const snapshot = { id: source?.id || weekStart, weekStart, budgets, explicitBudgetIds, dayWeights };
+  if (changed) {
+    await store.setDoc(
+      store.doc(db, 'users', state.user.uid, 'weeklyBudgets', weekStart),
+      { weekStart, budgets, explicitBudgetIds, dayWeights, updatedAt: store.serverTimestamp() },
+      { merge: true },
+    );
+  }
+  const index = state.weekly.findIndex((week) => (week.weekStart || week.id) === weekStart);
+  if (index >= 0) state.weekly[index] = snapshot;
+  else state.weekly.push(snapshot);
 }
 
 async function loadData() {
@@ -108,6 +144,7 @@ async function loadData() {
       state.weekly = weekly.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
       state.daily = daily.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
       state.defaultDayWeights = effectiveDayWeights(null, settings.exists() ? settings.data().defaultDayWeights : EQUAL_DAY_WEIGHTS);
+      await ensureCurrentWeekSnapshot();
       const now = today();
       const week = currentWeekStart();
       state.dashboard.today = now;
@@ -236,12 +273,16 @@ function renderBudget() {
 }
 
 async function saveDaily(inputs) {
-  const overrides = {};
+  const date = today();
+  const activeIds = new Set(state.categories.map((category) => category.id));
+  const preservedOverrides = Object.fromEntries(
+    Object.entries(dailyFor(date)?.overrides || {}).filter(([categoryId]) => !activeIds.has(categoryId)),
+  );
+  const overrides = { ...preservedOverrides };
   for (const category of state.categories) {
     const parsed = parseOptionalHours(inputs[category.id]);
     if (parsed.explicit) overrides[category.id] = parsed.minutes;
   }
-  const date = today();
   const ref = store.doc(db, 'users', state.user.uid, 'dailyBudgets', date);
   if (Object.keys(overrides).length) await store.setDoc(ref, { date, overrides, updatedAt: store.serverTimestamp() });
   else await store.deleteDoc(ref);
@@ -252,7 +293,16 @@ async function saveDaily(inputs) {
 
 async function saveWeekly({ budgetInputs, dayWeightInputs }) {
   const weekStart = currentWeekStart();
+  const existing = normalizeWeek(weekStart);
+  const activeIds = new Set(state.categories.map((category) => category.id));
+  const preservedBudgets = Object.fromEntries(
+    Object.entries(existing.budgets || {}).filter(([categoryId]) => !activeIds.has(categoryId)),
+  );
+  const preservedExplicitBudgetIds = (existing.explicitBudgetIds || [])
+    .filter((categoryId) => !activeIds.has(categoryId));
   const snapshot = buildWeeklyBudgetSnapshot({ weekStart, categories: state.categories, budgetInputs, dayWeightInputs });
+  snapshot.budgets = { ...preservedBudgets, ...snapshot.budgets };
+  snapshot.explicitBudgetIds = [...new Set([...preservedExplicitBudgetIds, ...snapshot.explicitBudgetIds])];
   const batch = store.writeBatch(db);
   batch.set(store.doc(db, 'users', state.user.uid, 'weeklyBudgets', weekStart), { ...snapshot, updatedAt: store.serverTimestamp() }, { merge: true });
   batch.set(store.doc(db, 'users', state.user.uid, 'settings', 'timeBudget'), { defaultDayWeights: snapshot.dayWeights, updatedAt: store.serverTimestamp() }, { merge: true });
@@ -276,11 +326,12 @@ function updateHeader(view) {
   }
 }
 
-function switchOwnedView(name) {
+async function switchOwnedView(name) {
   document.querySelectorAll('.view').forEach((view) => view.classList.add('hidden'));
   document.querySelector(`#${name}-view`)?.classList.remove('hidden');
   document.querySelectorAll('.nav-button').forEach((button) => button.classList.toggle('active', button.dataset.view === name));
   document.querySelector('.sidebar')?.classList.remove('open');
+  await loadData();
   if (name === 'dashboard') renderDashboard(); else renderBudget();
   updateHeader(name);
 }
@@ -311,7 +362,10 @@ document.addEventListener('click', (event) => {
   const button = event.target.closest('.nav-button[data-view="dashboard"], .nav-button[data-view="budget"]');
   if (!button) return;
   event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation();
-  switchOwnedView(button.dataset.view);
+  switchOwnedView(button.dataset.view).catch((error) => {
+    console.error(error);
+    alert(`화면을 불러오지 못했습니다: ${error.message}`);
+  });
 }, true);
 
 document.addEventListener('weekly-time-budget:data-changed', async () => {
