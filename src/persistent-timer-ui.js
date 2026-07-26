@@ -168,6 +168,19 @@ async function handleCancel(button) {
 }
 
 document.addEventListener('click', (event) => {
+  const opensRecord = event.target.closest('.nav-button[data-view="record"], [data-record-tab="timer"]');
+  if (!opensRecord || !state.user) return;
+  queueMicrotask(async () => {
+    try {
+      await loadCategories();
+      schedulePatch();
+    } catch (error) {
+      console.error('타이머 대분류 새로고침 실패', error);
+    }
+  });
+}, true);
+
+document.addEventListener('click', (event) => {
   const action = event.target.closest('#timer-action');
   const cancel = event.target.closest('#timer-cancel');
   if (!action && !cancel) return;
