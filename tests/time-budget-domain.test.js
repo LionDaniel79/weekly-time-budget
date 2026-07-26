@@ -92,17 +92,11 @@ test('일간 요약은 직접·자동 예산과 실제 기록을 계산한다', 
   assert.equal(result.categorySummaries[0].budgetSource, 'direct');
 });
 
-test('완전히 삭제된 대분류의 고아 예산 키는 대시보드 목록에서 제외한다', () => {
-  assert.equal(typeof timeBudgetDomain.selectDashboardCategories, 'function');
-  const categories = timeBudgetDomain.selectDashboardCategories({
-    activeCategories: [{ id: 'reading', name: '독서', defaultBudgetMinutes: 420 }],
-    archivedCategories: [{ id: 'thesis', name: '논문', defaultBudgetMinutes: 0 }],
-    entries: [{ categoryId: 'thesis', date: '2026-07-20', durationMinutes: 30 }],
-    start: '2026-07-20',
-    end: '2026-07-26',
-    weekDocument: { budgets: { reading: 420, deletedVideo: 60 } },
-    dailyDocument: { overrides: { deletedVideo: 60 } },
-  });
-  assert.deepEqual(categories.map((category) => category.id), ['reading', 'thesis']);
-  assert.equal(categories.some((category) => category.name === '삭제된 대분류'), false);
+test('활성·보관 대분류에 없는 고아 예산 참조를 제거한다', () => {
+  assert.equal(typeof timeBudgetDomain.removeUnknownCategoryReferences, 'function');
+  const cleaned = timeBudgetDomain.removeUnknownCategoryReferences(
+    { reading: 420, thesis: 30, deletedVideo: 60 },
+    new Set(['reading', 'thesis']),
+  );
+  assert.deepEqual(cleaned, { reading: 420, thesis: 30 });
 });
