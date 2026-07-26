@@ -1,0 +1,159 @@
+import { firebaseConfig } from '../firebase-config.js';
+
+const appModule = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js');
+const authModule = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js');
+const store = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js');
+
+const app = appModule.getApps().length ? appModule.getApp() : appModule.initializeApp(firebaseConfig);
+const auth = authModule.getAuth(app);
+const db = store.getFirestore(app);
+
+const esc = (value = '') => String(value).replace(/[&<>'"]/g, (char) => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;',
+}[char]));
+
+function ensureStyles() {
+  if (document.querySelector('#delete-guard-styles')) return;
+  const style = document.createElement('style');
+  style.id = 'delete-guard-styles';
+  style.textContent = `
+    .delete-guard-backdrop{position:fixed;inset:0;background:rgba(13,35,30,.5);display:grid;place-items:center;padding:20px;z-index:2000}
+    .delete-guard-dialog{width:min(520px,100%);background:#fffdf7;border-radius:22px;padding:24px;box-shadow:0 24px 70px rgba(0,0,0,.28)}
+    .delete-guard-dialog h2{margin-bottom:8px}.delete-guard-warning{background:#fff0ed;color:#8b2e25;border-radius:14px;padding:14px;margin:16px 0}
+    .delete-guard-actions{display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;margin-top:20px}
+    .delete-guard-archive{border:0;border-radius:14px;padding:13px 18px;font-weight:800;cursor:pointer;background:#ece7d8;color:#5c4c1e}
+    @media(max-width:600px){.delete-guard-actions>*{flex:1}}
+  `;
+  document.head.append(style);
+}
+
+function closeDialog() {
+  document.querySelector('#delete-guard-dialog')?.remove();
+}
+
+function showDialog(html) {
+  closeDialog();
+  const backdrop = document.createElement('div');
+  backdrop.id = 'delete-guard-dialog';
+  backdrop.className = 'delete-guard-backdrop';
+  backdrop.innerHTML = `<div class="delete-guard-dialog" role="dialog" aria-modal="true">${html}</div>`;
+  backdrop.addEventListener('click', (event) => { if (event.target === backdrop) closeDialog(); });
+  document.body.append(backdrop);
+  return backdrop;
+}
+
+async function entryCount(user, categoryId) {
+  const snapshot = await store.getDocs(store.query(
+    store.collection(db, 'users', user.uid, 'entries'),
+    store.where('categoryId', '==', categoryId),
+  ));
+  return snapshot.size;
+}
+
+async function archiveCategory(user, categoryId) {
+  const categoryRef = store.doc(db, 'users', user.uid, 'categories', categoryId);
+  const snapshot = await store.getDoc(categoryRef);
+  if (!snapshot.exists()) throw new Error('대분류를 찾을 수 없습니다.');
+  const batch = store.writeBatch(db);
+  batch.set(store.doc(db, 'users', user.uid, 'archivedCategories', categoryId), {
+    ...snapshot.data(),
+    archivedAt: store.serverTimestamp(),
+  });
+  batch.delete(categoryRef);
+  await batch.commit();
+}
+
+async function permanentlyDelete(user, categoryId) {
+  const [entries, weeks] = await Promise.all([
+    store.getDocs(store.query(
+      store.collection(db, 'users', user.uid, 'entries'),
+      store.where('categoryId', '==', categoryId),
+    )),
+    store.getDocs(store.collection(db, 'users', user.uid, 'weeklyBudgets')),
+  ]);
+
+  const operations = [];
+  entries.docs.forEach((item) => operations.push({ type: 'delete', ref: item.ref }));
+  operations.push({ type: 'delete', ref: store.doc(db, 'users', user.uid, 'categories', categoryId) });
+  operations.push({ type: 'delete', ref: store.doc(db, 'users', user.uid, 'archivedCategories', categoryId) });
+  weeks.docs.forEach((week) => {
+    const data = week.data();
+    if (data.budgets?.[categoryId] === undefined) return;
+    const budgets = { ...data.budgets };
+    delete budgets[categoryId];
+    operations.push({ type: 'set', ref: week.ref, data: { budgets } });
+  });
+
+  for (let index = 0; index < operations.length; index += 450) {
+    const batch = store.writeBatch(db);
+    operations.slice(index, index + 450).forEach((operation) => {
+      if (operation.type === 'delete') batch.delete(operation.ref);
+      else batch.set(operation.ref, operation.data, { merge: true });
+    });
+    await batch.commit();
+  }
+}
+
+async function openChoice(categoryId, categoryName) {
+  const user = auth.currentUser;
+  if (!user) return alert('로그인이 필요합니다.');
+  const count = await entryCount(user, categoryId);
+  const dialog = showDialog(`
+    <h2>${esc(categoryName)} 처리</h2>
+    <p>완전히 삭제하거나 보관할 수 있습니다.</p>
+    <div class="delete-guard-warning">
+      <strong>삭제</strong>: 대분류와 연결된 시간 기록 ${count}건, 주간 예산 데이터를 완전히 삭제합니다.<br>
+      <strong>보관</strong>: 새 기록과 예산에서는 숨기고 과거 기록과 이름은 유지합니다.
+    </div>
+    <div class="delete-guard-actions">
+      <button type="button" class="secondary-button" data-action="cancel">취소</button>
+      <button type="button" class="delete-guard-archive" data-action="archive">보관</button>
+      <button type="button" class="danger-button" data-action="delete">삭제</button>
+    </div>`);
+
+  dialog.querySelector('[data-action="cancel"]').onclick = closeDialog;
+  dialog.querySelector('[data-action="archive"]').onclick = async (event) => {
+    event.currentTarget.disabled = true;
+    event.currentTarget.textContent = '보관 중…';
+    try { await archiveCategory(user, categoryId); location.reload(); }
+    catch (error) { alert(`보관하지 못했습니다: ${error.message}`); event.currentTarget.disabled = false; event.currentTarget.textContent = '보관'; }
+  };
+  dialog.querySelector('[data-action="delete"]').onclick = () => {
+    if (!count) return executeDelete(user, categoryId, categoryName, count);
+    const warning = showDialog(`
+      <h2>정말 완전히 삭제할까요?</h2>
+      <div class="delete-guard-warning"><strong>${esc(categoryName)}</strong>에 연결된 시간 기록 <strong>${count}건</strong>이 있습니다.<br>삭제하면 대분류, 시간 기록, 주간 예산이 모두 사라지며 복구할 수 없습니다.</div>
+      <div class="delete-guard-actions">
+        <button type="button" class="secondary-button" data-action="cancel">취소</button>
+        <button type="button" class="danger-button" data-action="confirm">그래도 완전 삭제</button>
+      </div>`);
+    warning.querySelector('[data-action="cancel"]').onclick = closeDialog;
+    warning.querySelector('[data-action="confirm"]').onclick = () => executeDelete(user, categoryId, categoryName, count);
+  };
+}
+
+async function executeDelete(user, categoryId, categoryName, count) {
+  const button = document.querySelector('#delete-guard-dialog [data-action="confirm"], #delete-guard-dialog [data-action="delete"]');
+  if (button) { button.disabled = true; button.textContent = '삭제 중…'; }
+  try {
+    await permanentlyDelete(user, categoryId);
+    alert(`${categoryName} 대분류와 연결된 시간 기록 ${count}건을 완전히 삭제했습니다.`);
+    location.reload();
+  } catch (error) {
+    alert(`완전히 삭제하지 못했습니다: ${error.message}`);
+    if (button) { button.disabled = false; button.textContent = count ? '그래도 완전 삭제' : '삭제'; }
+  }
+}
+
+ensureStyles();
+document.addEventListener('click', (event) => {
+  const button = event.target.closest('.category-delete');
+  if (!button) return;
+  event.preventDefault();
+  event.stopPropagation();
+  event.stopImmediatePropagation();
+  const row = button.closest('.category-edit-row');
+  if (!row) return;
+  const name = row.querySelector('[name="name"]')?.value?.trim() || '대분류';
+  openChoice(row.dataset.id, name).catch((error) => alert(`대분류 정보를 확인하지 못했습니다: ${error.message}`));
+}, true);
