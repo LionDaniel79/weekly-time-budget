@@ -6,6 +6,13 @@ export const EQUAL_DAY_WEIGHTS = Object.freeze(
 
 const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object || {}, key);
 
+export function removeUnknownCategoryReferences(values = {}, knownCategoryIds = new Set()) {
+  const known = knownCategoryIds instanceof Set ? knownCategoryIds : new Set(knownCategoryIds || []);
+  return Object.fromEntries(
+    Object.entries(values || {}).filter(([categoryId]) => known.has(categoryId)),
+  );
+}
+
 export function normalizeDayWeights(rawValues = {}) {
   const values = Object.fromEntries(DAY_KEYS.map((key) => {
     const raw = rawValues[key];
