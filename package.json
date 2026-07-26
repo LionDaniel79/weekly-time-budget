@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "test": "node --test",
-    "start": "npx serve ."
+    "start": "npx serve .",
+    "prepare:pages": "node scripts/prepare-pages-site.mjs"
   },
   "devDependencies": {
     "serve": "^14.2.4"
