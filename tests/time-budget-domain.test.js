@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import * as timeBudgetDomain from '../src/time-budget-domain.js';
 import {
   DAY_KEYS,
   normalizeDayWeights,
@@ -89,4 +90,13 @@ test('일간 요약은 직접·자동 예산과 실제 기록을 계산한다', 
   assert.equal(result.totalActualMinutes, 60);
   assert.equal(result.percentage, 50);
   assert.equal(result.categorySummaries[0].budgetSource, 'direct');
+});
+
+test('활성·보관 대분류에 없는 고아 예산 참조를 제거한다', () => {
+  assert.equal(typeof timeBudgetDomain.removeUnknownCategoryReferences, 'function');
+  const cleaned = timeBudgetDomain.removeUnknownCategoryReferences(
+    { reading: 420, thesis: 30, deletedVideo: 60 },
+    new Set(['reading', 'thesis']),
+  );
+  assert.deepEqual(cleaned, { reading: 420, thesis: 30 });
 });
