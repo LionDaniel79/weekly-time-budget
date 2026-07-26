@@ -51,6 +51,23 @@ test('새 타이머 시작 시 기존 원격 타이머를 복구한다', async (
   assert.equal(result.timer.categoryId, 'reading');
 });
 
+test('동시 시작 경쟁에서 다른 기기가 만든 타이머를 복구한다', async () => {
+  const storage = memoryStorage();
+  const remoteTimer = { userId: 'u1', categoryId: 'reading', startedAt: 2000, running: true };
+  let reads = 0;
+  const remote = {
+    get: async () => { reads += 1; return reads === 1 ? null : remoteTimer; },
+    set: async () => { throw new Error('active-timer-conflict'); },
+    remove: async () => {},
+    complete: async () => {},
+  };
+  const controller = createPersistentTimerController({ remote, storage, storageKey: 'timer', now: () => 5000 });
+  const result = await controller.start({ userId: 'u1', categoryId: 'thesis' });
+  assert.equal(result.recovered, true);
+  assert.equal(result.timer.categoryId, 'reading');
+  assert.equal(JSON.parse(storage.getItem('timer')).categoryId, 'reading');
+});
+
 test('시작 원격 저장 실패 시 localStorage만으로 시작하지 않는다', async () => {
   const storage = memoryStorage();
   const remote = remoteStore();
