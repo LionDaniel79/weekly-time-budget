@@ -38,7 +38,11 @@ function configureController() {
         return snapshot.exists() ? snapshot.data() : null;
       },
       async set(timer) {
-        await store.setDoc(activeRef, { ...timer, updatedAt: store.serverTimestamp() });
+        await store.runTransaction(db, async (transaction) => {
+          const existing = await transaction.get(activeRef);
+          if (existing.exists()) throw new Error('active-timer-conflict');
+          transaction.set(activeRef, { ...timer, updatedAt: store.serverTimestamp() });
+        });
       },
       async complete(timer, entry) {
         const batch = store.writeBatch(db);
