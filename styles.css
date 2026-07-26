@@ -43,8 +43,10 @@ h1,h2,h3,p { margin-top: 0; }
 .tab-button.active { background: #173b33; color: #fff; }
 .manual-mode-switch { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
 .manual-mode-switch .tab-button { min-width: 0; width: 100%; white-space: normal; }
-.duration-input-row,.hours-input { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 10px; align-items: center; }
-.duration-input-row span,.hours-input span { font-weight: 800; white-space: nowrap; }
+.duration-input-row { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 10px; align-items: center; }
+.hours-input { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 10px; align-items: center; }
+.duration-input-row span { font-weight: 800; white-space: nowrap; }
+.hours-input span { font-weight: 800; white-space: nowrap; }
 .form-grid { display: grid; gap: 14px; }
 .form-grid label { display: grid; gap: 7px; font-weight: 700; }
 .form-grid input,.form-grid select,.form-grid textarea,.time-budget-form input { width: 100%; max-width: 100%; min-height: 44px; border: 1px solid #cdd5d0; border-radius: 12px; padding: 10px 12px; background: white; }
