@@ -64,25 +64,49 @@ async function archiveCategory(user, categoryId) {
 }
 
 async function permanentlyDelete(user, categoryId) {
-  const [entries, weeks] = await Promise.all([
+  const [entries, weeks, days, activeTimer] = await Promise.all([
     store.getDocs(store.query(
       store.collection(db, 'users', user.uid, 'entries'),
       store.where('categoryId', '==', categoryId),
     )),
     store.getDocs(store.collection(db, 'users', user.uid, 'weeklyBudgets')),
+    store.getDocs(store.collection(db, 'users', user.uid, 'dailyBudgets')),
+    store.getDoc(store.doc(db, 'users', user.uid, 'activeTimer', 'current')),
   ]);
 
   const operations = [];
   entries.docs.forEach((item) => operations.push({ type: 'delete', ref: item.ref }));
   operations.push({ type: 'delete', ref: store.doc(db, 'users', user.uid, 'categories', categoryId) });
   operations.push({ type: 'delete', ref: store.doc(db, 'users', user.uid, 'archivedCategories', categoryId) });
+
   weeks.docs.forEach((week) => {
     const data = week.data();
-    if (data.budgets?.[categoryId] === undefined) return;
-    const budgets = { ...data.budgets };
+    const hasBudget = data.budgets?.[categoryId] !== undefined;
+    const explicitBudgetIds = Array.isArray(data.explicitBudgetIds)
+      ? data.explicitBudgetIds.filter((id) => id !== categoryId)
+      : undefined;
+    if (!hasBudget && explicitBudgetIds === undefined) return;
+    const budgets = { ...(data.budgets || {}) };
     delete budgets[categoryId];
-    operations.push({ type: 'set', ref: week.ref, data: { budgets } });
+    operations.push({ type: 'set', ref: week.ref, data: {
+      budgets,
+      ...(explicitBudgetIds === undefined ? {} : { explicitBudgetIds }),
+    } });
   });
+
+  days.docs.forEach((day) => {
+    const data = day.data();
+    if (!Object.prototype.hasOwnProperty.call(data.overrides || {}, categoryId)) return;
+    const overrides = { ...(data.overrides || {}) };
+    delete overrides[categoryId];
+    operations.push(Object.keys(overrides).length
+      ? { type: 'set', ref: day.ref, data: { overrides } }
+      : { type: 'delete', ref: day.ref });
+  });
+
+  if (activeTimer.exists() && activeTimer.data().categoryId === categoryId) {
+    operations.push({ type: 'delete', ref: activeTimer.ref });
+  }
 
   for (let index = 0; index < operations.length; index += 450) {
     const batch = store.writeBatch(db);
@@ -102,7 +126,7 @@ async function openChoice(categoryId, categoryName) {
     <h2>${esc(categoryName)} 처리</h2>
     <p>완전히 삭제하거나 보관할 수 있습니다.</p>
     <div class="delete-guard-warning">
-      <strong>삭제</strong>: 대분류와 연결된 시간 기록 ${count}건, 주간 예산 데이터를 완전히 삭제합니다.<br>
+      <strong>삭제</strong>: 대분류와 연결된 시간 기록 ${count}건, 일간·주간 예산과 진행 중 타이머 데이터를 완전히 삭제합니다.<br>
       <strong>보관</strong>: 새 기록과 예산에서는 숨기고 과거 기록과 이름은 유지합니다.
     </div>
     <div class="delete-guard-actions">
@@ -116,13 +140,17 @@ async function openChoice(categoryId, categoryName) {
     event.currentTarget.disabled = true;
     event.currentTarget.textContent = '보관 중…';
     try { await archiveCategory(user, categoryId); location.reload(); }
-    catch (error) { alert(`보관하지 못했습니다: ${error.message}`); event.currentTarget.disabled = false; event.currentTarget.textContent = '보관'; }
+    catch (error) {
+      alert(`보관하지 못했습니다: ${error.message}`);
+      event.currentTarget.disabled = false;
+      event.currentTarget.textContent = '보관';
+    }
   };
   dialog.querySelector('[data-action="delete"]').onclick = () => {
     if (!count) return executeDelete(user, categoryId, categoryName, count);
     const warning = showDialog(`
       <h2>정말 완전히 삭제할까요?</h2>
-      <div class="delete-guard-warning"><strong>${esc(categoryName)}</strong>에 연결된 시간 기록 <strong>${count}건</strong>이 있습니다.<br>삭제하면 대분류, 시간 기록, 주간 예산이 모두 사라지며 복구할 수 없습니다.</div>
+      <div class="delete-guard-warning"><strong>${esc(categoryName)}</strong>에 연결된 시간 기록 <strong>${count}건</strong>이 있습니다.<br>삭제하면 대분류, 시간 기록, 일간·주간 예산과 진행 중 타이머가 모두 사라지며 복구할 수 없습니다.</div>
       <div class="delete-guard-actions">
         <button type="button" class="secondary-button" data-action="cancel">취소</button>
         <button type="button" class="danger-button" data-action="confirm">그래도 완전 삭제</button>
