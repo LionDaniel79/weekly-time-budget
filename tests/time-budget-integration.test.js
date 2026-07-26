@@ -66,6 +66,13 @@ test('완전 삭제는 예산 맵을 merge하지 않고 교체하여 삭제 키�
   assert.doesNotMatch(source, /batch\.set\(operation\.ref, operation\.data, \{ merge: true \}\)/);
 });
 
+test('로그인 시 기존 고아 예산 참조를 자동 정리하고 화면을 갱신한다', async () => {
+  const source = await read('src/category-delete-guard.js');
+  for (const token of ['cleanupOrphanCategoryReferences', 'removeUnknownCategoryReferences', "weekly-time-budget:data-changed", 'onAuthStateChanged']) {
+    assert.ok(source.includes(token), token);
+  }
+});
+
 test('신규 경로는 사용자 하위 wildcard 보안 규칙으로 보호된다', async () => {
   const rules = await read('firestore.rules');
   assert.match(rules, /match \/users\/\{userId\}\/\{document=\*\*\}/);
