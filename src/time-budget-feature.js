@@ -479,6 +479,11 @@ authModule.onAuthStateChanged(auth, async (user) => {
   state.cacheLoaded = false;
   if (!user) {
     state.runtime = null;
+    state.categories = [];
+    state.archived = [];
+    state.entries = [];
+    state.weekly = [];
+    state.daily = [];
     return;
   }
   state.runtime = await getOfflineRuntime({ userId: user.uid, firestore: store, db });
