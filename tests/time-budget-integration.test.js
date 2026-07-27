@@ -45,12 +45,17 @@ test('기능 모듈은 일간·주간 예산 문서와 기본 비율을 읽고 �
   assert.doesNotMatch(feature.slice(start, end), /dailyBudgets/);
 });
 
-test('타이머는 Firestore와 localStorage에서 복구하고 절대 시각으로 표시한다', async () => {
-  const timerUi = await read('src/persistent-timer-ui.js');
-  for (const token of ['activeTimer', 'localStorage', 'createPersistentTimerController', 'visibilitychange', 'timer-${Math.round(timer.startedAt)}', 'runTransaction']) {
+test('타이머는 localStorage에서 복구하고 공통 저장소가 활성 타이머를 조건부 정리한다', async () => {
+  const [timerUi, remote] = await Promise.all([
+    read('src/persistent-timer-ui.js'),
+    read('src/offline-entry-repository.js'),
+  ]);
+  for (const token of ['activeTimer', 'localStorage', 'createPersistentTimerController', 'visibilitychange', 'timer-${Math.round(timer.startedAt)}', 'saveEntryLocalFirst']) {
     assert.ok(timerUi.includes(token), token);
   }
-  assert.match(timerUi, /batch\.delete\(activeRef\)/);
+  for (const token of ['runTransaction', 'clearActiveTimer', 'startedAt', 'transaction.delete(activeRef)']) {
+    assert.ok(remote.includes(token), token);
+  }
   const html = await read('index.html');
   assert.ok(html.includes('./src/persistent-timer-ui.js'));
 });
@@ -68,7 +73,7 @@ test('완전 삭제는 예산 맵을 merge하지 않고 교체하여 삭제 키�
 
 test('로그인 시 기존 고아 예산 참조를 자동 정리하고 화면을 갱신한다', async () => {
   const source = await read('src/category-delete-guard.js');
-  for (const token of ['cleanupOrphanCategoryReferences', 'removeUnknownCategoryReferences', "weekly-time-budget:data-changed", 'onAuthStateChanged']) {
+  for (const token of ['cleanupOrphanCategoryReferences', 'removeUnknownCategoryReferences', 'weekly-time-budget:data-changed', 'onAuthStateChanged']) {
     assert.ok(source.includes(token), token);
   }
 });
