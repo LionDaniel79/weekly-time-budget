@@ -23,7 +23,7 @@ test('기록 기간 통합 모듈은 공통 인덱스와 local-first 기록을 �
   assert.ok(source.includes('weekly-time-budget:data-changed'));
 });
 
-test('대시보드와 통계 캐시를 모두 합쳐 최신 기록 기간을 만든다', async () => {
+test('대시보드와 통계 캐시를 모두 확인해 최신 기록 기간을 만든다', async () => {
   const source = await read('src/recorded-period-navigation.js');
   assert.ok(source.includes('cachedRemoteEntries'));
   assert.ok(source.includes('snapshot?.entries'));
@@ -52,6 +52,14 @@ test('기간 인덱스가 준비되기 전에는 복원된 과거 기간을 보�
   assert.match(source, /function patchStatistics\(\) \{\s*if \(!state\.periodsReady\) return;/);
   assert.match(source, /state\.periods = buildRecordedPeriodIndex[\s\S]*state\.periodsReady = true;/);
   assert.match(source, /onAuthStateChanged\([\s\S]*state\.periodsReady = false;/);
+});
+
+test('기간 인덱스 준비 전에는 기존 7일·월 이동 핸들러가 실행되지 않는다', async () => {
+  const source = await read('src/recorded-period-navigation.js');
+  assert.ok(source.includes('blockUntilPeriodsReady'));
+  assert.match(source, /function dashboardClick\(event\)[\s\S]*blockUntilPeriodsReady\(event\)/);
+  assert.match(source, /function statisticsWeekClick\(event\)[\s\S]*blockUntilPeriodsReady\(event\)/);
+  assert.match(source, /document\.addEventListener\('change'[\s\S]*blockUntilPeriodsReady\(event\)/);
 });
 
 test('초기 로그인과 사용자 전환은 기간 조회를 사용자별로 다시 실행한다', async () => {
