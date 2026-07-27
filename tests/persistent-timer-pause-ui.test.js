@@ -19,7 +19,7 @@ test('일시정지 상태에서는 화면 갱신 인터벌을 시작하지 않�
 
 test('Firestore 어댑터는 기존 activeTimer 문서를 갱신할 수 있다', async () => {
   const source = await read('src/persistent-timer-ui.js');
-  assert.match(source, /async update\(timer\)[\s\S]*setDoc\(activeRef[\s\S]*merge: true/);
+  assert.match(source, /async update\(timer\)[\s\S]*setDoc\(\s*activeRef[\s\S]*merge: true/);
 });
 
 test('멈춤 버튼 클릭은 기존 타이머 액션보다 먼저 처리된다', async () => {
