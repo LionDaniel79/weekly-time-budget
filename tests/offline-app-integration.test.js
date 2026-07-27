@@ -15,6 +15,10 @@ test('오프라인 모듈은 올바른 자바스크립트 문법이다', async (
     '../src/offline-runtime.js',
     '../src/app-toast.js',
     '../src/ui-session-state.js',
+    '../src/service-worker-cache.js',
+    '../src/service-worker-registration.js',
+    '../src/statistics-session-state.js',
+    '../service-worker.js',
   ]) {
     const result = spawnSync(process.execPath, ['--check', fileURLToPath(new URL(relative, import.meta.url))], { encoding: 'utf8' });
     assert.equal(result.status, 0, `${relative}: ${result.stderr || result.stdout}`);
@@ -65,8 +69,12 @@ test('저장 결과 토스트는 서버·기기·동기화 완료 상태와 iOS 
   ]) assert.ok(source.includes(token), token);
 });
 
-test('앱은 마지막 메뉴와 기록 내부 탭을 사용자별로 저장하고 복원한다', async () => {
-  const source = await read('src/app.js');
+test('앱은 마지막 메뉴와 모든 내부 상태를 사용자별로 저장하고 복원한다', async () => {
+  const [appSource, budgetSource, statisticsSource] = await Promise.all([
+    read('src/app.js'),
+    read('src/time-budget-feature.js'),
+    read('src/statistics-session-state.js'),
+  ]);
   for (const token of [
     'getUiState',
     'putUiState',
@@ -74,5 +82,36 @@ test('앱은 마지막 메뉴와 기록 내부 탭을 사용자별로 저장하�
     'weekly-time-budget:save-ui-state',
     'activeView',
     'manualMode',
+  ]) assert.ok(appSource.includes(token), token);
+  for (const token of ['dashboard', 'budget', 'selectedDate', 'selectedWeekStart']) {
+    assert.ok(budgetSource.includes(token), token);
+  }
+  for (const token of ['statistics', 'weekStart', 'year', 'month', 'activeView']) {
+    assert.ok(statisticsSource.includes(token), token);
+  }
+});
+
+test('서비스 워커는 앱 셸을 캐시하고 인증·Firestore API 응답은 캐시하지 않는다', async () => {
+  const [html, serviceWorker] = await Promise.all([
+    read('index.html'),
+    read('service-worker.js'),
+  ]);
+  assert.ok(html.includes('./src/service-worker-registration.js'));
+  for (const token of [
+    'weekly-time-budget-shell-v1',
+    'firebase-firestore.js',
+    'firestore.googleapis.com',
+    'identitytoolkit.googleapis.com',
+    "request.mode === 'navigate'",
+  ]) assert.ok(serviceWorker.includes(token), token);
+});
+
+test('완전 삭제는 서버 기록과 동기화 대기 기록을 함께 경고하고 제거한다', async () => {
+  const source = await read('src/category-delete-guard.js');
+  for (const token of [
+    'countPendingByCategory',
+    'deletePendingByCategory',
+    '동기화 대기 기록',
+    'cleanupOfflineCategory',
   ]) assert.ok(source.includes(token), token);
 });
