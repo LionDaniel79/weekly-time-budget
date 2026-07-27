@@ -140,6 +140,9 @@ export function createPersistentTimerController({
       try {
         const remoteTimer = normalizeTimerSnapshot(await remote.get());
         if (remoteTimer && local) {
+          if (local.startedAt !== remoteTimer.startedAt) {
+            return useRemoteTimer(remoteTimer).timer;
+          }
           if (local.stateChangedAt > remoteTimer.stateChangedAt) {
             active = local;
             writeLocal(local);
