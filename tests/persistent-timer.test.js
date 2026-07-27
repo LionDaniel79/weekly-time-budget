@@ -148,23 +148,15 @@ test('일시정지 원격 저장이 일시적 실패여도 로컬 일시정지�
   let clock = 1_000;
   const storage = memoryStorage();
   const remote = remoteStore();
-  await createPersistentTimerController({ remote, storage, storageKey: 'seed', now: () => clock }).start({ userId: 'u1', categoryId: 'unused' });
-  remote.update = async () => { throw Object.assign(new Error('offline'), { code: 'unavailable' }); };
-  const controller = createPersistentTimerController({ remote: remoteStore(), storage, storageKey: 'timer', now: () => clock });
+  const controller = createPersistentTimerController({ remote, storage, storageKey: 'timer', now: () => clock });
   await controller.start({ userId: 'u1', categoryId: 'reading' });
-  controller.active;
-  const failingRemote = controller;
-  // controller가 사용하는 원격 어댑터를 별도로 구성해 재시도 가능한 실패를 검증한다.
-  const retryRemote = remoteStore();
-  retryRemote.update = async () => { throw Object.assign(new Error('offline'), { code: 'unavailable' }); };
-  const retryController = createPersistentTimerController({ remote: retryRemote, storage: memoryStorage(), storageKey: 'retry', now: () => clock });
-  await retryController.start({ userId: 'u1', categoryId: 'reading' });
+  remote.update = async () => { throw Object.assign(new Error('offline'), { code: 'unavailable' }); };
   clock = 61_000;
-  const result = await retryController.pause();
+  const result = await controller.pause();
   assert.equal(result.remotePending, true);
-  assert.equal(retryController.active.running, false);
-  assert.equal(retryController.elapsedSeconds(), 60);
-  assert.equal(failingRemote.active.running, true);
+  assert.equal(controller.active.running, false);
+  assert.equal(controller.elapsedSeconds(), 60);
+  assert.equal(JSON.parse(storage.getItem('timer')).running, false);
 });
 
 test('일시정지 원격 저장이 영구 실패하면 변경 전 실행 상태로 되돌린다', async () => {
