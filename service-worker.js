@@ -1,6 +1,6 @@
 import { cacheModuleGraph } from './src/service-worker-cache.js';
 
-const SHELL_CACHE = 'weekly-time-budget-shell-v4';
+const SHELL_CACHE = 'weekly-time-budget-shell-v5';
 const RUNTIME_CACHE = 'weekly-time-budget-runtime-v1';
 const APP_CACHE_PREFIX = 'weekly-time-budget-';
 const FIREBASE_VERSION_ROOT = 'https://www.gstatic.com/firebasejs/11.10.0/';
@@ -26,6 +26,8 @@ const SHELL_URLS = [
   './src/time-budget-domain.js',
   './src/time-budget-ui.js',
   './src/time-budget-feature.js',
+  './src/recorded-period-domain.js',
+  './src/recorded-period-navigation.js',
   './src/statistics-ui.js',
   './src/statistics-offline-rescue.js',
   './src/statistics-mobile-overflow.js',
