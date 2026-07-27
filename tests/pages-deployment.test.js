@@ -81,6 +81,7 @@ test('Pages 준비는 실행 파일만 _site에 복사하고 배포 설정을 �
   await mkdir(path.join(rootDir, '.github'), { recursive: true });
   await writeFile(path.join(rootDir, 'index.html'), '<link rel="stylesheet" href="./styles.css"><script type="module" src="./src/app.js"></script>');
   await writeFile(path.join(rootDir, 'styles.css'), 'body{}');
+  await writeFile(path.join(rootDir, 'service-worker.js'), 'self.addEventListener("fetch", () => {});');
   await writeFile(path.join(rootDir, 'src', 'app.js'), "import { firebaseConfig } from '../firebase-config.js';");
   await writeFile(path.join(rootDir, 'manifest.webmanifest'), '{"start_url":"./"}');
   await writeFile(path.join(rootDir, 'firebase-config.js'), 'export const firebaseConfig = { apiKey: "REPLACE_ME" };');
@@ -96,6 +97,7 @@ test('Pages 준비는 실행 파일만 _site에 복사하고 배포 설정을 �
   for (const relativePath of [
     'index.html',
     'styles.css',
+    'service-worker.js',
     'src/app.js',
     'firebase-config.js',
     'manifest.webmanifest',
@@ -122,6 +124,7 @@ test('Pages 준비는 이전 _site 내용을 삭제해 오래된 파일을 남�
   await mkdir(outputDir, { recursive: true });
   await writeFile(path.join(rootDir, 'index.html'), '<main>app</main>');
   await writeFile(path.join(rootDir, 'styles.css'), 'body{}');
+  await writeFile(path.join(rootDir, 'service-worker.js'), 'self.addEventListener("fetch", () => {});');
   await writeFile(path.join(rootDir, 'src', 'app.js'), 'export {};');
   await writeFile(path.join(rootDir, 'manifest.webmanifest'), '{}');
   await writeFile(path.join(outputDir, 'obsolete.js'), 'old');

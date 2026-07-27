@@ -19,6 +19,8 @@ import {
   renderDashboardHtml,
   renderTimeBudgetHtml,
 } from './time-budget-ui.js';
+import { getOfflineRuntime } from './offline-runtime.js';
+import { showOfflineNotice, showToast } from './app-toast.js';
 
 const appModule = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js');
 const authModule = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js');
@@ -31,11 +33,13 @@ const today = () => toDateKey(new Date());
 const currentWeekStart = () => getWeekRange().start;
 const state = {
   user: null,
+  runtime: null,
   categories: [], archived: [], entries: [], weekly: [], daily: [],
   defaultDayWeights: { ...EQUAL_DAY_WEIGHTS },
   dashboard: createDashboardUiState(today(), currentWeekStart()),
   budget: createTimeBudgetUiState(today()),
   loading: false,
+  cacheLoaded: false,
 };
 let patchQueued = false;
 let loadingPromise = null;
@@ -43,16 +47,47 @@ let loadingPromise = null;
 const activeCategories = () => state.categories;
 const defaultBudget = (category) => Number(category.defaultBudgetMinutes ?? category.budgetMinutes ?? 0) || 0;
 
+function plainEntry(doc) {
+  const data = doc.data();
+  return {
+    id: doc.id,
+    ...data,
+    createdAt: data.createdAt?.toMillis?.() ?? (Number(data.localCreatedAt || 0) || Date.now()),
+  };
+}
+
+function saveFeatureUiState(partial = {}) {
+  document.dispatchEvent(new CustomEvent('weekly-time-budget:save-ui-state', { detail: partial }));
+}
+
+function applyRestoredUiState(saved = {}) {
+  if (saved.dashboard) Object.assign(state.dashboard, saved.dashboard);
+  if (saved.budget) Object.assign(state.budget, saved.budget);
+  const now = today();
+  const week = currentWeekStart();
+  state.dashboard.today = now;
+  state.dashboard.currentWeekStart = week;
+  state.budget.today = now;
+  if (state.dashboard.selectedDate > now) state.dashboard.selectedDate = now;
+  if (state.dashboard.selectedWeekStart > week) state.dashboard.selectedWeekStart = week;
+}
+
+if (globalThis.window?.__weeklyTimeBudgetUiState) {
+  applyRestoredUiState(globalThis.window.__weeklyTimeBudgetUiState);
+}
+document.addEventListener('weekly-time-budget:ui-state-restored', (event) => {
+  applyRestoredUiState(event.detail || {});
+  if (!state.user) return;
+  const dashboard = document.querySelector('#dashboard-view');
+  const budget = document.querySelector('#budget-view');
+  if (dashboard && !dashboard.classList.contains('hidden')) { renderDashboard(); updateHeader('dashboard'); }
+  if (budget && !budget.classList.contains('hidden')) { renderBudget(); updateHeader('budget'); }
+});
+
 function allKnownCategories() {
   const map = new Map();
   state.archived.forEach((item) => map.set(item.id, item));
   state.categories.forEach((item) => map.set(item.id, item));
-  state.entries.forEach((entry) => {
-    if (!map.has(entry.categoryId)) map.set(entry.categoryId, { id: entry.categoryId, name: '삭제된 대분류', defaultBudgetMinutes: 0, order: 9999 });
-  });
-  state.weekly.forEach((week) => Object.keys(week.budgets || {}).forEach((id) => {
-    if (!map.has(id)) map.set(id, { id, name: '삭제된 대분류', defaultBudgetMinutes: 0, order: 9999 });
-  }));
   return [...map.values()].sort((a, b) => Number(a.order || 9999) - Number(b.order || 9999));
 }
 
@@ -84,9 +119,12 @@ const weekLabel = (key) => { const range = weekRange(key); return `${range.start
 
 function periodCategories({ start, end, weekDocument, dailyDocument = null }) {
   const activeIds = new Set(state.categories.map((category) => category.id));
-  const budgetIds = new Set(Object.keys(weekDocument?.budgets || {}));
-  const overrideIds = new Set(Object.keys(dailyDocument?.overrides || {}));
-  const entryIds = new Set(state.entries.filter((entry) => entry.date >= start && entry.date <= end).map((entry) => entry.categoryId));
+  const knownIds = new Set(allKnownCategories().map((category) => category.id));
+  const budgetIds = new Set(Object.keys(weekDocument?.budgets || {}).filter((id) => knownIds.has(id)));
+  const overrideIds = new Set(Object.keys(dailyDocument?.overrides || {}).filter((id) => knownIds.has(id)));
+  const entryIds = new Set(state.entries
+    .filter((entry) => entry.date >= start && entry.date <= end && knownIds.has(entry.categoryId))
+    .map((entry) => entry.categoryId));
   return allKnownCategories()
     .filter((category) => activeIds.has(category.id) || budgetIds.has(category.id) || overrideIds.has(category.id) || entryIds.has(category.id))
     .map((category) => activeIds.has(category.id) ? category : { ...category, defaultBudgetMinutes: 0, budgetMinutes: 0 });
@@ -123,11 +161,27 @@ async function ensureCurrentWeekSnapshot() {
   else state.weekly.push(snapshot);
 }
 
+async function applyCachedData() {
+  if (!state.runtime || state.cacheLoaded) return false;
+  const snapshot = await state.runtime.store.getSnapshot(state.user.uid);
+  state.cacheLoaded = true;
+  if (!snapshot) return false;
+  if (Array.isArray(snapshot.categories)) state.categories = snapshot.categories;
+  if (Array.isArray(snapshot.archivedCategories)) state.archived = snapshot.archivedCategories;
+  if (Array.isArray(snapshot.weeklyBudgets)) state.weekly = snapshot.weeklyBudgets;
+  if (Array.isArray(snapshot.dailyBudgets)) state.daily = snapshot.dailyBudgets;
+  if (snapshot.defaultDayWeights) state.defaultDayWeights = effectiveDayWeights(null, snapshot.defaultDayWeights);
+  state.entries = await state.runtime.mergedEntries(Array.isArray(snapshot.entries) ? snapshot.entries : []);
+  applyRestoredUiState(globalThis.window?.__weeklyTimeBudgetUiState || {});
+  return true;
+}
+
 async function loadData() {
-  if (!state.user) return;
+  if (!state.user || !state.runtime) return;
   if (loadingPromise) return loadingPromise;
   loadingPromise = (async () => {
     state.loading = true;
+    const hadCache = await applyCachedData();
     try {
       const root = ['users', state.user.uid];
       const [categories, archived, entries, weekly, daily, settings] = await Promise.all([
@@ -140,11 +194,26 @@ async function loadData() {
       ]);
       state.categories = categories.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
       state.archived = archived.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-      state.entries = entries.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      const remoteEntries = entries.docs.map(plainEntry);
+      state.entries = await state.runtime.mergedEntries(remoteEntries);
       state.weekly = weekly.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
       state.daily = daily.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
       state.defaultDayWeights = effectiveDayWeights(null, settings.exists() ? settings.data().defaultDayWeights : EQUAL_DAY_WEIGHTS);
       await ensureCurrentWeekSnapshot();
+      await state.runtime.store.patchSnapshot(state.user.uid, {
+        categories: state.categories,
+        archivedCategories: state.archived,
+        entries: remoteEntries,
+        weeklyBudgets: state.weekly,
+        dailyBudgets: state.daily,
+        defaultDayWeights: state.defaultDayWeights,
+        updatedAt: Date.now(),
+      });
+    } catch (error) {
+      if (!hadCache && !state.categories.length) throw error;
+      console.warn('대시보드 오프라인 스냅숏 사용', error);
+      showOfflineNotice();
+    } finally {
       const now = today();
       const week = currentWeekStart();
       state.dashboard.today = now;
@@ -152,15 +221,11 @@ async function loadData() {
       state.budget.today = now;
       if (state.dashboard.selectedDate > now) state.dashboard.selectedDate = now;
       if (state.dashboard.selectedWeekStart > week) state.dashboard.selectedWeekStart = week;
-    } finally {
       state.loading = false;
     }
   })();
-  try {
-    await loadingPromise;
-  } finally {
-    loadingPromise = null;
-  }
+  try { await loadingPromise; }
+  finally { loadingPromise = null; }
 }
 
 function weeklySummary(key) {
@@ -213,7 +278,10 @@ function renderDashboard() {
   bindDashboardControls({
     root,
     state: state.dashboard,
-    rerender: () => { renderDashboard(); updateHeader('dashboard'); },
+    rerender: () => {
+      saveFeatureUiState({ dashboard: { ...state.dashboard } });
+      renderDashboard(); updateHeader('dashboard');
+    },
     onPreviousDate: () => {
       const value = previousRecordedDate(dates, state.dashboard.selectedDate);
       if (value) selectDate(value);
@@ -225,7 +293,10 @@ function renderDashboard() {
     onSelectDate: selectDate,
     onCalendarMove: moveCalendar,
     onWeekMove: (direction) => {
-      state.dashboard.selectedWeekStart = moveWeekStart(state.dashboard.selectedWeekStart, direction === 'prev' ? -1 : 1);
+      const next = moveWeekStart(state.dashboard.selectedWeekStart, direction === 'prev' ? -1 : 1);
+      if (next > state.dashboard.currentWeekStart) return;
+      state.dashboard.selectedWeekStart = next;
+      saveFeatureUiState({ dashboard: { ...state.dashboard } });
       renderDashboard(); updateHeader('dashboard');
     },
   });
@@ -237,6 +308,7 @@ function selectDate(value) {
   const date = new Date(`${value}T12:00:00`);
   state.dashboard.calendarYear = date.getFullYear();
   state.dashboard.calendarMonth = date.getMonth() + 1;
+  saveFeatureUiState({ dashboard: { ...state.dashboard } });
   renderDashboard(); updateHeader('dashboard');
 }
 
@@ -248,6 +320,7 @@ function moveCalendar(direction) {
   if (`${year}-${String(month).padStart(2, '0')}` > state.dashboard.today.slice(0, 7)) return;
   state.dashboard.calendarYear = year;
   state.dashboard.calendarMonth = month;
+  saveFeatureUiState({ dashboard: { ...state.dashboard } });
   renderDashboard();
 }
 
@@ -266,7 +339,10 @@ function renderBudget() {
   bindTimeBudgetControls({
     root,
     state: state.budget,
-    rerender: () => { renderBudget(); updateHeader('budget'); },
+    rerender: () => {
+      saveFeatureUiState({ budget: { ...state.budget } });
+      renderBudget(); updateHeader('budget');
+    },
     onSaveDaily: saveDaily,
     onSaveWeekly: saveWeekly,
   });
@@ -284,8 +360,13 @@ async function saveDaily(inputs) {
     if (parsed.explicit) overrides[category.id] = parsed.minutes;
   }
   const ref = store.doc(db, 'users', state.user.uid, 'dailyBudgets', date);
-  if (Object.keys(overrides).length) await store.setDoc(ref, { date, overrides, updatedAt: store.serverTimestamp() });
-  else await store.deleteDoc(ref);
+  try {
+    if (Object.keys(overrides).length) await store.setDoc(ref, { date, overrides, updatedAt: store.serverTimestamp() });
+    else await store.deleteDoc(ref);
+  } catch (error) {
+    showToast({ type: 'error', title: '오늘 시간 예산을 저장하지 못했습니다.', message: '예산 변경은 인터넷 연결 후 다시 시도하세요.' });
+    throw error;
+  }
   await loadData(); renderBudget(); renderDashboard();
   document.dispatchEvent(new CustomEvent('weekly-time-budget:data-changed'));
   alert('오늘 시간 예산을 저장했습니다.');
@@ -306,7 +387,11 @@ async function saveWeekly({ budgetInputs, dayWeightInputs }) {
   const batch = store.writeBatch(db);
   batch.set(store.doc(db, 'users', state.user.uid, 'weeklyBudgets', weekStart), { ...snapshot, updatedAt: store.serverTimestamp() }, { merge: true });
   batch.set(store.doc(db, 'users', state.user.uid, 'settings', 'timeBudget'), { defaultDayWeights: snapshot.dayWeights, updatedAt: store.serverTimestamp() }, { merge: true });
-  await batch.commit();
+  try { await batch.commit(); }
+  catch (error) {
+    showToast({ type: 'error', title: '이번 주 시간 예산을 저장하지 못했습니다.', message: '예산 변경은 인터넷 연결 후 다시 시도하세요.' });
+    throw error;
+  }
   await loadData(); renderBudget(); renderDashboard();
   document.dispatchEvent(new CustomEvent('weekly-time-budget:data-changed'));
   alert('이번 주 시간 예산과 요일 비율을 저장했습니다.');
@@ -331,6 +416,7 @@ async function switchOwnedView(name) {
   document.querySelector(`#${name}-view`)?.classList.remove('hidden');
   document.querySelectorAll('.nav-button').forEach((button) => button.classList.toggle('active', button.dataset.view === name));
   document.querySelector('.sidebar')?.classList.remove('open');
+  saveFeatureUiState({ activeView: name });
   await loadData();
   if (name === 'dashboard') renderDashboard(); else renderBudget();
   updateHeader(name);
@@ -368,9 +454,19 @@ document.addEventListener('click', (event) => {
   });
 }, true);
 
+document.addEventListener('weekly-time-budget:entries-changed', async (event) => {
+  if (!state.user || event.detail?.userId && event.detail.userId !== state.user.uid) return;
+  state.entries = await state.runtime.mergedEntries(
+    Array.isArray((await state.runtime.store.getSnapshot(state.user.uid))?.entries)
+      ? (await state.runtime.store.getSnapshot(state.user.uid)).entries
+      : [],
+  );
+  if (!document.querySelector('#dashboard-view')?.classList.contains('hidden')) renderDashboard();
+});
+
 document.addEventListener('weekly-time-budget:data-changed', async () => {
   if (!state.user) return;
-  await loadData();
+  try { await loadData(); } catch { /* cached data remains */ }
   if (!document.querySelector('#dashboard-view')?.classList.contains('hidden')) renderDashboard();
   if (!document.querySelector('#budget-view')?.classList.contains('hidden')) renderBudget();
 });
@@ -380,7 +476,18 @@ observer.observe(document.body, { childList: true, subtree: true });
 patchNavigation();
 authModule.onAuthStateChanged(auth, async (user) => {
   state.user = user;
-  if (!user) return;
+  state.cacheLoaded = false;
+  if (!user) {
+    state.runtime = null;
+    state.categories = [];
+    state.archived = [];
+    state.entries = [];
+    state.weekly = [];
+    state.daily = [];
+    state.defaultDayWeights = { ...EQUAL_DAY_WEIGHTS };
+    return;
+  }
+  state.runtime = await getOfflineRuntime({ userId: user.uid, firestore: store, db });
   await loadData();
   schedulePatch();
 });

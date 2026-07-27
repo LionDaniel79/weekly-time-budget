@@ -1,5 +1,6 @@
 import { firebaseConfig } from '../firebase-config.js';
 import { removeUnknownCategoryReferences } from './time-budget-domain.js';
+import { getOfflineRuntime } from './offline-runtime.js';
 
 const appModule = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js');
 const authModule = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js');
@@ -175,15 +176,49 @@ async function permanentlyDelete(user, categoryId) {
   await commitOperations(operations);
 }
 
+async function cleanupOfflineCategory(runtime, userId, categoryId) {
+  await runtime.store.deletePendingByCategory(userId, categoryId);
+  const snapshot = await runtime.store.getSnapshot(userId);
+  if (!snapshot) return;
+  const cleanBudgets = (weeks = []) => weeks.map((week) => {
+    const budgets = { ...(week.budgets || {}) };
+    delete budgets[categoryId];
+    return {
+      ...week,
+      budgets,
+      explicitBudgetIds: Array.isArray(week.explicitBudgetIds)
+        ? week.explicitBudgetIds.filter((id) => id !== categoryId)
+        : week.explicitBudgetIds,
+    };
+  });
+  const cleanDays = (days = []) => days.map((day) => {
+    const overrides = { ...(day.overrides || {}) };
+    delete overrides[categoryId];
+    return { ...day, overrides };
+  });
+  await runtime.store.patchSnapshot(userId, {
+    categories: (snapshot.categories || []).filter((item) => item.id !== categoryId),
+    archivedCategories: (snapshot.archivedCategories || []).filter((item) => item.id !== categoryId),
+    entries: (snapshot.entries || []).filter((item) => item.categoryId !== categoryId),
+    weeklyBudgets: cleanBudgets(snapshot.weeklyBudgets),
+    dailyBudgets: cleanDays(snapshot.dailyBudgets),
+    updatedAt: Date.now(),
+  });
+}
+
 async function openChoice(categoryId, categoryName) {
   const user = auth.currentUser;
   if (!user) return alert('로그인이 필요합니다.');
-  const count = await entryCount(user, categoryId);
+  const runtime = await getOfflineRuntime({ userId: user.uid, firestore: store, db });
+  const [count, pendingCount] = await Promise.all([
+    entryCount(user, categoryId),
+    runtime.store.countPendingByCategory(user.uid, categoryId),
+  ]);
   const dialog = showDialog(`
     <h2>${esc(categoryName)} 처리</h2>
     <p>완전히 삭제하거나 보관할 수 있습니다.</p>
     <div class="delete-guard-warning">
-      <strong>삭제</strong>: 대분류와 연결된 시간 기록 ${count}건, 일간·주간 예산과 진행 중 타이머 데이터를 완전히 삭제합니다.<br>
+      <strong>삭제</strong>: 서버 시간 기록 ${count}건과 동기화 대기 기록 ${pendingCount}건, 일간·주간 예산과 진행 중 타이머 데이터를 완전히 삭제합니다.<br>
       <strong>보관</strong>: 새 기록과 예산에서는 숨기고 과거 기록과 이름은 유지합니다.
     </div>
     <div class="delete-guard-actions">
@@ -204,29 +239,32 @@ async function openChoice(categoryId, categoryName) {
     }
   };
   dialog.querySelector('[data-action="delete"]').onclick = () => {
-    if (!count) return executeDelete(user, categoryId, categoryName, count);
+    if (!count && !pendingCount) return executeDelete(user, runtime, categoryId, categoryName, count, pendingCount);
     const warning = showDialog(`
       <h2>정말 완전히 삭제할까요?</h2>
-      <div class="delete-guard-warning"><strong>${esc(categoryName)}</strong>에 연결된 시간 기록 <strong>${count}건</strong>이 있습니다.<br>삭제하면 대분류, 시간 기록, 일간·주간 예산과 진행 중 타이머가 모두 사라지며 복구할 수 없습니다.</div>
+      <div class="delete-guard-warning"><strong>${esc(categoryName)}</strong>에 연결된 서버 시간 기록 <strong>${count}건</strong>과 아직 서버에 반영되지 않은 <strong>동기화 대기 기록 ${pendingCount}건</strong>이 있습니다.<br>완전 삭제하면 대분류, 모든 시간 기록, 일간·주간 예산과 진행 중 타이머가 사라지며 복구할 수 없습니다.</div>
       <div class="delete-guard-actions">
         <button type="button" class="secondary-button" data-action="cancel">취소</button>
         <button type="button" class="danger-button" data-action="confirm">그래도 완전 삭제</button>
       </div>`);
     warning.querySelector('[data-action="cancel"]').onclick = closeDialog;
-    warning.querySelector('[data-action="confirm"]').onclick = () => executeDelete(user, categoryId, categoryName, count);
+    warning.querySelector('[data-action="confirm"]').onclick = () => executeDelete(user, runtime, categoryId, categoryName, count, pendingCount);
   };
 }
 
-async function executeDelete(user, categoryId, categoryName, count) {
+async function executeDelete(user, runtime, categoryId, categoryName, count, pendingCount) {
   const button = document.querySelector('#delete-guard-dialog [data-action="confirm"], #delete-guard-dialog [data-action="delete"]');
   if (button) { button.disabled = true; button.textContent = '삭제 중…'; }
   try {
     await permanentlyDelete(user, categoryId);
-    alert(`${categoryName} 대분류와 연결된 시간 기록 ${count}건을 완전히 삭제했습니다.`);
+    await cleanupOfflineCategory(runtime, user.uid, categoryId);
+    document.dispatchEvent(new CustomEvent('weekly-time-budget:entries-changed', { detail: { userId: user.uid } }));
+    document.dispatchEvent(new CustomEvent('weekly-time-budget:data-changed'));
+    alert(`${categoryName} 대분류와 서버 기록 ${count}건, 동기화 대기 기록 ${pendingCount}건을 완전히 삭제했습니다.`);
     location.reload();
   } catch (error) {
     alert(`완전히 삭제하지 못했습니다: ${error.message}`);
-    if (button) { button.disabled = false; button.textContent = count ? '그래도 완전 삭제' : '삭제'; }
+    if (button) { button.disabled = false; button.textContent = count || pendingCount ? '그래도 완전 삭제' : '삭제'; }
   }
 }
 
