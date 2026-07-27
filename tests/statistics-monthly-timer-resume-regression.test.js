@@ -24,7 +24,7 @@ test('화면이 다시 보일 때 활성 타이머 탭은 원격 상태를 다�
   assert.match(source, /visibilitychange[\s\S]*timerTabIsActive\(\)[\s\S]*refreshTimerFromRemote/);
 });
 
-test('수정된 화면 모듈을 강제 갱신하도록 서비스 워커 셸 캐시를 v6으로 올린다', async () => {
+test('수정된 화면 모듈을 강제 갱신하도록 서비스 워커 셸 캐시를 v7으로 올린다', async () => {
   const source = await read('service-worker.js');
-  assert.ok(source.includes('weekly-time-budget-shell-v6'));
+  assert.ok(source.includes('weekly-time-budget-shell-v7'));
 });

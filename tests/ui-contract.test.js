@@ -66,13 +66,13 @@ test('통계 화면의 기간 제목은 선택한 통계 기간을 표시한다'
   assert.match(statisticsSource, /restoreWeeklyHeader/);
 });
 
-test('대분류는 이름·기본예산·순서를 한 번에 적용한다', async () => {
+test('대분류는 이름·기본예산·순서를 한 번에 저장한다', async () => {
   const [indexHtml, editorSource] = await Promise.all([
     read('index.html'),
     read('src/category-bulk-editor.js'),
   ]);
   assert.match(indexHtml, /category-bulk-editor\.js/);
-  assert.match(editorSource, /대분류 변경사항 적용/);
+  assert.match(editorSource, />저장<\/button>/);
   assert.match(editorSource, /writeBatch/);
   assert.match(editorSource, /defaultBudgetMinutes/);
   assert.match(editorSource, /order:\s*index\s*\+\s*1/);

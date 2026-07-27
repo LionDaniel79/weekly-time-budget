@@ -1,0 +1,27 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+
+const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
+
+test('모바일 기록 내역은 날짜와 삭제 버튼을 같은 행에 두고 높이를 줄인다', async () => {
+  const source = await read('src/mobile-compact.css');
+  assert.match(source, /#history-view \.entry\s*\{[^}]*grid-template-columns:\s*auto minmax\(0,\s*1fr\) auto;/s);
+  assert.match(source, /#history-view \.entry\s*>\s*strong:first-child\s*\{[^}]*white-space:\s*nowrap;/s);
+  assert.match(source, /#history-view \.entry \.entry-actions\s*\{[^}]*grid-column:\s*auto;/s);
+  assert.match(source, /#history-view \.entry\s*\{[^}]*padding:\s*(?:8|9|10)px 0;/s);
+  assert.match(source, /#history-view \.entry p\s*\{[^}]*margin:\s*2px 0 0;/s);
+});
+
+test('모바일 메뉴 버튼은 두 줄로 나뉘지 않는다', async () => {
+  const source = await read('src/mobile-compact.css');
+  assert.match(source, /\.mobile-menu\s*\{[^}]*white-space:\s*nowrap;[^}]*word-break:\s*keep-all;[^}]*flex-shrink:\s*0;/s);
+  assert.match(source, /\.topbar\s*>\s*div\s*\{[^}]*min-width:\s*0;/s);
+});
+
+test('모바일 압축 스타일은 기본 스타일 뒤에 로드된다', async () => {
+  const html = await read('index.html');
+  const base = html.indexOf('./styles.css');
+  const compact = html.indexOf('./src/mobile-compact.css');
+  assert.ok(base >= 0 && compact > base);
+});
