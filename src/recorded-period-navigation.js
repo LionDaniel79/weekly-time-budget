@@ -21,6 +21,7 @@ const emptyIndex = () => ({ dates: [], weekStarts: [], months: [], years: [] });
 const state = {
   userId: null,
   periods: emptyIndex(),
+  periodsReady: false,
   refreshPromise: null,
   refreshUserId: null,
   refreshSequence: 0,
@@ -106,6 +107,7 @@ function dashboardWeekModel() {
 }
 
 function patchDashboard() {
+  if (!state.periodsReady) return;
   const model = dashboardWeekModel();
   if (!model) return;
   if (model.normalized !== model.selected) {
@@ -201,6 +203,7 @@ function patchMonthlyStatistics(view) {
 }
 
 function patchStatistics() {
+  if (!state.periodsReady) return;
   const view = document.querySelector('#statistics-view');
   if (!view || view.classList.contains('hidden') || !view.dataset.statisticsRescue) return;
 
@@ -246,6 +249,7 @@ async function refreshPeriods() {
   if (!user) {
     state.userId = null;
     state.periods = emptyIndex();
+    state.periodsReady = false;
     schedulePatch();
     return;
   }
@@ -270,6 +274,7 @@ async function refreshPeriods() {
     if (auth.currentUser?.uid !== userId || sequence !== state.refreshSequence) return;
     state.userId = userId;
     state.periods = buildRecordedPeriodIndex(entries, todayKey());
+    state.periodsReady = true;
     schedulePatch();
     scheduleWarmupRefresh(userId);
   })();
@@ -289,6 +294,7 @@ async function refreshPeriods() {
 function dashboardClick(event) {
   const button = event.target.closest?.('#dashboard-view [data-week-direction]');
   if (!button) return false;
+  if (!state.periodsReady) return false;
   const model = dashboardWeekModel();
   if (!model) return false;
   event.preventDefault();
@@ -303,6 +309,7 @@ function dashboardClick(event) {
 function statisticsWeekClick(event) {
   const button = event.target.closest?.('#statistics-view [data-rescue-week]');
   if (!button) return false;
+  if (!state.periodsReady) return false;
   const model = statisticsWeekModel();
   if (!model) return false;
   event.preventDefault();
@@ -319,6 +326,7 @@ document.addEventListener('click', (event) => {
 }, true);
 
 document.addEventListener('change', (event) => {
+  if (!state.periodsReady) return;
   const view = document.querySelector('#statistics-view');
   if (!view || view.classList.contains('hidden')) return;
   const monthSelect = view.querySelector('#statistics-rescue-month');
@@ -384,6 +392,7 @@ authModule.onAuthStateChanged(auth, (user) => {
   state.warmupAttempt = 0;
   state.userId = user?.uid || null;
   state.periods = emptyIndex();
+  state.periodsReady = false;
   refreshPeriods();
 });
 
