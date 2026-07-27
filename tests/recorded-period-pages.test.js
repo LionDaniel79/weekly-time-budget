@@ -22,11 +22,10 @@ test('Pages 산출물에 기록 기간 도메인과 화면 연결 모듈이 포�
   await access(path.join(outputDir, 'src', 'recorded-period-domain.js'));
   await access(path.join(outputDir, 'src', 'recorded-period-navigation.js'));
   await access(path.join(outputDir, 'src', 'mobile-compact.css'));
-  await access(path.join(outputDir, 'src', 'category-save-label.js'));
   const serviceWorker = await readFile(path.join(outputDir, 'service-worker.js'), 'utf8');
   assert.ok(serviceWorker.includes('weekly-time-budget-shell-v7'));
   assert.ok(serviceWorker.includes('./src/recorded-period-domain.js'));
   assert.ok(serviceWorker.includes('./src/recorded-period-navigation.js'));
   assert.ok(serviceWorker.includes('./src/mobile-compact.css'));
-  assert.ok(serviceWorker.includes('./src/category-save-label.js'));
+  assert.ok(serviceWorker.includes('./src/category-bulk-editor.js'));
 });
