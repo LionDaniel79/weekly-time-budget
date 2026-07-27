@@ -21,7 +21,6 @@ const SHELL_URLS = [
   './src/auth-login-guard.js',
   './src/category-ui-patch.js',
   './src/category-bulk-editor.js',
-  './src/category-save-label.js',
   './src/category-delete-guard.js',
   './src/orphan-local-timer-cleanup.js',
   './src/local-timer-removal-reload.js',
