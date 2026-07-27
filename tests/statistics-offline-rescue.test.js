@@ -27,7 +27,10 @@ test('오프라인 통계 구조가 앱과 서비스 워커에 포함된다', as
     read('index.html'),
     read('service-worker.js'),
   ]);
-  assert.ok(html.includes('./src/statistics-offline-rescue.js'));
+  const rescueIndex = html.indexOf('./src/statistics-offline-rescue.js');
+  const legacyIndex = html.indexOf('./src/statistics-ui.js');
+  assert.ok(html.includes('data-view="statistics" class="nav-button"'));
+  assert.ok(rescueIndex >= 0 && legacyIndex > rescueIndex, '캐시 우선 통계 모듈이 기존 통계 모듈보다 먼저 실행되어야 합니다.');
   assert.ok(serviceWorker.includes('./src/statistics-offline-rescue.js'));
   assert.ok(serviceWorker.includes('weekly-time-budget-shell-v3'));
 });
