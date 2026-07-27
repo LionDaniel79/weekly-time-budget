@@ -18,6 +18,8 @@ test('오프라인 모듈은 올바른 자바스크립트 문법이다', async (
     '../src/service-worker-cache.js',
     '../src/service-worker-registration.js',
     '../src/statistics-session-state.js',
+    '../src/orphan-local-timer-cleanup.js',
+    '../src/local-timer-removal-reload.js',
     '../service-worker.js',
   ]) {
     const result = spawnSync(process.execPath, ['--check', fileURLToPath(new URL(relative, import.meta.url))], { encoding: 'utf8' });
@@ -97,21 +99,29 @@ test('서비스 워커는 앱 셸을 캐시하고 인증·Firestore API 응답�
     read('service-worker.js'),
   ]);
   assert.ok(html.includes('./src/service-worker-registration.js'));
+  assert.ok(html.includes('./src/local-timer-removal-reload.js'));
   for (const token of [
     'weekly-time-budget-shell-v1',
     'firebase-firestore.js',
     'firestore.googleapis.com',
     'identitytoolkit.googleapis.com',
     "request.mode === 'navigate'",
+    'local-timer-removal-reload.js',
   ]) assert.ok(serviceWorker.includes(token), token);
 });
 
 test('완전 삭제는 서버 기록과 동기화 대기 기록을 함께 경고하고 제거한다', async () => {
-  const source = await read('src/category-delete-guard.js');
+  const [deleteSource, cleanupSource, reloadSource] = await Promise.all([
+    read('src/category-delete-guard.js'),
+    read('src/orphan-local-timer-cleanup.js'),
+    read('src/local-timer-removal-reload.js'),
+  ]);
   for (const token of [
     'countPendingByCategory',
     'deletePendingByCategory',
     '동기화 대기 기록',
     'cleanupOfflineCategory',
-  ]) assert.ok(source.includes(token), token);
+  ]) assert.ok(deleteSource.includes(token), token);
+  assert.ok(cleanupSource.includes('weekly-time-budget:local-timer-removed'));
+  assert.ok(reloadSource.includes('location.reload()'));
 });
