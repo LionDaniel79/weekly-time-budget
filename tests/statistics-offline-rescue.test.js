@@ -22,6 +22,13 @@ test('통계 구조 요청은 무기한 대기하지 않고 재시도 화면으�
   assert.ok(source.includes('서버 응답이 늦어'));
 });
 
+test('통계 메모리 캐시는 사용자 전환 시 초기화된다', async () => {
+  const source = await read('src/statistics-offline-rescue.js');
+  assert.ok(source.includes('activeUserId'));
+  assert.match(source, /if \(activeUserId !== user\.uid\) \{[\s\S]*state\.data = null;[\s\S]*activeUserId = user\.uid;/);
+  assert.match(source, /onAuthStateChanged\([\s\S]*state\.data = null;/);
+});
+
 test('오프라인 통계 구조가 앱과 서비스 워커에 포함된다', async () => {
   const [html, serviceWorker] = await Promise.all([
     read('index.html'),
