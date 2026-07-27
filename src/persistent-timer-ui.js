@@ -1,5 +1,7 @@
 import { firebaseConfig } from '../firebase-config.js';
 import { createPersistentTimerController, localDateKey } from './persistent-timer.js';
+import { getOfflineRuntime } from './offline-runtime.js';
+import { showEntrySaveResult, showToast } from './app-toast.js';
 
 const appModule = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js');
 const authModule = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js');
@@ -9,7 +11,15 @@ const auth = authModule.getAuth(app);
 const db = store.getFirestore(app);
 
 const LAST_CATEGORY_KEY = 'weekly-time-budget:last-timer-category';
-const state = { user: null, categories: [], archived: [], controller: null, interval: null, patchQueued: false };
+const state = {
+  user: null,
+  categories: [],
+  archived: [],
+  controller: null,
+  runtime: null,
+  interval: null,
+  patchQueued: false,
+};
 const escapeHtml = (value = '') => String(value).replace(/[&<>'"]/g, (char) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;',
 }[char]));
@@ -17,14 +27,35 @@ const escapeHtml = (value = '') => String(value).replace(/[&<>'"]/g, (char) => (
 function storageKey(uid) { return `weekly-time-budget:active-timer:${uid}`; }
 
 async function loadCategories() {
-  if (!state.user) return;
+  if (!state.user || !state.runtime) return;
+  const cached = await state.runtime.store.getSnapshot(state.user.uid);
+  if (Array.isArray(cached?.categories)) state.categories = cached.categories;
+  if (Array.isArray(cached?.archivedCategories)) state.archived = cached.archivedCategories;
+
   const root = ['users', state.user.uid];
-  const [active, archived] = await Promise.all([
-    store.getDocs(store.query(store.collection(db, ...root, 'categories'), store.orderBy('order'))),
-    store.getDocs(store.collection(db, ...root, 'archivedCategories')),
-  ]);
-  state.categories = active.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-  state.archived = archived.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+  try {
+    const [active, archived] = await Promise.all([
+      store.getDocs(store.query(store.collection(db, ...root, 'categories'), store.orderBy('order'))),
+      store.getDocs(store.collection(db, ...root, 'archivedCategories')),
+    ]);
+    state.categories = active.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    state.archived = archived.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    await state.runtime.store.patchSnapshot(state.user.uid, {
+      categories: state.categories,
+      archivedCategories: state.archived,
+      updatedAt: Date.now(),
+    });
+  } catch (error) {
+    if (!state.categories.length) throw error;
+    console.warn('오프라인 대분류 스냅숏 사용', error);
+  }
+}
+
+function dispatchEntryChange() {
+  document.dispatchEvent(new CustomEvent('weekly-time-budget:entries-changed', {
+    detail: { userId: state.user.uid },
+  }));
+  document.dispatchEvent(new CustomEvent('weekly-time-budget:data-changed'));
 }
 
 function configureController() {
@@ -44,17 +75,24 @@ function configureController() {
           transaction.set(activeRef, { ...timer, updatedAt: store.serverTimestamp() });
         });
       },
-      async complete(timer, entry) {
-        const batch = store.writeBatch(db);
-        const entryRef = store.doc(db, 'users', state.user.uid, 'entries', `timer-${Math.round(timer.startedAt)}`);
-        batch.set(entryRef, { ...entry, createdAt: store.serverTimestamp() }, { merge: true });
-        batch.delete(activeRef);
-        await batch.commit();
-      },
       async remove() {
         await store.deleteDoc(activeRef);
       },
     },
+    complete: async (timer, entry) => state.runtime.repository.saveEntryLocalFirst({
+      userId: state.user.uid,
+      localId: `timer-${Math.round(timer.startedAt)}`,
+      entry: { ...entry, createdAt: Date.now() },
+      clearActiveTimer: { userId: timer.userId, startedAt: timer.startedAt },
+      onLocalSaved: async () => {
+        showToast({
+          type: 'queued',
+          title: '✓ 타이머 기록을 기기에 안전하게 저장했습니다.',
+          message: '서버 반영 상태를 확인하고 있습니다.',
+        });
+        dispatchEntryChange();
+      },
+    }),
   });
 }
 
@@ -128,11 +166,20 @@ async function handleAction(button) {
         note: document.querySelector('#timer-note')?.value || '',
         startedDate: localDateKey(new Date()),
       });
-      if (result.recovered) alert('이미 진행 중인 타이머를 복구했습니다.');
+      if (result.recovered) {
+        showToast({ type: 'info', title: '진행 중이던 타이머를 복구했습니다.' });
+      } else if (result.remotePending) {
+        showToast({
+          type: 'queued',
+          title: '타이머를 기기에서 시작했습니다.',
+          message: '인터넷 연결 후 실행 상태를 서버에 확인합니다.',
+        });
+      }
       renderTimer();
       return;
     }
-    await state.controller.stop((timer, { endedAt, durationMinutes }) => ({
+
+    const result = await state.controller.stop((timer, { endedAt, durationMinutes }) => ({
       categoryId: timer.categoryId,
       note: timer.note,
       date: timer.startedDate,
@@ -143,10 +190,15 @@ async function handleAction(button) {
     }));
     stopDisplay();
     renderTimer();
-    document.dispatchEvent(new CustomEvent('weekly-time-budget:data-changed'));
+    showEntrySaveResult(result.completion);
+    dispatchEntryChange();
   } catch (error) {
     console.error(error);
-    alert(`타이머 작업에 실패했습니다: ${error.message}`);
+    showToast({
+      type: 'error',
+      title: '타이머 작업에 실패했습니다.',
+      message: error.message,
+    });
     renderTimer();
   } finally {
     if (button.isConnected) button.disabled = false;
@@ -161,7 +213,7 @@ async function handleCancel(button) {
     stopDisplay();
     renderTimer();
   } catch (error) {
-    alert(`타이머를 취소하지 못했습니다: ${error.message}`);
+    showToast({ type: 'error', title: '타이머를 취소하지 못했습니다.', message: '인터넷 연결 후 다시 시도하세요.' });
   } finally {
     if (button.isConnected) button.disabled = false;
   }
@@ -171,12 +223,8 @@ document.addEventListener('click', (event) => {
   const opensRecord = event.target.closest('.nav-button[data-view="record"], [data-record-tab="timer"]');
   if (!opensRecord || !state.user) return;
   queueMicrotask(async () => {
-    try {
-      await loadCategories();
-      schedulePatch();
-    } catch (error) {
-      console.error('타이머 대분류 새로고침 실패', error);
-    }
+    try { await loadCategories(); schedulePatch(); }
+    catch (error) { console.error('타이머 대분류 새로고침 실패', error); }
   });
 }, true);
 
@@ -203,14 +251,19 @@ new MutationObserver(schedulePatch).observe(document.body, { childList: true, su
 authModule.onAuthStateChanged(auth, async (user) => {
   state.user = user;
   stopDisplay();
-  if (!user) { state.controller = null; return; }
-  await loadCategories();
-  configureController();
+  if (!user) {
+    state.controller = null;
+    state.runtime = null;
+    return;
+  }
   try {
+    state.runtime = await getOfflineRuntime({ userId: user.uid, firestore: store, db });
+    await loadCategories();
+    configureController();
     await state.controller.recover();
   } catch (error) {
     console.error('타이머 복구 실패', error);
-    alert('진행 중 타이머를 확인하지 못했습니다. 네트워크 상태를 확인하세요.');
+    showToast({ type: 'error', title: '진행 중 타이머를 확인하지 못했습니다.', message: '네트워크와 기기 저장소 상태를 확인하세요.' });
   }
   schedulePatch();
 });
