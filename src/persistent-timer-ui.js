@@ -19,6 +19,8 @@ const state = {
   runtime: null,
   interval: null,
   patchQueued: false,
+  recoveryPromise: null,
+  recoveryUserId: null,
 };
 const escapeHtml = (value = '') => String(value).replace(/[&<>'"]/g, (char) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;',
@@ -114,6 +116,33 @@ function formatClock(seconds) {
 
 function timerTabIsActive() {
   return Boolean(document.querySelector('#record-view [data-record-tab="timer"].active'));
+}
+
+async function refreshTimerFromRemote({ refreshCategories = false } = {}) {
+  const user = state.user;
+  const controller = state.controller;
+  if (!user || !controller) return null;
+  if (state.recoveryPromise && state.recoveryUserId === user.uid) return state.recoveryPromise;
+
+  const promise = (async () => {
+    if (refreshCategories) await loadCategories();
+    const timer = await controller.recover();
+    if (state.user?.uid !== user.uid || state.controller !== controller) return timer;
+    if (timerTabIsActive()) renderTimer();
+    else schedulePatch();
+    return timer;
+  })();
+
+  state.recoveryPromise = promise;
+  state.recoveryUserId = user.uid;
+  try {
+    return await promise;
+  } finally {
+    if (state.recoveryPromise === promise) {
+      state.recoveryPromise = null;
+      state.recoveryUserId = null;
+    }
+  }
 }
 
 function renderTimer() {
@@ -223,8 +252,8 @@ document.addEventListener('click', (event) => {
   const opensRecord = event.target.closest('.nav-button[data-view="record"], [data-record-tab="timer"]');
   if (!opensRecord || !state.user) return;
   queueMicrotask(async () => {
-    try { await loadCategories(); schedulePatch(); }
-    catch (error) { console.error('타이머 대분류 새로고침 실패', error); }
+    try { await refreshTimerFromRemote({ refreshCategories: true }); }
+    catch (error) { console.error('타이머 상태 새로고침 실패', error); }
   });
 }, true);
 
@@ -236,7 +265,17 @@ document.addEventListener('click', (event) => {
   if (action) handleAction(action); else handleCancel(cancel);
 }, true);
 
-document.addEventListener('visibilitychange', () => { if (!document.hidden) updateDisplay(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) return;
+  if (timerTabIsActive()) {
+    refreshTimerFromRemote().catch((error) => {
+      console.error('화면 복귀 후 타이머 복구 실패', error);
+      updateDisplay();
+    });
+    return;
+  }
+  updateDisplay();
+});
 
 function schedulePatch() {
   if (state.patchQueued || !state.user) return;
@@ -251,6 +290,8 @@ new MutationObserver(schedulePatch).observe(document.body, { childList: true, su
 authModule.onAuthStateChanged(auth, async (user) => {
   state.user = user;
   stopDisplay();
+  state.recoveryPromise = null;
+  state.recoveryUserId = null;
   if (!user) {
     state.controller = null;
     state.runtime = null;
@@ -262,7 +303,7 @@ authModule.onAuthStateChanged(auth, async (user) => {
     state.runtime = await getOfflineRuntime({ userId: user.uid, firestore: store, db });
     await loadCategories();
     configureController();
-    await state.controller.recover();
+    await refreshTimerFromRemote();
   } catch (error) {
     console.error('타이머 복구 실패', error);
     showToast({ type: 'error', title: '진행 중 타이머를 확인하지 못했습니다.', message: '네트워크와 기기 저장소 상태를 확인하세요.' });

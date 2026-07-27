@@ -120,7 +120,7 @@ test('서비스 워커는 앱 셸을 캐시하고 인증·Firestore API 응답�
   assert.ok(html.includes('./src/service-worker-registration.js'));
   assert.ok(html.includes('./src/local-timer-removal-reload.js'));
   for (const token of [
-    'weekly-time-budget-shell-v5',
+    'weekly-time-budget-shell-v6',
     'firebase-firestore.js',
     'firestore.googleapis.com',
     'identitytoolkit.googleapis.com',
