@@ -133,9 +133,14 @@ document.addEventListener('weekly-time-budget:ui-state-restored', (event) => {
 });
 
 document.addEventListener('click', (event) => {
-  const nav = event.target.closest('.nav-button[data-view="statistics"]');
+  const nav = event.target.closest('.nav-button[data-view]');
   if (nav) {
-    desiredState = { ...(desiredState || {}), activeView: 'statistics' };
+    const activeView = nav.dataset.view;
+    desiredState = { ...(desiredState || {}), activeView };
+    if (activeView !== 'statistics') {
+      restoring = false;
+      return;
+    }
     document.dispatchEvent(new CustomEvent('weekly-time-budget:save-ui-state', {
       detail: { activeView: 'statistics' },
     }));
