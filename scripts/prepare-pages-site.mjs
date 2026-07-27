@@ -42,9 +42,9 @@ function crc32(buffer) {
 function pngChunk(type, data) {
   const typeBuffer = Buffer.from(type, 'ascii');
   const length = Buffer.alloc(4);
-  length.writeUInt32BE(data.length);
+  length.writeUInt32BE(data.length, 0);
   const checksum = Buffer.alloc(4);
-  checksum.writeUInt32BE(crc32(Buffer.concat([typeBuffer, data])));
+  checksum.writeUInt32BE(crc32(Buffer.concat([typeBuffer, data])), 0);
   return Buffer.concat([length, typeBuffer, data, checksum]);
 }
 
@@ -216,6 +216,7 @@ export async function preparePagesSite({
   await mkdir(outputDir, { recursive: true });
   await cp(path.join(rootDir, 'index.html'), path.join(outputDir, 'index.html'));
   await cp(path.join(rootDir, 'styles.css'), path.join(outputDir, 'styles.css'));
+  await cp(path.join(rootDir, 'service-worker.js'), path.join(outputDir, 'service-worker.js'));
   await cp(path.join(rootDir, 'src'), path.join(outputDir, 'src'), { recursive: true });
   await cp(
     path.join(rootDir, 'manifest.webmanifest'),
