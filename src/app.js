@@ -82,7 +82,8 @@ const optionHtml = (selectedId = '') => state.categories
 
 function plainEntry(doc) {
   const data = doc.data();
-  const createdAt = data.createdAt?.toMillis?.() ?? Number(data.localCreatedAt || 0) || Date.now();
+  const createdAt = data.createdAt?.toMillis?.()
+    ?? (Number(data.localCreatedAt || 0) || Date.now());
   return { id: doc.id, ...data, createdAt };
 }
 
@@ -393,8 +394,9 @@ function bindManual() {
       } else {
         const startTime = $('#manual-start').value;
         const endTime = $('#manual-end').value;
+        if (!startTime || !endTime) throw new Error('시간 범위를 확인하세요.');
         const durationMinutes = minutesBetween(startTime, endTime);
-        if (!startTime || !endTime || durationMinutes <= 0 || durationMinutes > 1440) throw new Error('시간 범위를 확인하세요.');
+        if (durationMinutes <= 0 || durationMinutes > 1440) throw new Error('시간 범위를 확인하세요.');
         entry = { categoryId, note: $('#manual-note').value.trim(), date, durationMinutes, startTime, endTime, source: 'manual' };
       }
       submit.disabled = true;
