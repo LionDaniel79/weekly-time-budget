@@ -39,14 +39,17 @@ test('app은 addDoc 대신 local-first 저장과 pending 병합을 사용한다'
 });
 
 test('캐시 스냅숏을 먼저 복원하고 원격 실패 시 오프라인 안내를 유지한다', async () => {
-  const source = await read('src/app.js');
+  const [appSource, toastSource] = await Promise.all([
+    read('src/app.js'),
+    read('src/app-toast.js'),
+  ]);
   for (const token of [
     'restoreCachedState',
     'getSnapshot',
     'applySnapshotToState',
-    '오프라인 상태입니다.',
     '온라인에서 한 번 실행한 뒤',
-  ]) assert.ok(source.includes(token), token);
+  ]) assert.ok(appSource.includes(token), token);
+  assert.ok(toastSource.includes('오프라인 상태입니다.'), '오프라인 상태입니다.');
 });
 
 test('저장 결과 토스트는 서버·기기·동기화 완료 상태와 iOS safe area를 제공한다', async () => {
