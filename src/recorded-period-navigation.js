@@ -92,6 +92,19 @@ function buttonTarget(button, target) {
   else delete button.dataset.recordedPeriodTarget;
 }
 
+function setControlEnabled(control, enabled) {
+  if (!control) return;
+  control.disabled = !enabled;
+  control.setAttribute('aria-disabled', enabled ? 'false' : 'true');
+}
+
+function blockUntilPeriodsReady(event) {
+  if (state.periodsReady) return false;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  return true;
+}
+
 function dashboardWeekModel() {
   const root = document.querySelector('#dashboard-view [data-feature-ui="dashboard"]');
   if (!root || !root.querySelector('[data-dashboard-mode="weekly"].active')) return null;
@@ -173,6 +186,9 @@ function patchMonthlyStatistics(view) {
   const monthSelect = view.querySelector('#statistics-rescue-month');
   if (!yearSelect || !monthSelect) return;
 
+  setControlEnabled(yearSelect, true);
+  setControlEnabled(monthSelect, true);
+
   const now = new Date();
   const currentYear = now.getFullYear();
   const currentMonth = now.getMonth() + 1;
@@ -227,8 +243,19 @@ function patchStatistics() {
   patchZeroAchievement(view);
 }
 
+function patchUnreadyControls() {
+  document.querySelectorAll('#dashboard-view [data-week-direction], #statistics-view [data-rescue-week]')
+    .forEach((control) => setControlEnabled(control, false));
+  document.querySelectorAll('#statistics-rescue-year, #statistics-rescue-month')
+    .forEach((control) => setControlEnabled(control, false));
+}
+
 function patchAll() {
   state.patchScheduled = false;
+  if (!state.periodsReady) {
+    patchUnreadyControls();
+    return;
+  }
   patchDashboard();
   patchStatistics();
 }
@@ -298,7 +325,7 @@ async function refreshPeriods() {
 function dashboardClick(event) {
   const button = event.target.closest?.('#dashboard-view [data-week-direction]');
   if (!button) return false;
-  if (!state.periodsReady) return false;
+  if (blockUntilPeriodsReady(event)) return true;
   const model = dashboardWeekModel();
   if (!model) return false;
   event.preventDefault();
@@ -313,7 +340,7 @@ function dashboardClick(event) {
 function statisticsWeekClick(event) {
   const button = event.target.closest?.('#statistics-view [data-rescue-week]');
   if (!button) return false;
-  if (!state.periodsReady) return false;
+  if (blockUntilPeriodsReady(event)) return true;
   const model = statisticsWeekModel();
   if (!model) return false;
   event.preventDefault();
@@ -330,7 +357,8 @@ document.addEventListener('click', (event) => {
 }, true);
 
 document.addEventListener('change', (event) => {
-  if (!state.periodsReady) return;
+  if (!event.target.matches('#statistics-rescue-year, #statistics-rescue-month')) return;
+  if (blockUntilPeriodsReady(event)) return;
   const view = document.querySelector('#statistics-view');
   if (!view || view.classList.contains('hidden')) return;
   const monthSelect = view.querySelector('#statistics-rescue-month');
@@ -353,22 +381,20 @@ document.addEventListener('change', (event) => {
     return;
   }
 
-  if (event.target.matches('#statistics-rescue-month')) {
-    const option = event.target.selectedOptions?.[0];
-    if (!option || option.disabled) {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      schedulePatch();
-      return;
-    }
+  const option = event.target.selectedOptions?.[0];
+  if (!option || option.disabled) {
     event.preventDefault();
     event.stopImmediatePropagation();
-    applyStatisticsState({
-      mode: 'monthly',
-      year: Number(view.querySelector('#statistics-rescue-year')?.value),
-      month: Number(event.target.value),
-    });
+    schedulePatch();
+    return;
   }
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  applyStatisticsState({
+    mode: 'monthly',
+    year: Number(view.querySelector('#statistics-rescue-year')?.value),
+    month: Number(event.target.value),
+  });
 }, true);
 
 for (const eventName of [
