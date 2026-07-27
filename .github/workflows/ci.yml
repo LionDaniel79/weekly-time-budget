@@ -28,11 +28,24 @@ jobs:
         run: |
           test -f _site/index.html
           test -f _site/styles.css
+          test -f _site/service-worker.js
           test -f _site/src/time-budget-domain.js
           test -f _site/src/time-budget-ui.js
           test -f _site/src/time-budget-feature.js
           test -f _site/src/persistent-timer.js
           test -f _site/src/persistent-timer-ui.js
+          test -f _site/src/orphan-local-timer-cleanup.js
+          test -f _site/src/local-timer-removal-reload.js
+          test -f _site/src/offline-entry-domain.js
+          test -f _site/src/offline-store.js
+          test -f _site/src/offline-entry-repository.js
+          test -f _site/src/offline-sync.js
+          test -f _site/src/offline-runtime.js
+          test -f _site/src/app-toast.js
+          test -f _site/src/ui-session-state.js
+          test -f _site/src/service-worker-cache.js
+          test -f _site/src/service-worker-registration.js
+          test -f _site/src/statistics-session-state.js
       - name: Upload failed test output
         if: failure()
         uses: actions/upload-artifact@v4

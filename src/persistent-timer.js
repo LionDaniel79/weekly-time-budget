@@ -3,6 +3,19 @@ const safeParse = (value) => {
   catch { return null; }
 };
 
+const RETRYABLE_CODES = new Set([
+  'unavailable',
+  'deadline-exceeded',
+  'resource-exhausted',
+  'network-request-failed',
+]);
+
+function isRetryable(error = {}) {
+  const code = String(error?.code || '').toLowerCase().split('/').pop();
+  return RETRYABLE_CODES.has(code)
+    || /network|offline|failed to fetch|connection|timeout/i.test(String(error?.message || error || ''));
+}
+
 export function createTimerSnapshot({ userId, categoryId, note = '', startedAt = Date.now(), startedDate }) {
   if (!userId) throw new Error('사용자 정보가 필요합니다.');
   if (!categoryId) throw new Error('대분류를 선택하세요.');
@@ -34,9 +47,12 @@ export function createPersistentTimerController({
   remote,
   storage,
   storageKey,
+  complete = null,
   now = () => Date.now(),
 }) {
   if (!remote || !storage || !storageKey) throw new Error('타이머 저장소 설정이 필요합니다.');
+  const completeTimer = complete || remote.complete;
+  if (typeof completeTimer !== 'function') throw new Error('타이머 기록 저장 설정이 필요합니다.');
   let active = null;
 
   const writeLocal = (timer) => storage.setItem(storageKey, JSON.stringify(timer));
@@ -45,7 +61,7 @@ export function createPersistentTimerController({
   const useRemoteTimer = (timer) => {
     active = timer;
     writeLocal(timer);
-    return { timer: active, recovered: true };
+    return { timer: active, recovered: true, remotePending: false };
   };
 
   return {
@@ -55,16 +71,18 @@ export function createPersistentTimerController({
       const local = readLocal();
       try {
         const remoteTimer = await remote.get();
-        if (remoteTimer) {
-          active = remoteTimer;
-          writeLocal(remoteTimer);
+        if (remoteTimer) return useRemoteTimer(remoteTimer).timer;
+        if (local) {
+          active = local;
+          try { await remote.set(local); }
+          catch (error) { if (!isRetryable(error)) throw error; }
           return active;
         }
         active = null;
         clearLocal();
         return null;
       } catch (error) {
-        if (local) {
+        if (local && isRetryable(error)) {
           active = local;
           return active;
         }
@@ -73,30 +91,50 @@ export function createPersistentTimerController({
     },
 
     async start(input) {
-      const existing = await remote.get();
+      const local = readLocal();
+      if (local) {
+        active = local;
+        return { timer: active, recovered: true, remotePending: true };
+      }
+
+      let existing = null;
+      let remotePending = false;
+      try {
+        existing = await remote.get();
+      } catch (error) {
+        if (!isRetryable(error)) throw error;
+        remotePending = true;
+      }
       if (existing) return useRemoteTimer(existing);
+
       const timer = createTimerSnapshot({ ...input, startedAt: input.startedAt ?? now() });
+      active = timer;
+      writeLocal(timer);
       try {
         await remote.set(timer);
       } catch (error) {
         const racedTimer = await remote.get().catch(() => null);
         if (racedTimer) return useRemoteTimer(racedTimer);
-        throw error;
+        if (!isRetryable(error)) {
+          active = null;
+          clearLocal();
+          throw error;
+        }
+        remotePending = true;
       }
-      active = timer;
-      writeLocal(timer);
-      return { timer, recovered: false };
+      return { timer, recovered: false, remotePending };
     },
 
     async stop(buildEntry) {
       if (!active) throw new Error('진행 중인 타이머가 없습니다.');
+      const timer = active;
       const endedAt = now();
-      const durationMinutes = Math.max(1, Math.round((endedAt - active.startedAt) / 60000));
-      const entry = buildEntry(active, { endedAt, durationMinutes });
-      await remote.complete(active, entry);
+      const durationMinutes = Math.max(1, Math.round((endedAt - timer.startedAt) / 60000));
+      const entry = buildEntry(timer, { endedAt, durationMinutes });
+      const completion = await completeTimer(timer, entry);
       active = null;
       clearLocal();
-      return entry;
+      return { entry, completion };
     },
 
     async cancel() {
