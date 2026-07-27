@@ -66,7 +66,7 @@ function restoreStatisticsState() {
   const view = statisticsView();
   if (!saved || desiredState?.activeView !== 'statistics' || !view) return;
 
-  if (view.classList.contains('hidden') || !view.querySelector('[data-stat-mode]')) {
+  if (view.classList.contains('hidden')) {
     const button = statisticsButton();
     if (button) {
       restoring = true;
@@ -75,6 +75,10 @@ function restoreStatisticsState() {
     }
     return;
   }
+
+  // 통계 데이터가 로딩 중이면 메뉴를 다시 클릭하지 않는다.
+  // 최종 탭 DOM이 만들어질 때 MutationObserver가 복원을 다시 예약한다.
+  if (!view.querySelector('[data-stat-mode]')) return;
 
   const activeMode = selectedMode();
   if (saved.mode && activeMode !== saved.mode) {
@@ -150,7 +154,7 @@ document.addEventListener('change', (event) => {
 }, true);
 
 observer = new MutationObserver(() => {
-  if (restoring) scheduleRestore();
+  if (desiredState?.activeView === 'statistics') scheduleRestore();
 });
 observer.observe(document.body, { childList: true, subtree: true });
 
