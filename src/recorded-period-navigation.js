@@ -22,8 +22,12 @@ const state = {
   userId: null,
   periods: emptyIndex(),
   refreshPromise: null,
+  refreshUserId: null,
+  refreshSequence: 0,
   patchScheduled: false,
   retryTimer: null,
+  warmupTimer: null,
+  warmupAttempt: 0,
   applying: false,
 };
 
@@ -102,13 +106,6 @@ function dashboardWeekModel() {
 }
 
 function patchDashboard() {
-  const today = todayKey();
-  const todayButton = document.querySelector(`#dashboard-view [data-dashboard-date="${today}"]`);
-  if (todayButton) {
-    todayButton.disabled = false;
-    todayButton.setAttribute('aria-disabled', 'false');
-  }
-
   const model = dashboardWeekModel();
   if (!model) return;
   if (model.normalized !== model.selected) {
@@ -233,6 +230,17 @@ function schedulePatch() {
   queueMicrotask(patchAll);
 }
 
+function scheduleWarmupRefresh(userId) {
+  if (!userId || state.warmupAttempt >= 3) return;
+  const delays = [300, 900, 1800];
+  const delay = delays[state.warmupAttempt];
+  state.warmupAttempt += 1;
+  clearTimeout(state.warmupTimer);
+  state.warmupTimer = setTimeout(() => {
+    if (auth.currentUser?.uid === userId) refreshPeriods();
+  }, delay);
+}
+
 async function refreshPeriods() {
   const user = auth.currentUser;
   if (!user) {
@@ -241,28 +249,40 @@ async function refreshPeriods() {
     schedulePatch();
     return;
   }
-  if (state.refreshPromise) return state.refreshPromise;
-  state.refreshPromise = (async () => {
-    const runtime = getExistingOfflineRuntime(user.uid);
+
+  const userId = user.uid;
+  if (state.refreshPromise && state.refreshUserId === userId) return state.refreshPromise;
+  const sequence = ++state.refreshSequence;
+  const promise = (async () => {
+    const runtime = getExistingOfflineRuntime(userId);
     if (!runtime) {
       clearTimeout(state.retryTimer);
-      state.retryTimer = setTimeout(() => refreshPeriods(), 150);
+      state.retryTimer = setTimeout(() => {
+        if (auth.currentUser?.uid === userId) refreshPeriods();
+      }, 150);
       return;
     }
-    const snapshot = await runtime.store.getSnapshot(user.uid);
+    const snapshot = await runtime.store.getSnapshot(userId);
     const remoteEntries = Array.isArray(snapshot?.statisticsData?.entries)
       ? snapshot.statisticsData.entries
       : (Array.isArray(snapshot?.entries) ? snapshot.entries : []);
     const entries = await runtime.mergedEntries(remoteEntries);
-    if (auth.currentUser?.uid !== user.uid) return;
-    state.userId = user.uid;
+    if (auth.currentUser?.uid !== userId || sequence !== state.refreshSequence) return;
+    state.userId = userId;
     state.periods = buildRecordedPeriodIndex(entries, todayKey());
     schedulePatch();
+    scheduleWarmupRefresh(userId);
   })();
+
+  state.refreshPromise = promise;
+  state.refreshUserId = userId;
   try {
-    await state.refreshPromise;
+    await promise;
   } finally {
-    state.refreshPromise = null;
+    if (state.refreshPromise === promise) {
+      state.refreshPromise = null;
+      state.refreshUserId = null;
+    }
   }
 }
 
@@ -357,6 +377,11 @@ observer.observe(document.body, { childList: true, subtree: true });
 
 authModule.onAuthStateChanged(auth, (user) => {
   clearTimeout(state.retryTimer);
+  clearTimeout(state.warmupTimer);
+  state.refreshSequence += 1;
+  state.refreshPromise = null;
+  state.refreshUserId = null;
+  state.warmupAttempt = 0;
   state.userId = user?.uid || null;
   state.periods = emptyIndex();
   refreshPeriods();
