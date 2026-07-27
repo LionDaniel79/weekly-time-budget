@@ -15,7 +15,7 @@ test('월간 통계 옵션 패치는 같은 모델에서 select DOM을 반복 �
 test('타이머 메뉴 진입 시 원격 activeTimer를 다시 확인한 뒤 즉시 렌더한다', async () => {
   const source = await read('src/persistent-timer-ui.js');
   assert.match(source, /async function refreshTimerFromRemote/);
-  assert.match(source, /refreshTimerFromRemote[\s\S]*state\.controller\.recover\(\)[\s\S]*renderTimer\(\)/);
+  assert.match(source, /refreshTimerFromRemote[\s\S]*controller\.recover\(\)[\s\S]*renderTimer\(\)/);
   assert.match(source, /opensRecord[\s\S]*refreshTimerFromRemote/);
 });
 
