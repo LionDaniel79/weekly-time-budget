@@ -61,7 +61,10 @@ export function createOfflineEntryRepository({
         clearActiveTimer,
       });
       await store.putPending(record);
-      if (typeof onLocalSaved === 'function') await onLocalSaved(record);
+      if (typeof onLocalSaved === 'function') {
+        try { await onLocalSaved(record); }
+        catch (error) { console.error('기기 저장 후 화면 갱신 실패', error); }
+      }
       const synced = await syncRecord(record);
       const pendingCount = await store.countPending(userId);
       return {
