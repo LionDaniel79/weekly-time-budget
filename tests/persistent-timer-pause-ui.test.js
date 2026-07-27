@@ -17,9 +17,12 @@ test('일시정지 상태에서는 화면 갱신 인터벌을 시작하지 않�
   assert.match(source, /function startDisplay\(\)[\s\S]*active\.running === false[\s\S]*return;/);
 });
 
-test('Firestore 어댑터는 기존 activeTimer 문서를 갱신할 수 있다', async () => {
+test('Firestore 상태 변경은 같은 시작 시각의 타이머만 트랜잭션으로 갱신한다', async () => {
   const source = await read('src/persistent-timer-ui.js');
-  assert.match(source, /async update\(timer\)[\s\S]*setDoc\(\s*activeRef[\s\S]*merge: true/);
+  assert.match(source, /async update\(timer\)[\s\S]*runTransaction/);
+  assert.match(source, /sameTimer\(existing\.data\(\), timer\)/);
+  assert.ok(source.includes("throw new Error('active-timer-conflict')"));
+  assert.match(source, /async remove\(timer\)[\s\S]*transaction\.delete\(activeRef\)/);
 });
 
 test('멈춤 버튼 클릭은 기존 타이머 액션보다 먼저 처리된다', async () => {
