@@ -19,6 +19,8 @@ test('오프라인 모듈은 올바른 자바스크립트 문법이다', async (
     '../src/service-worker-registration.js',
     '../src/statistics-session-state.js',
     '../src/statistics-offline-rescue.js',
+    '../src/recorded-period-domain.js',
+    '../src/recorded-period-navigation.js',
     '../src/orphan-local-timer-cleanup.js',
     '../src/local-timer-removal-reload.js',
     '../service-worker.js',
@@ -118,13 +120,15 @@ test('서비스 워커는 앱 셸을 캐시하고 인증·Firestore API 응답�
   assert.ok(html.includes('./src/service-worker-registration.js'));
   assert.ok(html.includes('./src/local-timer-removal-reload.js'));
   for (const token of [
-    'weekly-time-budget-shell-v4',
+    'weekly-time-budget-shell-v5',
     'firebase-firestore.js',
     'firestore.googleapis.com',
     'identitytoolkit.googleapis.com',
     "request.mode === 'navigate'",
     'local-timer-removal-reload.js',
     'statistics-offline-rescue.js',
+    'recorded-period-domain.js',
+    'recorded-period-navigation.js',
   ]) assert.ok(serviceWorker.includes(token), token);
 });
 
