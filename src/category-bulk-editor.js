@@ -145,7 +145,7 @@ function enhanceCategoryEditor() {
     const registeredCard = rows[0].closest('.card');
     const actions = document.createElement('div');
     actions.className = 'category-bulk-actions';
-    actions.innerHTML = '<button id="category-bulk-apply" type="button" class="primary-button">대분류 변경사항 적용</button>';
+    actions.innerHTML = '<button id="category-bulk-apply" type="button" class="primary-button">저장</button>';
     actions.querySelector('button').onclick = (event) => applyAllCategories(event.currentTarget);
     registeredCard?.append(actions);
   }
