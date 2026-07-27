@@ -37,6 +37,15 @@ test('대시보드와 통계는 기록 기간 목적지와 disabled 상태를 �
   assert.ok(source.includes("achievement.textContent = '—'"));
 });
 
+test('기간 인덱스가 준비되기 전에는 복원된 과거 기간을 보정하지 않는다', async () => {
+  const source = await read('src/recorded-period-navigation.js');
+  assert.ok(source.includes('periodsReady: false'));
+  assert.match(source, /function patchDashboard\(\) \{\s*if \(!state\.periodsReady\) return;/);
+  assert.match(source, /function patchStatistics\(\) \{\s*if \(!state\.periodsReady\) return;/);
+  assert.match(source, /state\.periods = buildRecordedPeriodIndex[\s\S]*state\.periodsReady = true;/);
+  assert.match(source, /onAuthStateChanged\([\s\S]*state\.periodsReady = false;/);
+});
+
 test('초기 로그인과 사용자 전환은 기간 조회를 사용자별로 다시 실행한다', async () => {
   const source = await read('src/recorded-period-navigation.js');
   for (const token of [
