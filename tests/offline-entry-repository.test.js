@@ -27,6 +27,27 @@ test('기기 저장 후 원격 성공이면 대기함을 제거한다', async ()
   assert.equal(await store.countPending('u1'), 0);
 });
 
+test('기기 저장 후 UI 콜백 실패가 원격 동기화를 막지 않는다', async () => {
+  const store = await createMemoryOfflineStore();
+  let writes = 0;
+  const repository = createOfflineEntryRepository({
+    store,
+    createId: () => 'entry-ui-callback',
+    now: () => 1000,
+    remote: { save: async () => { writes += 1; } },
+  });
+
+  const result = await repository.saveEntryLocalFirst({
+    userId: 'u1',
+    entry,
+    onLocalSaved: async () => { throw new Error('render failed'); },
+  });
+
+  assert.equal(result.status, 'synced');
+  assert.equal(writes, 1);
+  assert.equal(await store.countPending('u1'), 0);
+});
+
 test('네트워크 실패면 기록을 pending으로 유지한다', async () => {
   const store = await createMemoryOfflineStore();
   const repository = createOfflineEntryRepository({
