@@ -21,6 +21,7 @@ const SHELL_URLS = [
   './src/category-ui-patch.js',
   './src/category-bulk-editor.js',
   './src/category-delete-guard.js',
+  './src/orphan-local-timer-cleanup.js',
   './src/time-budget-domain.js',
   './src/time-budget-ui.js',
   './src/time-budget-feature.js',
