@@ -59,22 +59,25 @@ test('오늘 직접 예산은 자동 예산보다 우선하며 0도 유효하다
   assert.deepEqual(resolveDailyBudget({ category, date: '2026-07-20', weekDocument, dailyDocument: { overrides: { reading: 0 } } }), { minutes: 0, source: 'direct' });
 });
 
-test('전날과 다음날은 가장 가까운 기록 날짜로 이동한다', () => {
+test('전날과 다음날은 양수 기록 날짜와 오늘 사이에서 이동한다', () => {
   const dates = recordedDateKeys([
-    { date: '2026-07-20' }, { date: '2026-07-20' }, { date: '2026-07-24' },
-    { date: '2026-07-26' }, { date: '2026-07-27' },
+    { date: '2026-07-20', durationMinutes: 30 },
+    { date: '2026-07-20', durationMinutes: 15 },
+    { date: '2026-07-24', durationMinutes: 0 },
+    { date: '2026-07-26', durationMinutes: 45 },
+    { date: '2026-07-27', durationMinutes: 20 },
   ], '2026-07-26');
-  assert.deepEqual(dates, ['2026-07-20', '2026-07-24', '2026-07-26']);
-  assert.equal(previousRecordedDate(dates, '2026-07-26'), '2026-07-24');
-  assert.equal(nextRecordedDateOrToday(dates, '2026-07-20', '2026-07-26'), '2026-07-24');
-  assert.equal(nextRecordedDateOrToday(dates, '2026-07-24', '2026-07-26'), '2026-07-26');
+  assert.deepEqual(dates, ['2026-07-20', '2026-07-26']);
+  assert.equal(previousRecordedDate(dates, '2026-07-26'), '2026-07-20');
+  assert.equal(nextRecordedDateOrToday(dates, '2026-07-20', '2026-07-26'), '2026-07-26');
   assert.equal(nextRecordedDateOrToday(dates, '2026-07-26', '2026-07-26'), null);
 });
 
 test('달력은 기록이 있는 과거와 오늘 날짜만 활성화한다', () => {
-  const cells = calendarMonthCells(2026, 7, ['2026-07-20', '2026-07-24', '2026-07-27'], '2026-07-26');
+  const cells = calendarMonthCells(2026, 7, ['2026-07-20', '2026-07-24'], '2026-07-26');
   assert.equal(cells.find((cell) => cell.date === '2026-07-20').active, true);
   assert.equal(cells.find((cell) => cell.date === '2026-07-21').disabled, true);
+  assert.equal(cells.find((cell) => cell.date === '2026-07-26').disabled, false);
   assert.equal(cells.find((cell) => cell.date === '2026-07-27').disabled, true);
 });
 
