@@ -60,6 +60,10 @@ function dispatchEntryChange() {
   document.dispatchEvent(new CustomEvent('weekly-time-budget:data-changed'));
 }
 
+function sameTimer(snapshot, timer) {
+  return Number(snapshot?.startedAt) === Number(timer?.startedAt);
+}
+
 function configureController() {
   const activeRef = store.doc(db, 'users', state.user.uid, 'activeTimer', 'current');
   state.controller = createPersistentTimerController({
@@ -78,14 +82,25 @@ function configureController() {
         });
       },
       async update(timer) {
-        await store.setDoc(
-          activeRef,
-          { ...timer, updatedAt: store.serverTimestamp() },
-          { merge: true },
-        );
+        await store.runTransaction(db, async (transaction) => {
+          const existing = await transaction.get(activeRef);
+          if (existing.exists() && !sameTimer(existing.data(), timer)) {
+            throw new Error('active-timer-conflict');
+          }
+          transaction.set(
+            activeRef,
+            { ...timer, updatedAt: store.serverTimestamp() },
+            { merge: true },
+          );
+        });
       },
-      async remove() {
-        await store.deleteDoc(activeRef);
+      async remove(timer) {
+        await store.runTransaction(db, async (transaction) => {
+          const existing = await transaction.get(activeRef);
+          if (!existing.exists()) return;
+          if (!sameTimer(existing.data(), timer)) throw new Error('active-timer-conflict');
+          transaction.delete(activeRef);
+        });
       },
     },
     complete: async (timer, entry) => state.runtime.repository.saveEntryLocalFirst({
@@ -246,6 +261,11 @@ async function handleAction(button) {
   }
 }
 
+async function recoverAfterConflict() {
+  await refreshTimerFromRemote();
+  showToast({ type: 'info', title: '다른 기기의 타이머 상태를 불러왔습니다.' });
+}
+
 async function handlePauseToggle(button) {
   const active = state.controller?.active;
   if (!active || button.disabled) return;
@@ -266,6 +286,10 @@ async function handlePauseToggle(button) {
     }
   } catch (error) {
     console.error(error);
+    if (error.message === 'active-timer-conflict') {
+      await recoverAfterConflict().catch(console.error);
+      return;
+    }
     showToast({
       type: 'error',
       title: '타이머 상태를 변경하지 못했습니다.',
@@ -285,6 +309,10 @@ async function handleCancel(button) {
     stopDisplay();
     renderTimer();
   } catch (error) {
+    if (error.message === 'active-timer-conflict') {
+      await recoverAfterConflict().catch(console.error);
+      return;
+    }
     showToast({ type: 'error', title: '타이머를 취소하지 못했습니다.', message: '인터넷 연결 후 다시 시도하세요.' });
   } finally {
     if (button.isConnected) button.disabled = false;
