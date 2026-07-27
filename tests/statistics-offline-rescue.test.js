@@ -6,10 +6,11 @@ const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
 test('통계는 서버 조회가 멈춰도 기기 스냅숏으로 먼저 표시한다', async () => {
   const source = await read('src/statistics-offline-rescue.js');
-  assert.ok(source.includes("getExistingOfflineRuntime"));
-  assert.ok(source.includes("getSnapshot"));
-  assert.ok(source.includes("mergedEntries"));
-  assert.match(source, /Promise\.race\([\s\S]*STATISTICS_SERVER_TIMEOUT_MS/);
+  assert.ok(source.includes('getExistingOfflineRuntime'));
+  assert.ok(source.includes('getSnapshot'));
+  assert.ok(source.includes('mergedEntries'));
+  assert.match(source, /Promise\.race\([\s\S]*timeoutPromise\(\)/);
+  assert.match(source, /setTimeout\([\s\S]*STATISTICS_SERVER_TIMEOUT_MS/);
   assert.ok(source.includes('statisticsData'));
   assert.ok(source.includes('기기에 저장된 자료'));
 });
