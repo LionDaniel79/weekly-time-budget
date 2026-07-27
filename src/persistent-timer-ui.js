@@ -254,6 +254,8 @@ authModule.onAuthStateChanged(auth, async (user) => {
   if (!user) {
     state.controller = null;
     state.runtime = null;
+    state.categories = [];
+    state.archived = [];
     return;
   }
   try {
