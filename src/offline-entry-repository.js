@@ -51,6 +51,7 @@ export function createOfflineEntryRepository({
       entry,
       localId = createId(),
       clearActiveTimer = null,
+      onLocalSaved = null,
     }) {
       const record = createPendingEntry({
         userId,
@@ -60,6 +61,7 @@ export function createOfflineEntryRepository({
         clearActiveTimer,
       });
       await store.putPending(record);
+      if (typeof onLocalSaved === 'function') await onLocalSaved(record);
       const synced = await syncRecord(record);
       const pendingCount = await store.countPending(userId);
       return {
