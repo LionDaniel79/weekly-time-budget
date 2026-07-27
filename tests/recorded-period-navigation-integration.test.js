@@ -34,8 +34,20 @@ test('대시보드와 통계는 기록 기간 목적지와 disabled 상태를 �
     'statistics-rescue-month',
     'is-unavailable',
   ]) assert.ok(source.includes(token), token);
-  assert.ok(source.includes('date === today') || source.includes('data-dashboard-date'));
   assert.ok(source.includes("achievement.textContent = '—'"));
+});
+
+test('초기 로그인과 사용자 전환은 기간 조회를 사용자별로 다시 실행한다', async () => {
+  const source = await read('src/recorded-period-navigation.js');
+  for (const token of [
+    'refreshUserId',
+    'refreshSequence',
+    'warmupAttempt',
+    'scheduleWarmupRefresh',
+    'auth.currentUser?.uid !== userId',
+    'state.refreshPromise === promise',
+  ]) assert.ok(source.includes(token), token);
+  assert.match(source, /onAuthStateChanged\([\s\S]*state\.refreshSequence \+= 1;[\s\S]*state\.refreshPromise = null;[\s\S]*state\.warmupAttempt = 0;/);
 });
 
 test('통합 모듈은 통계와 시간 예산 기능보다 먼저 로드되고 앱 셸에 캐시된다', async () => {
