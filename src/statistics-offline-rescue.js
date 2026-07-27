@@ -32,14 +32,15 @@ const state = {
   warning: '',
 };
 let loadSequence = 0;
+let activeUserId = null;
 
 const escapeHtml = (value = '') => String(value).replace(/[&<>'"]/g, (char) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;',
 }[char]));
-const view = () => document.querySelector('#statistics-view');
-const isVisible = () => Boolean(view() && !view().classList.contains('hidden'));
+const statisticsView = () => document.querySelector('#statistics-view');
+const statisticsVisible = () => Boolean(statisticsView() && !statisticsView().classList.contains('hidden'));
 
-function injectRescueStyles() {
+function injectStyles() {
   if (document.querySelector('#statistics-rescue-styles')) return;
   const style = document.createElement('style');
   style.id = 'statistics-rescue-styles';
@@ -66,6 +67,14 @@ function timeoutPromise() {
   return new Promise((_, reject) => {
     setTimeout(() => reject(new Error('서버 응답이 늦어 기기에 저장된 자료를 표시합니다.')), STATISTICS_SERVER_TIMEOUT_MS);
   });
+}
+
+function resetUserState(nextUserId = null) {
+  loadSequence += 1;
+  activeUserId = nextUserId;
+  state.data = null;
+  state.source = 'none';
+  state.warning = '';
 }
 
 async function readCachedStatistics(user) {
@@ -139,7 +148,9 @@ function overallAchievement(summary) {
 }
 
 function differenceText(item) {
-  if (item.status === 'unbudgeted') return `예산 미설정 · ${formatMinutes(item.actualMinutes ?? item.totalActualMinutes)} 기록`;
+  if (item.status === 'unbudgeted') {
+    return `예산 미설정 · ${formatMinutes(item.actualMinutes ?? item.totalActualMinutes)} 기록`;
+  }
   const difference = Number(item.differenceMinutes) || 0;
   if (difference > 0) return `${formatMinutes(difference)} 초과`;
   if (difference < 0) return `${formatMinutes(Math.abs(difference))} 남음`;
@@ -185,7 +196,9 @@ function formatChange(item) {
 }
 
 function comparisonTable(items, key, label, changeLabel) {
-  if (!items.length) return '<div class="card statistics-card"><div class="empty-statistics">비교할 기록이 없습니다.</div></div>';
+  if (!items.length) {
+    return '<div class="card statistics-card"><div class="empty-statistics">비교할 기록이 없습니다.</div></div>';
+  }
   return `<div class="card statistics-card"><div class="section-title"><h2>기간별 예산과 실제 기록</h2></div>
     <table class="statistics-rescue-table"><thead><tr><th>기간</th><th>기간 예산</th><th>실제 기록</th><th>달성률</th><th>기록 일수</th><th>${changeLabel}</th></tr></thead><tbody>${items.map((item) => `<tr>
       <td data-label="기간"><strong>${label(item[key])}</strong></td>
@@ -270,29 +283,31 @@ function persistState() {
   }));
 }
 
-function renderStatisticsRescue() {
-  const target = view();
+function renderStatistics() {
+  const target = statisticsView();
   if (!target || !state.data) return;
   target.dataset.statisticsRescue = 'true';
-  const cacheMessage = state.source === 'cache'
+  const sourceMessage = state.source === 'cache'
     ? '기기에 저장된 자료를 먼저 표시하고 있습니다. 과거의 변동 예산은 서버 연결 후 최신 자료로 자동 갱신됩니다.'
     : '서버의 최신 자료로 통계를 표시하고 있습니다.';
-  const warning = state.warning
+  const notice = state.warning
     ? `<div class="statistics-rescue-banner warning">${escapeHtml(state.warning)}<div class="statistics-rescue-actions"><button id="statistics-rescue-retry" class="secondary-button" type="button">통계를 다시 불러오기</button></div></div>`
-    : `<div class="statistics-rescue-banner">${cacheMessage}</div>`;
+    : `<div class="statistics-rescue-banner">${sourceMessage}</div>`;
   target.innerHTML = `<div class="statistics-tabs">${[
     ['weekly', '주별 통계'],
     ['monthly', '월간 통계'],
     ['yearly', '연간 통계'],
     ['monthly-comparison', '월간 비교'],
     ['yearly-comparison', '연도별 비교'],
-  ].map(([mode, label]) => `<button class="tab-button ${state.mode === mode ? 'active' : ''}" data-rescue-stat-mode="${mode}" type="button">${label}</button>`).join('')}</div>${controlsHtml()}${warning}${bodyHtml()}`;
-  document.querySelector('#week-label').textContent = headerText();
-  document.querySelector('#page-title').textContent = '통계';
+  ].map(([mode, label]) => `<button class="tab-button ${state.mode === mode ? 'active' : ''}" data-rescue-stat-mode="${mode}" type="button">${label}</button>`).join('')}</div>${controlsHtml()}${notice}${bodyHtml()}`;
+  const label = document.querySelector('#week-label');
+  const title = document.querySelector('#page-title');
+  if (label) label.textContent = headerText();
+  if (title) title.textContent = '통계';
 }
 
 function showLoading() {
-  const target = view();
+  const target = statisticsView();
   if (!target) return;
   target.classList.remove('hidden');
   target.dataset.statisticsRescue = 'loading';
@@ -300,42 +315,48 @@ function showLoading() {
 }
 
 function showFailure(error) {
-  const target = view();
+  const target = statisticsView();
   if (!target) return;
   target.dataset.statisticsRescue = 'error';
   target.innerHTML = `<div class="card"><h2>통계를 불러오지 못했습니다.</h2><p class="warning">${escapeHtml(error.message || '통계 자료를 확인하지 못했습니다.')}</p><button id="statistics-rescue-retry" class="primary-button" type="button">통계를 다시 불러오기</button></div>`;
 }
 
-async function loadStatisticsRescue({ keepCurrent = false } = {}) {
+async function loadStatistics({ keepCurrent = false } = {}) {
   const user = auth.currentUser;
   if (!user) return;
+  if (activeUserId !== user.uid) {
+    state.data = null;
+    state.source = 'none';
+    state.warning = '';
+    activeUserId = user.uid;
+  }
   const sequence = ++loadSequence;
   if (!keepCurrent || !state.data) showLoading();
   let cached = null;
   try {
     cached = await readCachedStatistics(user);
-    if (sequence !== loadSequence) return;
+    if (sequence !== loadSequence || activeUserId !== user.uid) return;
     if (cached) {
       state.data = cached;
       state.source = 'cache';
       state.warning = '';
-      renderStatisticsRescue();
+      renderStatistics();
     }
   } catch (error) {
     console.warn('통계 기기 캐시를 읽지 못했습니다.', error);
   }
   try {
     const server = await fetchServerStatistics(user);
-    if (sequence !== loadSequence) return;
+    if (sequence !== loadSequence || activeUserId !== user.uid) return;
     state.data = server;
     state.source = 'server';
     state.warning = '';
-    renderStatisticsRescue();
+    renderStatistics();
   } catch (error) {
-    if (sequence !== loadSequence) return;
+    if (sequence !== loadSequence || activeUserId !== user.uid) return;
     if (state.data || cached) {
       state.warning = error.message || '서버 통계 자료를 갱신하지 못했습니다.';
-      renderStatisticsRescue();
+      renderStatistics();
     } else {
       showFailure(error);
     }
@@ -344,14 +365,27 @@ async function loadStatisticsRescue({ keepCurrent = false } = {}) {
 
 function activateStatistics(button) {
   document.querySelectorAll('.view').forEach((item) => item.classList.add('hidden'));
-  view()?.classList.remove('hidden');
+  statisticsView()?.classList.remove('hidden');
   document.querySelectorAll('.nav-button').forEach((item) => item.classList.toggle('active', item === button));
   document.querySelector('.sidebar')?.classList.remove('open');
   persistState();
-  loadStatisticsRescue();
+  loadStatistics();
 }
 
-injectRescueStyles();
+injectStyles();
+
+authModule.onAuthStateChanged(auth, (user) => {
+  const nextUserId = user?.uid || null;
+  if (nextUserId === activeUserId) return;
+  resetUserState(nextUserId);
+  if (!user) {
+    const target = statisticsView();
+    if (target) {
+      delete target.dataset.statisticsRescue;
+      target.innerHTML = '';
+    }
+  }
+});
 
 document.addEventListener('click', (event) => {
   const statisticsButton = event.target.closest?.('.nav-button[data-view="statistics"]');
@@ -361,7 +395,7 @@ document.addEventListener('click', (event) => {
     activateStatistics(statisticsButton);
     return;
   }
-  if (!isVisible() || view()?.dataset.statisticsRescue === undefined) return;
+  if (!statisticsVisible() || statisticsView()?.dataset.statisticsRescue === undefined) return;
   const modeButton = event.target.closest?.('[data-rescue-stat-mode]');
   if (modeButton) {
     event.preventDefault();
@@ -369,7 +403,7 @@ document.addEventListener('click', (event) => {
     state.mode = modeButton.dataset.rescueStatMode;
     state.warning = '';
     persistState();
-    renderStatisticsRescue();
+    renderStatistics();
     return;
   }
   const weekButton = event.target.closest?.('[data-rescue-week]');
@@ -378,37 +412,37 @@ document.addEventListener('click', (event) => {
     event.stopImmediatePropagation();
     state.weekStart = moveWeekStart(state.weekStart, Number(weekButton.dataset.rescueWeek), now);
     persistState();
-    renderStatisticsRescue();
+    renderStatistics();
     return;
   }
   if (event.target.closest?.('#statistics-rescue-retry')) {
     event.preventDefault();
     event.stopImmediatePropagation();
     state.warning = '';
-    loadStatisticsRescue({ keepCurrent: Boolean(state.data) });
+    loadStatistics({ keepCurrent: Boolean(state.data) });
   }
 }, true);
 
 document.addEventListener('change', (event) => {
-  if (!isVisible() || view()?.dataset.statisticsRescue === undefined) return;
+  if (!statisticsVisible() || statisticsView()?.dataset.statisticsRescue === undefined) return;
   if (event.target.matches('#statistics-rescue-year')) {
     event.stopImmediatePropagation();
     state.year = Number(event.target.value);
     persistState();
-    renderStatisticsRescue();
+    renderStatistics();
   }
   if (event.target.matches('#statistics-rescue-month')) {
     event.stopImmediatePropagation();
     state.month = Number(event.target.value);
     persistState();
-    renderStatisticsRescue();
+    renderStatistics();
   }
 }, true);
 
 document.addEventListener('weekly-time-budget:data-changed', (event) => {
-  if (!isVisible()) return;
+  if (!statisticsVisible()) return;
   event.stopImmediatePropagation();
-  loadStatisticsRescue({ keepCurrent: true });
+  loadStatistics({ keepCurrent: true });
 }, true);
 
 document.addEventListener('weekly-time-budget:ui-state-restored', (event) => {
