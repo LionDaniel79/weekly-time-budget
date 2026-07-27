@@ -1,3 +1,9 @@
+import {
+  buildRecordedPeriodIndex,
+  nextRecordedPeriodOrCurrent,
+  previousRecordedPeriod,
+} from './recorded-period-domain.js';
+
 export const DAY_KEYS = Object.freeze(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']);
 
 export const EQUAL_DAY_WEIGHTS = Object.freeze(
@@ -122,20 +128,11 @@ export function resolveDailyBudget({
 }
 
 export function recordedDateKeys(entries, today) {
-  return [...new Set(entries
-    .map((entry) => entry.date)
-    .filter((date) => typeof date === 'string' && date <= today))]
-    .sort();
+  return buildRecordedPeriodIndex(entries, today).dates;
 }
 
-export function previousRecordedDate(recordDates, selectedDate) {
-  return [...recordDates].reverse().find((date) => date < selectedDate) || null;
-}
-
-export function nextRecordedDateOrToday(recordDates, selectedDate, today) {
-  if (selectedDate >= today) return null;
-  return recordDates.find((date) => date > selectedDate) || today;
-}
+export const previousRecordedDate = previousRecordedPeriod;
+export const nextRecordedDateOrToday = nextRecordedPeriodOrCurrent;
 
 export function calendarMonthCells(year, month, recordedDates, today) {
   const active = new Set(recordedDates);
@@ -150,7 +147,7 @@ export function calendarMonthCells(year, month, recordedDates, today) {
       continue;
     }
     const date = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    const isActive = active.has(date) && date <= today;
+    const isActive = date <= today && (active.has(date) || date === today);
     cells.push({ date, day, active: isActive, disabled: !isActive });
   }
   return cells;
