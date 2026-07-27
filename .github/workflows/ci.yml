@@ -35,6 +35,7 @@ jobs:
           test -f _site/src/persistent-timer.js
           test -f _site/src/persistent-timer-ui.js
           test -f _site/src/orphan-local-timer-cleanup.js
+          test -f _site/src/local-timer-removal-reload.js
           test -f _site/src/offline-entry-domain.js
           test -f _site/src/offline-store.js
           test -f _site/src/offline-entry-repository.js
