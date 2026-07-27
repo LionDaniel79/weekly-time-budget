@@ -2,24 +2,23 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 인터넷이 없거나 불안정해도 수동 입력과 타이머 기록을 기기에 먼저 안전하게 저장하고 자동 동기화하며, 저장 결과와 마지막 메뉴·내부 탭을 명확히 복원한다.
+**Goal:** 인터넷이 없거나 불안정해도 수동 입력과 타이머 기록을 기기에 먼저 안전하게 저장하고 자동 동기화하며, 저장 결과와 마지막 메뉴·내부 탭을 복원한다.
 
-**Architecture:** IndexedDB에 사용자별 대기 기록·데이터 스냅숏·UI 상태를 저장한다. 모든 기록은 동일한 `localId`를 IndexedDB 키와 Firestore 문서 ID로 사용하며, `offline-runtime.js`가 앱과 타이머에 하나의 저장소·기록 저장소·동기화 코디네이터를 공유한다. 모듈형 서비스 워커는 앱 셸과 Firebase ESM 의존성 그래프를 캐시해 이전 로그인 사용자의 오프라인 재실행을 지원한다.
+**Architecture:** IndexedDB에 사용자별 대기 기록·데이터 스냅숏·UI 상태를 저장한다. 모든 기록은 동일한 `localId`를 IndexedDB 키와 Firestore 문서 ID로 사용한다. `offline-runtime.js`가 앱과 타이머에 하나의 저장소·기록 저장소·동기화 코디네이터를 공유하고, 모듈형 서비스 워커가 앱 셸과 Firebase ESM 의존성 그래프를 캐시한다.
 
 **Tech Stack:** Vanilla JavaScript ES modules, Firebase Auth/Firestore 11.10.0, IndexedDB, Service Worker module, Node.js 22 `node:test`, `fake-indexeddb` 6.2.5, GitHub Pages.
 
 ## Global Constraints
 
-- 오프라인 사용은 이 기기에서 이전에 로그인한 동일 사용자만 허용한다.
-- 로그인하지 않은 임시 기록은 만들지 않는다.
-- 수동 입력과 타이머 기록 모두 IndexedDB 저장이 성공한 뒤에만 저장 성공으로 표시한다.
-- `navigator.onLine`은 힌트로만 사용하고 실제 Firestore 쓰기 결과로 최종 상태를 판정한다.
-- Firestore 문서 ID는 IndexedDB의 `localId`와 동일해야 한다.
-- iOS의 Background Sync API에는 의존하지 않는다.
-- 저장 알림은 확인 버튼 없는 하단 토스트이며 기본 4초, 오류는 7초 표시한다.
+- 이전에 이 기기에서 로그인한 동일 사용자만 오프라인 기록을 사용할 수 있다.
+- 수동 입력과 타이머 기록은 IndexedDB 쓰기가 성공한 뒤에만 성공으로 표시한다.
+- `navigator.onLine`은 힌트일 뿐이며 Firestore 쓰기 결과로 `synced`와 `queued`를 구분한다.
+- IndexedDB `localId`와 Firestore 기록 문서 ID는 반드시 같다.
+- Background Sync API에는 의존하지 않는다.
+- 하단 토스트는 기본 4초, 오류는 7초 표시하고 iOS safe area를 반영한다.
 - 마지막 메뉴와 대시보드·기록·시간 예산·통계 내부 상태를 사용자별로 복원한다.
-- 미래 날짜와 미래 주는 기존 제한에 맞춰 오늘 또는 이번 주로 보정한다.
-- 기존 통계 계산, 대분류 보관/완전 삭제, 로그인, 모바일 레이아웃을 회귀시키지 않는다.
+- 미래 날짜·미래 주·미래 통계 기간은 오늘 또는 현재 기간으로 보정한다.
+- 기존 통계 계산, 로그인, 대분류 보관/완전 삭제, 모바일 레이아웃을 회귀시키지 않는다.
 
 ---
 
@@ -27,38 +26,26 @@
 
 **Create**
 
-- `src/offline-entry-domain.js`: 대기 기록 생성, 오류 분류, 기록 병합 순수 로직.
-- `src/offline-store.js`: IndexedDB 스키마와 사용자별 CRUD.
-- `src/offline-entry-repository.js`: local-first 저장과 Firestore 원격 어댑터.
-- `src/offline-sync.js`: 사용자별 단일 실행 자동 동기화.
-- `src/offline-runtime.js`: 앱·타이머가 공유하는 사용자별 런타임 싱글턴.
-- `src/app-toast.js`: 저장·대기·동기화·오류 토스트.
-- `src/ui-session-state.js`: UI 상태 기본값·정규화·기간 보정.
-- `src/service-worker-cache.js`: ESM 의존성 그래프 캐시 함수.
-- `service-worker.js`: 앱 셸·Firebase 모듈 캐시와 탐색 fallback.
-- `src/service-worker-registration.js`: 모듈형 서비스 워커 등록.
-- `tests/offline-entry-domain.test.js`
-- `tests/offline-store.test.js`
-- `tests/offline-entry-repository.test.js`
-- `tests/offline-sync.test.js`
-- `tests/ui-session-state.test.js`
-- `tests/service-worker-cache.test.js`
-- `tests/offline-app-integration.test.js`
+- `src/offline-entry-domain.js`: pending 생성, 오류 분류, 기록 병합.
+- `src/offline-store.js`: IndexedDB 사용자별 CRUD.
+- `src/offline-entry-repository.js`: local-first 저장과 Firestore 어댑터.
+- `src/offline-sync.js`: 단일 실행 자동 동기화.
+- `src/offline-runtime.js`: 앱과 타이머가 공유하는 런타임.
+- `src/app-toast.js`: 저장·동기화 토스트.
+- `src/ui-session-state.js`: UI 상태 정규화.
+- `src/service-worker-cache.js`, `service-worker.js`, `src/service-worker-registration.js`.
+- `tests/offline-entry-domain.test.js`, `tests/offline-store.test.js`, `tests/offline-entry-repository.test.js`, `tests/offline-sync.test.js`, `tests/ui-session-state.test.js`, `tests/service-worker-cache.test.js`, `tests/offline-app-integration.test.js`.
 
 **Modify**
 
-- `package.json`, `package-lock.json`: `fake-indexeddb` 6.2.5 개발 의존성.
-- `src/app.js`: 캐시 우선 초기화, 수동 기록 저장, pending 병합, 기록 상태·메뉴 상태.
-- `src/persistent-timer.js`, `src/persistent-timer-ui.js`: 오프라인 시작·종료.
-- `src/time-budget-feature.js`: 캐시 fallback과 대시보드·예산 탭 복원.
-- `src/statistics-ui.js`: 캐시 fallback과 통계 상태 복원.
-- `src/category-delete-guard.js`: 대기 기록 경고·삭제.
-- `index.html`, `styles.css`: 서비스 워커 등록, 토스트·상태 배지.
-- `scripts/prepare-pages-site.mjs`, `.github/workflows/ci.yml`: 배포 산출물.
+- `package.json`, `package-lock.json`.
+- `src/app.js`, `src/persistent-timer.js`, `src/persistent-timer-ui.js`.
+- `src/time-budget-feature.js`, `src/statistics-ui.js`, `src/category-delete-guard.js`.
+- `index.html`, `styles.css`, `scripts/prepare-pages-site.mjs`, `.github/workflows/ci.yml`, 기존 관련 테스트.
 
 ---
 
-### Task 1: 대기 기록과 UI 상태 순수 로직
+### Task 1: Pending 기록과 UI 상태 순수 로직
 
 **Files:**
 - Create: `src/offline-entry-domain.js`
@@ -66,48 +53,48 @@
 - Test: `tests/offline-entry-domain.test.js`
 - Test: `tests/ui-session-state.test.js`
 
-**Interfaces:**
+**Produces:**
 - `createPendingEntry({ userId, entry, localId, createdAt, clearActiveTimer })`.
-- `classifySyncError(error) -> 'retryable' | 'permanent'`.
+- `classifySyncError(error)`.
 - `mergeRemoteAndPendingEntries(remoteEntries, pendingRecords)`.
 - `createDefaultUiState({ today, currentWeekStart })`.
 - `normalizeUiState(raw, { today, currentWeekStart, validViews })`.
 
-- [ ] **Step 1: Write failing tests**
+- [ ] **Step 1: Write failing pending tests**
 
 ```js
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createPendingEntry, classifySyncError, mergeRemoteAndPendingEntries } from '../src/offline-entry-domain.js';
 
-test('pending 기록은 사용자·대분류·동일 문서 ID를 보존한다', () => {
-  const record = createPendingEntry({
-    userId: 'u1', localId: 'local-1', createdAt: 1000,
+test('pending은 사용자·대분류·동일 문서 ID를 보존한다', () => {
+  const value = createPendingEntry({
+    userId: 'u1', localId: 'e1', createdAt: 1000,
     entry: { categoryId: 'reading', date: '2026-07-27', durationMinutes: 30 },
   });
-  assert.deepEqual(record, {
-    localId: 'local-1', userId: 'u1', categoryId: 'reading',
-    entry: { id: 'local-1', categoryId: 'reading', date: '2026-07-27', durationMinutes: 30 },
-    status: 'pending', attempts: 0, createdAt: 1000, lastAttemptAt: null, lastError: null, clearActiveTimer: null,
-  });
+  assert.equal(value.localId, 'e1');
+  assert.equal(value.entry.id, 'e1');
+  assert.equal(value.categoryId, 'reading');
+  assert.equal(value.status, 'pending');
 });
 
-test('pending 또는 failed 상태가 같은 ID의 원격 기록보다 우선한다', () => {
-  const merged = mergeRemoteAndPendingEntries(
+test('pending과 failed가 같은 ID의 원격 기록보다 우선한다', () => {
+  const result = mergeRemoteAndPendingEntries(
     [{ id: 'a', createdAt: 1000 }, { id: 'b', createdAt: 2000 }],
-    [{ localId: 'b', createdAt: 2000, status: 'pending', entry: { id: 'b', createdAt: 2000 } },
-     { localId: 'c', createdAt: 3000, status: 'failed', entry: { id: 'c', createdAt: 3000 } }],
+    [{ localId: 'b', createdAt: 2000, status: 'pending', entry: { id: 'b' } },
+     { localId: 'c', createdAt: 3000, status: 'failed', entry: { id: 'c' } }],
   );
-  assert.deepEqual(merged.map((item) => [item.id, item.syncStatus]), [['c', 'failed'], ['b', 'pending'], ['a', 'synced']]);
+  assert.deepEqual(result.map((item) => [item.id, item.syncStatus]), [['c', 'failed'], ['b', 'pending'], ['a', 'synced']]);
 });
 
 test('네트워크 오류만 자동 재시도한다', () => {
   assert.equal(classifySyncError({ code: 'unavailable' }), 'retryable');
   assert.equal(classifySyncError({ code: 'auth/network-request-failed' }), 'retryable');
   assert.equal(classifySyncError({ code: 'permission-denied' }), 'permanent');
-  assert.equal(classifySyncError({ code: 'invalid-argument' }), 'permanent');
 });
 ```
+
+- [ ] **Step 2: Write failing UI 상태 tests**
 
 ```js
 import { createDefaultUiState, normalizeUiState } from '../src/ui-session-state.js';
@@ -115,7 +102,7 @@ import { createDefaultUiState, normalizeUiState } from '../src/ui-session-state.
 test('메뉴와 내부 탭을 유지하고 미래 기간을 현재로 보정한다', () => {
   const value = normalizeUiState({
     activeView: 'statistics',
-    dashboard: { mode: 'weekly', selectedDate: '2026-08-10', selectedWeekStart: '2026-08-10', calendarYear: 2026, calendarMonth: 8 },
+    dashboard: { mode: 'weekly', selectedDate: '2026-08-10', selectedWeekStart: '2026-08-10' },
     record: { tab: 'manual', manualMode: 'duration' },
     budget: { mode: 'week' },
     statistics: { mode: 'monthly-comparison', weekStart: '2026-08-10', year: 2028, month: 12 },
@@ -128,9 +115,9 @@ test('메뉴와 내부 탭을 유지하고 미래 기간을 현재로 보정한�
   assert.equal(value.statistics.month, 7);
 });
 
-test('지원하지 않는 값은 안전한 기본값으로 돌아간다', () => {
+test('지원하지 않는 값은 기본값으로 돌아간다', () => {
   const defaults = createDefaultUiState({ today: '2026-07-27', currentWeekStart: '2026-07-27' });
-  const value = normalizeUiState({ activeView: 'missing', record: { tab: 'other', manualMode: 'other' } }, {
+  const value = normalizeUiState({ activeView: 'missing', record: { tab: 'other' } }, {
     today: '2026-07-27', currentWeekStart: '2026-07-27', validViews: ['dashboard','record'],
   });
   assert.equal(value.activeView, 'dashboard');
@@ -138,18 +125,16 @@ test('지원하지 않는 값은 안전한 기본값으로 돌아간다', () => 
 });
 ```
 
-- [ ] **Step 2: Verify RED**
+- [ ] **Step 3: Verify RED**
 
 Run: `node --test tests/offline-entry-domain.test.js tests/ui-session-state.test.js`
 
-Expected: FAIL with `ERR_MODULE_NOT_FOUND`.
+Expected: `ERR_MODULE_NOT_FOUND`.
 
-- [ ] **Step 3: Implement the pure modules**
-
-`offline-entry-domain.js` must include top-level `categoryId` for IndexedDB indexing and deterministic numeric sorting:
+- [ ] **Step 4: Implement minimal pure functions**
 
 ```js
-const RETRYABLE_CODES = new Set(['unavailable', 'deadline-exceeded', 'resource-exhausted', 'auth/network-request-failed']);
+const RETRYABLE_CODES = new Set(['unavailable', 'deadline-exceeded', 'resource-exhausted', 'network-request-failed']);
 export function createPendingEntry({ userId, entry, localId, createdAt = Date.now(), clearActiveTimer = null }) {
   if (!userId || !localId || !entry?.categoryId) throw new Error('사용자, 기록 ID, 대분류가 필요합니다.');
   return { localId, userId, categoryId: entry.categoryId, entry: { ...entry, id: localId }, status: 'pending', attempts: 0, createdAt, lastAttemptAt: null, lastError: null, clearActiveTimer };
@@ -161,11 +146,12 @@ export function classifySyncError(error = {}) {
 export function mergeRemoteAndPendingEntries(remoteEntries = [], pendingRecords = []) {
   const map = new Map(remoteEntries.map((entry) => [entry.id, { ...entry, syncStatus: 'synced' }]));
   pendingRecords.forEach((record) => map.set(record.localId, { ...record.entry, id: record.localId, createdAt: record.createdAt, syncStatus: record.status }));
-  return [...map.values()].sort((a, b) => Number(b.createdAt?.toMillis?.() ?? b.createdAt ?? 0) - Number(a.createdAt?.toMillis?.() ?? a.createdAt ?? 0));
+  const stamp = (entry) => Number(entry.createdAt?.toMillis?.() ?? entry.createdAt ?? 0);
+  return [...map.values()].sort((a, b) => stamp(b) - stamp(a));
 }
 ```
 
-`ui-session-state.js` must explicitly allow:
+`ui-session-state.js` must allow only:
 
 ```js
 const RECORD_TABS = new Set(['timer', 'manual']);
@@ -175,9 +161,9 @@ const BUDGET_MODES = new Set(['today', 'week']);
 const STATISTICS_MODES = new Set(['weekly', 'monthly', 'yearly', 'monthly-comparison', 'yearly-comparison']);
 ```
 
-Return a complete object even when `raw` is partial. Clamp dashboard date/week and statistics week to current values. Derive current year/month from `today` and clamp future statistics year/month.
+Return every state section even when input is partial. Clamp dashboard/statistics date and week values, then clamp future statistics year/month from `today`.
 
-- [ ] **Step 4: Verify GREEN and commit**
+- [ ] **Step 5: Verify GREEN and commit**
 
 Run: `node --test tests/offline-entry-domain.test.js tests/ui-session-state.test.js`
 
@@ -197,15 +183,13 @@ git commit -m "feat: add offline entry and UI state domain logic"
 - Create: `src/offline-store.js`
 - Test: `tests/offline-store.test.js`
 
-**Interfaces:**
-- `createOfflineStore({ indexedDB, IDBKeyRange, dbName })`.
-- Methods: `putPending`, `getPending`, `getPendingById`, `updatePending`, `deletePending`, `countPending`, `countPendingByCategory`, `deletePendingByCategory`, `getSnapshot`, `patchSnapshot`, `getUiState`, `putUiState`.
+**Produces:** `createOfflineStore({ indexedDB, IDBKeyRange, dbName })` with `putPending`, `getPending`, `getPendingById`, `updatePending`, `deletePending`, `countPending`, `countPendingByCategory`, `deletePendingByCategory`, `getSnapshot`, `patchSnapshot`, `getUiState`, `putUiState`.
 
-- [ ] **Step 1: Install the test-only IndexedDB implementation**
+- [ ] **Step 1: Install test dependency**
 
 Run: `npm install --save-dev fake-indexeddb@6.2.5`
 
-Expected: `package.json` and `package-lock.json` change; production bundle remains dependency-free because test code alone imports the package.
+Expected: `package.json` and `package-lock.json` contain version 6.2.5.
 
 - [ ] **Step 2: Write failing IndexedDB tests**
 
@@ -223,18 +207,17 @@ test('pending 기록은 사용자별·생성 순서대로 격리된다', async (
   await store.putPending({ localId: 'a', userId: 'u1', categoryId: 'reading', createdAt: 1, status: 'pending', entry: {} });
   await store.putPending({ localId: 'x', userId: 'u2', categoryId: 'reading', createdAt: 0, status: 'pending', entry: {} });
   assert.deepEqual((await store.getPending('u1')).map((item) => item.localId), ['a', 'b']);
-  assert.equal(await store.countPending('u1'), 2);
   assert.equal(await store.countPendingByCategory('u1', 'reading'), 2);
 });
 
-test('snapshot 부분 갱신은 다른 모듈의 필드를 지우지 않는다', async () => {
+test('snapshot 부분 갱신은 다른 필드를 지우지 않는다', async () => {
   const store = await newStore();
   await store.patchSnapshot('u1', { categories: [{ id: 'reading' }] });
   await store.patchSnapshot('u1', { entries: [{ id: 'e1' }] });
   assert.deepEqual(await store.getSnapshot('u1'), { userId: 'u1', categories: [{ id: 'reading' }], entries: [{ id: 'e1' }] });
 });
 
-test('UI 상태와 대분류별 pending 삭제가 사용자 경계를 지킨다', async () => {
+test('대분류별 삭제와 UI 상태가 다른 사용자에게 영향을 주지 않는다', async () => {
   const store = await newStore();
   await store.putPending({ localId: 'a', userId: 'u1', categoryId: 'reading', createdAt: 1, status: 'pending', entry: {} });
   await store.putPending({ localId: 'b', userId: 'u2', categoryId: 'reading', createdAt: 1, status: 'pending', entry: {} });
@@ -250,11 +233,9 @@ test('UI 상태와 대분류별 pending 삭제가 사용자 경계를 지킨다'
 
 Run: `node --test tests/offline-store.test.js`
 
-Expected: FAIL because `src/offline-store.js` does not exist.
+Expected: missing `offline-store.js`.
 
-- [ ] **Step 4: Implement IndexedDB schema and every method**
-
-Database: `weekly-time-budget-offline`, version `1`.
+- [ ] **Step 4: Implement schema and methods**
 
 ```js
 function upgrade(db) {
@@ -266,9 +247,7 @@ function upgrade(db) {
 }
 ```
 
-Use `IDBKeyRange.bound([userId, 0], [userId, Number.MAX_SAFE_INTEGER])` for ordered pending reads and `IDBKeyRange.only([userId, categoryId])` for category count/delete. `patchSnapshot` must read and put `{ ...existing, ...partial, userId }` within one readwrite transaction. Store UI as `{ userId, state }` and return only `state`.
-
-The returned object must implement all declared methods by calling transaction helpers; `updatePending` and `putPending` both use `put`, while `deletePendingByCategory` deletes every cursor result from the composite index.
+Use `IDBKeyRange.bound([userId, 0], [userId, Number.MAX_SAFE_INTEGER])` for ordered reads and `IDBKeyRange.only([userId, categoryId])` for category count/delete. `patchSnapshot` reads and writes `{ ...existing, ...partial, userId }` in one readwrite transaction. UI rows are `{ userId, state }`; `getUiState` returns `state` only. `putPending` and `updatePending` use `put`; `deletePendingByCategory` deletes every matching cursor row.
 
 - [ ] **Step 5: Verify GREEN and commit**
 
@@ -283,7 +262,7 @@ git commit -m "feat: add user-scoped IndexedDB offline store"
 
 ---
 
-### Task 3: 기록 저장소, Firestore 어댑터, 공유 런타임, 자동 동기화
+### Task 3: 기록 저장소, Firestore 어댑터, 공유 런타임
 
 **Files:**
 - Create: `src/offline-entry-repository.js`
@@ -292,45 +271,49 @@ git commit -m "feat: add user-scoped IndexedDB offline store"
 - Test: `tests/offline-entry-repository.test.js`
 - Test: `tests/offline-sync.test.js`
 
-**Interfaces:**
-- `createFirestoreEntryRemote({ db, firestore })` with `save(record)`.
+**Produces:**
+- `createFirestoreEntryRemote({ db, firestore })`.
 - `createOfflineEntryRepository({ store, remote, createId, now })`.
-- Repository methods: `saveEntryLocalFirst`, `flushPendingEntries`, `retryEntry`, `mergeEntries`.
 - `createOfflineSyncCoordinator({ repository, userId, eventTarget, documentTarget })`.
-- `configureOfflineRuntime({ userId, indexedDB, IDBKeyRange, remote, eventTarget, documentTarget })`.
-- `getOfflineRuntime(userId)`, `disposeOfflineRuntime()`.
+- `configureOfflineRuntime(options)`, `getOfflineRuntime(userId)`, `disposeOfflineRuntime()`.
 
 - [ ] **Step 1: Write failing repository tests**
 
 ```js
-test('원격 성공 전에도 IndexedDB에 먼저 기록한다', async () => {
-  const calls = [];
+import { indexedDB, IDBKeyRange } from 'fake-indexeddb';
+import { createOfflineStore } from '../src/offline-store.js';
+import { createPendingEntry } from '../src/offline-entry-domain.js';
+import { createOfflineEntryRepository } from '../src/offline-entry-repository.js';
+const createTestStore = () => createOfflineStore({ indexedDB, IDBKeyRange, dbName: `repo-${crypto.randomUUID()}` });
+
+test('원격 쓰기 전에 IndexedDB 기록이 존재한다', async () => {
   const store = await createTestStore();
+  const seen = [];
   const repository = createOfflineEntryRepository({
     store, createId: () => 'e1', now: () => 1000,
-    remote: { save: async (record) => { calls.push((await store.getPendingById(record.localId))?.localId); } },
+    remote: { save: async (record) => seen.push((await store.getPendingById(record.localId))?.localId) },
   });
-  const result = await repository.saveEntryLocalFirst({ userId: 'u1', entry: { categoryId: 'reading', date: '2026-07-27', durationMinutes: 30 } });
-  assert.deepEqual(calls, ['e1']);
+  const result = await repository.saveEntryLocalFirst({ userId: 'u1', entry: { categoryId: 'reading' } });
+  assert.deepEqual(seen, ['e1']);
   assert.equal(result.status, 'synced');
   assert.equal(await store.countPending('u1'), 0);
 });
 
-test('네트워크 실패는 queued, 권한 실패는 failed로 보존한다', async () => {
+test('네트워크 실패는 queued, 권한 실패는 failed다', async () => {
   const store = await createTestStore();
-  const network = createOfflineEntryRepository({ store, createId: () => 'n1', remote: { save: async () => { throw Object.assign(new Error('offline'), { code: 'unavailable' }); } } });
-  assert.equal((await network.saveEntryLocalFirst({ userId: 'u1', entry: { categoryId: 'reading' } })).status, 'queued');
-  const denied = createOfflineEntryRepository({ store, createId: () => 'p1', remote: { save: async () => { throw Object.assign(new Error('denied'), { code: 'permission-denied' }); } } });
-  assert.equal((await denied.saveEntryLocalFirst({ userId: 'u1', entry: { categoryId: 'reading' } })).status, 'failed');
-  assert.equal((await store.getPendingById('p1')).status, 'failed');
+  const queued = createOfflineEntryRepository({ store, createId: () => 'n1', remote: { save: async () => { throw Object.assign(new Error('offline'), { code: 'unavailable' }); } } });
+  assert.equal((await queued.saveEntryLocalFirst({ userId: 'u1', entry: { categoryId: 'reading' } })).status, 'queued');
+  const failed = createOfflineEntryRepository({ store, createId: () => 'p1', remote: { save: async () => { throw Object.assign(new Error('denied'), { code: 'permission-denied' }); } } });
+  assert.equal((await failed.saveEntryLocalFirst({ userId: 'u1', entry: { categoryId: 'reading' } })).status, 'failed');
 });
 
-test('같은 localId 재시도는 같은 원격 문서를 사용한다', async () => {
-  const ids = [];
+test('재시도는 같은 localId를 사용한다', async () => {
   const store = await createTestStore();
-  const repository = createOfflineEntryRepository({ store, createId: () => 'same', remote: { save: async (record) => ids.push(record.localId) } });
-  await repository.saveEntryLocalFirst({ userId: 'u1', localId: 'same', entry: { categoryId: 'reading' } });
-  await store.putPending(createPendingEntry({ userId: 'u1', localId: 'same', entry: { categoryId: 'reading' } }));
+  const ids = [];
+  const repository = createOfflineEntryRepository({ store, remote: { save: async (record) => ids.push(record.localId) } });
+  await store.putPending(createPendingEntry({ userId: 'u1', localId: 'same', createdAt: 1, entry: { categoryId: 'reading' } }));
+  await repository.flushPendingEntries('u1');
+  await store.putPending(createPendingEntry({ userId: 'u1', localId: 'same', createdAt: 1, entry: { categoryId: 'reading' } }));
   await repository.flushPendingEntries('u1');
   assert.deepEqual(ids, ['same', 'same']);
 });
@@ -339,6 +322,9 @@ test('같은 localId 재시도는 같은 원격 문서를 사용한다', async (
 - [ ] **Step 2: Write failing coordinator/runtime tests**
 
 ```js
+import { createOfflineSyncCoordinator } from '../src/offline-sync.js';
+import { configureOfflineRuntime, disposeOfflineRuntime } from '../src/offline-runtime.js';
+
 test('동시 flush는 같은 Promise를 공유한다', async () => {
   let calls = 0;
   let release;
@@ -355,9 +341,13 @@ test('동시 flush는 같은 Promise를 공유한다', async () => {
   assert.equal(calls, 1);
 });
 
-test('같은 사용자 configure는 동일 런타임을 반환한다', async () => {
-  const first = await configureTestRuntime('u1');
-  const second = await configureTestRuntime('u1');
+test('같은 UID configure는 동일 런타임을 반환한다', async () => {
+  const options = {
+    userId: 'u1', indexedDB, IDBKeyRange, dbName: `runtime-${crypto.randomUUID()}`,
+    remote: { save: async () => {} }, eventTarget: new EventTarget(), documentTarget: new EventTarget(),
+  };
+  const first = await configureOfflineRuntime(options);
+  const second = await configureOfflineRuntime(options);
   assert.equal(first, second);
   disposeOfflineRuntime();
 });
@@ -367,13 +357,13 @@ test('같은 사용자 configure는 동일 런타임을 반환한다', async () 
 
 Run: `node --test tests/offline-entry-repository.test.js tests/offline-sync.test.js`
 
-Expected: FAIL with missing modules.
+Expected: missing modules.
 
-- [ ] **Step 4: Implement repository and idempotent Firestore remote**
+- [ ] **Step 4: Implement repository and Firestore adapter**
 
-Repository algorithm: `putPending` → `remote.save` → success deletes local pending; retryable failure leaves `pending`; permanent failure writes `failed`. `flushPendingEntries` processes creation order, skips failed records, and continues after retryable errors.
+Repository order: `putPending` → `remote.save` → success deletes pending. Retryable failure writes `pending`; permanent failure writes `failed`. `flushPendingEntries` processes creation order, skips `failed`, and continues after retryable failures.
 
-Firestore remote must read conditional active timer before any transaction write:
+Firestore transaction must complete all reads before writes:
 
 ```js
 export function createFirestoreEntryRemote({ db, firestore }) {
@@ -393,11 +383,9 @@ export function createFirestoreEntryRemote({ db, firestore }) {
 }
 ```
 
-- [ ] **Step 5: Implement coordinator and shared runtime**
+- [ ] **Step 5: Implement coordinator and runtime**
 
-Coordinator keeps one `inFlight` Promise, listens to `online` and visible `visibilitychange`, and dispatches `weekly-time-budget:sync-result` with `{ reason, syncedCount, pendingCount, failedCount }` after each completed flush.
-
-Runtime owns exactly one active user:
+Coordinator keeps one `inFlight` Promise, listens to `online` and visible `visibilitychange`, and dispatches `weekly-time-budget:sync-result` with counts.
 
 ```js
 let current = null;
@@ -428,17 +416,17 @@ git commit -m "feat: add shared local-first synchronization runtime"
 
 ---
 
-### Task 4: 저장 결과 토스트와 동기화 상태 스타일
+### Task 4: 저장 결과 토스트
 
 **Files:**
 - Create: `src/app-toast.js`
 - Modify: `styles.css`
 - Test: `tests/offline-app-integration.test.js`
 
-- [ ] **Step 1: Write failing source-contract test**
+- [ ] **Step 1: Write failing contract test**
 
 ```js
-test('토스트는 서버 저장·대기·동기화 완료 문구와 safe-area 스타일을 제공한다', async () => {
+test('토스트는 저장·대기·동기화 문구와 safe-area 스타일을 제공한다', async () => {
   const [toast, css] = await Promise.all([read('src/app-toast.js'), read('styles.css')]);
   for (const text of ['기록을 서버에 저장했습니다', '기기에 안전하게 저장했습니다', '인터넷 연결 시 자동으로 반영됩니다', '대기 중이던 기록']) assert.ok(toast.includes(text));
   for (const token of ['env(safe-area-inset-bottom)', '.app-toast', '.sync-status.pending', '.sync-status.failed']) assert.ok(css.includes(token));
@@ -449,9 +437,9 @@ test('토스트는 서버 저장·대기·동기화 완료 문구와 safe-area �
 
 Run: `node --test tests/offline-app-integration.test.js`
 
-Expected: FAIL because `app-toast.js` does not exist.
+Expected: missing `app-toast.js`.
 
-- [ ] **Step 3: Implement toast API and listener**
+- [ ] **Step 3: Implement**
 
 ```js
 export function showEntrySaveResult(result) {
@@ -464,9 +452,9 @@ export function showSyncResult({ syncedCount }) {
 }
 ```
 
-Create one `#app-toast-region` with `aria-live="polite"`. Default duration 4000ms; error 7000ms. Listen for `weekly-time-budget:sync-result` and call `showSyncResult`. Position at `bottom: calc(16px + env(safe-area-inset-bottom));`.
+Create one `#app-toast-region` with `aria-live="polite"`. Listen for `weekly-time-budget:sync-result`. Position with `bottom: calc(16px + env(safe-area-inset-bottom));`.
 
-- [ ] **Step 4: Verify GREEN and commit**
+- [ ] **Step 4: Verify and commit**
 
 Run: `node --test tests/offline-app-integration.test.js`
 
@@ -474,19 +462,19 @@ Expected: PASS.
 
 ```bash
 git add src/app-toast.js styles.css tests/offline-app-integration.test.js
-git commit -m "feat: show entry save and synchronization status"
+git commit -m "feat: show record save and sync status"
 ```
 
 ---
 
-### Task 5: 앱 캐시 우선 초기화와 수동 기록 저장
+### Task 5: 앱 캐시 우선 초기화와 수동 기록
 
 **Files:**
 - Modify: `src/app.js:17-175, 234-322`
 - Modify: `index.html:70-79`
 - Test: `tests/offline-app-integration.test.js`
 
-- [ ] **Step 1: Add failing integration contracts**
+- [ ] **Step 1: Add failing contracts**
 
 ```js
 test('app은 공유 런타임과 local-first 저장을 사용한다', async () => {
@@ -498,7 +486,7 @@ test('app은 공유 런타임과 local-first 저장을 사용한다', async () =
   assert.match(source.slice(start, end), /saveEntryLocalFirst/);
 });
 
-test('기록 내역은 동기화 대기·실패·재시도를 표시한다', async () => {
+test('기록 내역은 pending·failed·재시도를 표시한다', async () => {
   const source = await read('src/app.js');
   for (const token of ['동기화 대기', '동기화 실패', 'data-retry-entry', 'retryEntry']) assert.ok(source.includes(token));
 });
@@ -508,34 +496,32 @@ test('기록 내역은 동기화 대기·실패·재시도를 표시한다', asy
 
 Run: `node --test tests/offline-app-integration.test.js`
 
-Expected: FAIL on missing integration tokens.
+Expected: missing integration tokens.
 
-- [ ] **Step 3: Split remote loading from state application**
-
-Add `applySnapshotToState(snapshot)`, `loadRemoteData()`, and `refreshMergedEntries()`. Auth flow:
+- [ ] **Step 3: Implement cache-first auth flow**
 
 1. Set `browserLocalPersistence`.
-2. Configure shared runtime with `createFirestoreEntryRemote`.
-3. Read snapshot and UI state; render cached categories/entries/budget immediately.
-4. Try Firestore reads; on success patch snapshot and merge pending.
-5. On retryable failure keep cached UI and show `오프라인 상태입니다. 새 기록은 기기에 저장됩니다.` once.
-6. If no cached categories exist, disable record controls and show `온라인에서 한 번 실행한 뒤 사용할 수 있습니다.`
-
-`refreshMergedEntries` must call:
+2. Configure runtime with `createFirestoreEntryRemote`.
+3. Read snapshot and UI state; render cached categories/entries/budget first.
+4. Attempt Firestore reads; success patches snapshot and merges pending.
+5. Failure keeps cached data and shows `오프라인 상태입니다. 새 기록은 기기에 저장됩니다.` once.
+6. No cached categories: disable record controls and show `온라인에서 한 번 실행한 뒤 사용할 수 있습니다.`
 
 ```js
-const pending = await runtime.store.getPending(state.user.uid);
-state.entries = mergeRemoteAndPendingEntries(remoteEntries, pending);
+async function refreshMergedEntries(remoteEntries = state.entries.filter((item) => item.syncStatus === 'synced')) {
+  const pending = await runtime.store.getPending(state.user.uid);
+  state.entries = mergeRemoteAndPendingEntries(remoteEntries, pending);
+}
 ```
 
-- [ ] **Step 4: Replace `saveEntry` after IndexedDB success only**
+- [ ] **Step 4: Replace `saveEntry`**
 
 ```js
 async function saveEntry(entry) {
   const result = await runtime.repository.saveEntryLocalFirst({ userId: state.user.uid, entry });
   const pending = await runtime.store.getPending(state.user.uid);
-  const withoutSameId = state.entries.filter((item) => item.id !== result.localId && item.syncStatus === 'synced');
-  state.entries = mergeRemoteAndPendingEntries([...withoutSameId, result.entry], pending);
+  const remote = state.entries.filter((item) => item.syncStatus === 'synced' && item.id !== result.localId);
+  state.entries = mergeRemoteAndPendingEntries([...remote, result.entry], pending);
   await runtime.store.patchSnapshot(state.user.uid, { entries: state.entries });
   renderDashboard(); renderHistory();
   showEntrySaveResult(result);
@@ -544,32 +530,28 @@ async function saveEntry(entry) {
 }
 ```
 
-Disable `기록 저장` while awaiting. Reset form only after `saveEntry` returns `synced`, `queued`, or `failed`; all three mean IndexedDB succeeded. If IndexedDB throws, keep every field and show a 7-second storage error toast.
+Disable `기록 저장` while awaiting. Reset the form after `synced`, `queued`, or `failed`, because all three mean IndexedDB succeeded. If IndexedDB throws, keep every field and show a storage error toast.
 
-- [ ] **Step 5: Make history deletion/retry queue-aware**
+- [ ] **Step 5: Make history delete/retry queue-aware**
 
-- pending/failed delete: remove IndexedDB item and local snapshot; do not call Firestore.
-- synced delete: retain current Firestore delete path.
-- failed retry: `runtime.repository.retryEntry(uid, localId)`, refresh, show result toast.
-- render `.sync-status.pending` or `.sync-status.failed` beside the record.
+- pending/failed delete: delete IndexedDB row and snapshot row only.
+- synced delete: existing Firestore delete.
+- failed retry: `runtime.repository.retryEntry(uid, localId)` then refresh and toast.
+- render `.sync-status.pending` and `.sync-status.failed`.
 
-- [ ] **Step 6: Load modules and verify**
+- [ ] **Step 6: Verify and commit**
 
-Add `app-toast.js` import through app.js and `service-worker-registration.js` as the first feature script in `index.html`. Do not add a second form-submit interceptor.
+Load `service-worker-registration.js` before feature scripts in `index.html`; app.js remains the sole manual submit owner.
 
 Run: `node --test tests/offline-app-integration.test.js tests/manual-entry.test.js tests/app-entry-selection.test.js`
-
-Expected: PASS.
 
 Run: `npm test`
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
-
 ```bash
 git add src/app.js index.html tests/offline-app-integration.test.js
-git commit -m "feat: save manual entries offline first"
+git commit -m "feat: save manual records offline first"
 ```
 
 ---
@@ -579,13 +561,15 @@ git commit -m "feat: save manual entries offline first"
 **Files:**
 - Modify: `src/persistent-timer.js:35-109`
 - Modify: `src/persistent-timer-ui.js:32-169`
-- Test: `tests/persistent-timer.test.js`
+- Modify: `tests/persistent-timer.test.js`
 - Test: `tests/offline-app-integration.test.js`
 
-- [ ] **Step 1: Write failing controller tests**
+- [ ] **Step 1: Replace the existing remote-failure test and add local-save failure test**
+
+Replace `시작 원격 저장 실패 시 localStorage만으로 시작하지 않는다` with:
 
 ```js
-test('원격 조회가 실패해도 로컬 타이머를 시작한다', async () => {
+test('원격 조회가 실패해도 localStorage 타이머를 시작한다', async () => {
   const storage = memoryStorage();
   const controller = createPersistentTimerController({
     storage, storageKey: 'timer', now: () => 1000,
@@ -597,12 +581,21 @@ test('원격 조회가 실패해도 로컬 타이머를 시작한다', async () 
   assert.equal(controller.active.startedAt, 1000);
   assert.ok(storage.getItem('timer'));
 });
+```
 
+Update existing stop tests to pass `complete: remote.complete`. Add:
+
+```js
 test('IndexedDB 종료 저장 실패 시 타이머를 유지한다', async () => {
-  const controller = configuredController({ complete: async () => { throw new Error('indexeddb failed'); } });
-  await controller.start({ userId: 'u1', categoryId: 'reading', startedDate: '2026-07-27' });
+  const storage = memoryStorage();
+  const remote = remoteStore();
+  let clock = 1000;
+  const controller = createPersistentTimerController({ remote, storage, storageKey: 'timer', now: () => clock, complete: async () => { throw new Error('indexeddb failed'); } });
+  await controller.start({ userId: 'u1', categoryId: 'reading' });
+  clock = 61000;
   await assert.rejects(() => controller.stop(() => ({ categoryId: 'reading', durationMinutes: 1 })), /indexeddb failed/);
   assert.ok(controller.active);
+  assert.ok(storage.getItem('timer'));
 });
 ```
 
@@ -610,17 +603,15 @@ test('IndexedDB 종료 저장 실패 시 타이머를 유지한다', async () =>
 
 Run: `node --test tests/persistent-timer.test.js`
 
-Expected: FAIL because start and completion are remote-first.
+Expected: new offline-start test fails.
 
-- [ ] **Step 3: Modify controller contract**
+- [ ] **Step 3: Modify controller**
 
-`start` writes local state before remote calls. If `remote.get()` returns an existing timer, replace local with it. If get/set fails, retain local and return `{ timer, recovered: false, remotePending: true }`. Add `syncActive()` to retry only the same local timer and never overwrite a different remote timer.
+`start` writes local timer before remote calls. Remote existing timer replaces it. Remote get/set failure retains local and returns `{ timer, recovered: false, remotePending: true }`. Add `syncActive()` that retries the same timer but never overwrites a different remote timer.
 
-`stop(buildEntry)` calls injected `complete(active, entry)`; clear local timer only after it returns. `cancel` remains conservative: remote remove failure retains local timer.
+`stop` calls injected `complete(active, entry)` and clears local only after it returns. `cancel` retains local if remote removal fails.
 
-- [ ] **Step 4: Integrate shared runtime in timer UI**
-
-Both app.js and timer UI call `configureOfflineRuntime`; same UID returns the same runtime. Completion:
+- [ ] **Step 4: Connect timer UI to runtime**
 
 ```js
 complete: async (timer, entry) => runtime.repository.saveEntryLocalFirst({
@@ -631,13 +622,11 @@ complete: async (timer, entry) => runtime.repository.saveEntryLocalFirst({
 })
 ```
 
-After stop, show `showEntrySaveResult(result)` and dispatch `weekly-time-budget:entries-changed` plus existing data-change event. Call `syncActive()` on `online` and visible `visibilitychange`.
+After stop, show save result and dispatch entry/data changed events. Call `syncActive()` on `online` and visible `visibilitychange`.
 
 - [ ] **Step 5: Verify and commit**
 
 Run: `node --test tests/persistent-timer.test.js tests/offline-app-integration.test.js`
-
-Expected: PASS.
 
 Run: `npm test`
 
@@ -662,7 +651,7 @@ git commit -m "feat: support offline timer recording"
 - [ ] **Step 1: Add failing contracts**
 
 ```js
-test('각 화면은 복원 이벤트를 받고 변경 상태를 저장한다', async () => {
+test('각 화면은 UI 복원과 저장 이벤트를 사용한다', async () => {
   const [app, budget, statistics] = await Promise.all([read('src/app.js'), read('src/time-budget-feature.js'), read('src/statistics-ui.js')]);
   assert.ok(app.includes('getUiState'));
   assert.ok(app.includes('putUiState'));
@@ -679,23 +668,20 @@ Run: `node --test tests/ui-session-state.test.js tests/offline-app-integration.t
 
 Expected: FAIL.
 
-- [ ] **Step 3: Add one partial-state writer in app.js**
+- [ ] **Step 3: Implement one partial-state writer**
 
-On `weekly-time-budget:save-ui-state`, read current state, deep-merge only `dashboard`, `record`, `budget`, or `statistics`, normalize, and write through `putUiState`. Before first authenticated render assign record tab/mode and dispatch `weekly-time-budget:ui-state-restored` with the normalized complete state.
+App handles `weekly-time-budget:save-ui-state`: read current state, merge only supplied sections, normalize, write. Before first authenticated render assign record tab/mode and dispatch the complete normalized state.
 
-Every side menu click saves `activeView`. Record tab and manual mode changes save `record`. If active view is statistics, let statistics-ui open its own view after the restore event.
+Every side menu click saves `activeView`; record tab and manual mode save `record`. Statistics restores itself rather than app.js forcing its hidden section.
 
-- [ ] **Step 4: Connect feature module state**
+- [ ] **Step 4: Connect feature modules**
 
-`time-budget-feature.js` applies saved dashboard/budget state before initial render and emits partial state after tab, date, calendar, week, and budget mode changes. Reapply existing future guards after restoration.
-
-`statistics-ui.js` applies `mode`, `weekStart`, `year`, `month` before render and emits after every tab/period change. If restored `activeView` is statistics, call existing `showStatisticsView` exactly once.
+- `time-budget-feature.js`: apply dashboard/budget state before initial render; emit after tab, date, calendar, week, budget mode changes; reapply future guards.
+- `statistics-ui.js`: apply mode/week/year/month before render; emit after every period change; open itself once when restored `activeView` is statistics.
 
 - [ ] **Step 5: Verify and commit**
 
 Run: `node --test tests/ui-session-state.test.js tests/offline-app-integration.test.js tests/statistics-ui.test.js tests/time-budget-integration.test.js`
-
-Expected: PASS.
 
 Run: `npm test`
 
@@ -703,23 +689,23 @@ Expected: PASS.
 
 ```bash
 git add src/app.js src/time-budget-feature.js src/statistics-ui.js tests/ui-session-state.test.js tests/offline-app-integration.test.js
-git commit -m "feat: restore last menu and internal tabs"
+git commit -m "feat: restore the last menu and internal state"
 ```
 
 ---
 
-### Task 8: 대시보드·시간 예산·통계의 캐시 fallback
+### Task 8: 대시보드·시간 예산·통계 캐시 fallback
 
 **Files:**
 - Modify: `src/time-budget-feature.js:94-166`
-- Modify: `src/statistics-ui.js` data-loading functions
+- Modify: `src/statistics-ui.js` data loaders
 - Test: `tests/offline-app-integration.test.js`
 - Test: `tests/time-budget-integration.test.js`
 
-- [ ] **Step 1: Add failing contracts**
+- [ ] **Step 1: Add failing contract**
 
 ```js
-test('시간 예산과 통계는 snapshot과 pending 기록을 사용한다', async () => {
+test('시간 예산과 통계는 snapshot·pending·entry change를 사용한다', async () => {
   const [budget, statistics] = await Promise.all([read('src/time-budget-feature.js'), read('src/statistics-ui.js')]);
   for (const source of [budget, statistics]) {
     for (const token of ['getSnapshot', 'patchSnapshot', 'mergeRemoteAndPendingEntries', 'weekly-time-budget:entries-changed']) assert.ok(source.includes(token), token);
@@ -733,26 +719,17 @@ Run: `node --test tests/offline-app-integration.test.js tests/time-budget-integr
 
 Expected: FAIL.
 
-- [ ] **Step 3: Make both modules cache-first**
+- [ ] **Step 3: Implement cache-first loaders**
 
-For each module:
+For both modules: get shared runtime; render snapshot plus pending first; attempt Firestore; success patches only owned fields; failure retains cached arrays; entry-change event recomputes immediately.
 
-1. Obtain shared runtime for UID.
-2. Read snapshot and pending entries; render cached fields immediately.
-3. Attempt Firestore reads.
-4. On success replace owned remote fields, merge pending, and patch only owned snapshot fields.
-5. On failure retain cached fields and do not replace them with empty arrays.
-6. Handle `weekly-time-budget:entries-changed` to recompute dashboard/statistics immediately.
+Fixed snapshot keys: `categories`, `archivedCategories`, `entries`, `weeklyBudgets`, `dailyBudgets`, `defaultDayWeights`, `weeklyBudget`, `updatedAt`.
 
-Snapshot keys are fixed: `categories`, `archivedCategories`, `entries`, `weeklyBudgets`, `dailyBudgets`, `defaultDayWeights`, `weeklyBudget`, `updatedAt`.
-
-Budget/category edits remain online-only existing operations; this feature queues record creation only.
+Budget/category writes remain online-only; this feature queues record creation only.
 
 - [ ] **Step 4: Verify and commit**
 
 Run: `node --test tests/offline-app-integration.test.js tests/time-budget-integration.test.js tests/statistics-ui.test.js`
-
-Expected: PASS.
 
 Run: `npm test`
 
@@ -765,7 +742,7 @@ git commit -m "feat: render reporting screens from offline snapshots"
 
 ---
 
-### Task 9: 서비스 워커 앱 셸과 Firebase ESM 그래프 캐시
+### Task 9: 서비스 워커 앱 셸과 Firebase 모듈 캐시
 
 **Files:**
 - Create: `src/service-worker-cache.js`
@@ -778,14 +755,15 @@ git commit -m "feat: render reporting screens from offline snapshots"
 - [ ] **Step 1: Write failing graph-cache tests**
 
 ```js
+import test from 'node:test';
+import assert from 'node:assert/strict';
 import { cacheModuleGraph, extractModuleSpecifiers } from '../src/service-worker-cache.js';
 
-test('정적 import를 절대 URL로 추출하고 중복을 제거한다', () => {
-  const source = `import './a.js'; import { b } from './b.js'; import './a.js';`;
-  assert.deepEqual(extractModuleSpecifiers(source, 'https://cdn/x/root.js'), ['https://cdn/x/a.js', 'https://cdn/x/b.js']);
+test('정적 import를 절대 URL로 중복 없이 추출한다', () => {
+  assert.deepEqual(extractModuleSpecifiers(`import './a.js'; import { b } from './b.js'; import './a.js';`, 'https://cdn/x/root.js'), ['https://cdn/x/a.js', 'https://cdn/x/b.js']);
 });
 
-test('Firebase ESM 그래프를 순환 없이 재귀 캐시한다', async () => {
+test('순환 ESM 그래프를 한 번씩 캐시한다', async () => {
   const sources = new Map([
     ['https://cdn/root.js', `import './a.js'; import './b.js';`],
     ['https://cdn/a.js', `import './b.js';`],
@@ -805,13 +783,15 @@ test('Firebase ESM 그래프를 순환 없이 재귀 캐시한다', async () => 
 
 Run: `node --test tests/service-worker-cache.test.js`
 
-Expected: FAIL because helper does not exist.
+Expected: missing helper.
 
-- [ ] **Step 3: Implement graph helper and service worker**
+- [ ] **Step 3: Implement helper and service worker**
 
-`extractModuleSpecifiers` handles `import 'x'` and `from 'x'`; resolves with `new URL`, returns unique URLs. `cacheModuleGraph` caches a successful cloned response, reads source text, and recursively processes allowed imports with a `seen` set.
+`extractModuleSpecifiers` handles `import 'x'` and `from 'x'`. `cacheModuleGraph` caches cloned successful responses, reads text, and follows allowed imports with a `seen` set.
 
-Use cache names `weekly-time-budget-shell-v1` and `weekly-time-budget-runtime-v1`. Precache these local paths:
+Cache names: `weekly-time-budget-shell-v1`, `weekly-time-budget-runtime-v1`.
+
+Precache:
 
 ```js
 const SHELL_URLS = [
@@ -826,11 +806,6 @@ const SHELL_URLS = [
   './src/offline-sync.js', './src/offline-runtime.js', './src/app-toast.js', './src/ui-session-state.js',
   './src/service-worker-cache.js', './src/service-worker-registration.js',
 ];
-```
-
-Warm these roots with `Promise.allSettled` so CDN failure does not abort shell install:
-
-```js
 const FIREBASE_ROOTS = [
   'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js',
   'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js',
@@ -838,29 +813,24 @@ const FIREBASE_ROOTS = [
 ];
 ```
 
-Fetch policy:
+Warm Firebase roots with `Promise.allSettled`. Fetch policy:
 
-- `firestore.googleapis.com`, `identitytoolkit.googleapis.com`, `securetoken.googleapis.com`: network only.
-- navigation: network first, cached `index.html` fallback.
-- local shell and `www.gstatic.com/firebasejs/11.10.0/`: cache first, network fill.
+- Firestore/Auth API hosts: network only, never cache.
+- navigation: network first, cached index fallback.
+- local shell and matching gstatic Firebase version: cache first with network fill.
 - other requests: normal fetch.
 
-Activate removes older `weekly-time-budget-*` caches and calls `clients.claim()`.
+Activate deletes older app caches and calls `clients.claim()`.
 
-- [ ] **Step 4: Register module service worker**
+- [ ] **Step 4: Register and verify**
 
 ```js
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./service-worker.js', { type: 'module', scope: './' })
-      .catch((error) => console.error('서비스 워커 등록 실패', error));
-  });
+  window.addEventListener('load', () => navigator.serviceWorker.register('./service-worker.js', { type: 'module', scope: './' }).catch((error) => console.error('서비스 워커 등록 실패', error)));
 }
 ```
 
-Load registration before Firebase feature scripts.
-
-- [ ] **Step 5: Verify and commit**
+Load registration before feature scripts.
 
 Run: `node --test tests/service-worker-cache.test.js tests/offline-app-integration.test.js`
 
@@ -868,12 +838,12 @@ Expected: PASS.
 
 ```bash
 git add src/service-worker-cache.js service-worker.js src/service-worker-registration.js index.html tests/service-worker-cache.test.js tests/offline-app-integration.test.js
-git commit -m "feat: cache the web app for offline reopening"
+git commit -m "feat: cache the app for offline reopening"
 ```
 
 ---
 
-### Task 10: 완전 삭제·Pages 산출물·전체 회귀 검증
+### Task 10: 완전 삭제·Pages 산출물·전체 검증
 
 **Files:**
 - Modify: `src/category-delete-guard.js:47-175`
@@ -886,20 +856,19 @@ git commit -m "feat: cache the web app for offline reopening"
 - [ ] **Step 1: Add failing deletion and deployment tests**
 
 ```js
-test('완전 삭제는 같은 사용자의 pending 기록을 경고하고 제거한다', async () => {
+test('완전 삭제는 pending 기록도 경고하고 제거한다', async () => {
   const source = await read('src/category-delete-guard.js');
   for (const token of ['countPendingByCategory', 'deletePendingByCategory', '동기화 대기 기록']) assert.ok(source.includes(token), token);
 });
 ```
 
 ```js
-test('Pages 산출물에 모든 오프라인 파일이 포함된다', async () => {
+test('Pages 산출물에 오프라인 파일이 모두 포함된다', async () => {
   const outputDir = await preparePagesSite({ rootDir, outputDir: tempDir, env: testFirebaseEnv });
   for (const file of [
     'service-worker.js', 'src/offline-entry-domain.js', 'src/offline-store.js',
     'src/offline-entry-repository.js', 'src/offline-sync.js', 'src/offline-runtime.js',
-    'src/app-toast.js', 'src/ui-session-state.js', 'src/service-worker-cache.js',
-    'src/service-worker-registration.js',
+    'src/app-toast.js', 'src/ui-session-state.js', 'src/service-worker-cache.js', 'src/service-worker-registration.js',
   ]) await access(path.join(outputDir, file));
 });
 ```
@@ -908,30 +877,28 @@ test('Pages 산출물에 모든 오프라인 파일이 포함된다', async () =
 
 Run: `node --test tests/pages-deploy.test.js tests/offline-app-integration.test.js tests/time-budget-integration.test.js`
 
-Expected: FAIL because deletion integration and root service worker copy are absent.
+Expected: deletion integration and root service worker copy fail.
 
 - [ ] **Step 3: Integrate pending deletion**
 
-Count Firestore entries and IndexedDB pending entries separately. Warning copy:
+Warning:
 
 ```text
 서버 기록 N건과 아직 서버에 반영되지 않은 동기화 대기 기록 M건이 있습니다.
 완전 삭제하면 모두 복구할 수 없습니다.
 ```
 
-After Firestore deletion succeeds, call `deletePendingByCategory(uid, categoryId)`, patch snapshot categories/entries, and dispatch data-change events. If local cleanup fails, state explicitly that server deletion succeeded but 기기 대기 기록 정리에 실패했다고 report; do not claim full success.
+After Firestore deletion succeeds, call `deletePendingByCategory`, patch snapshot categories/entries, and dispatch data-change events. If local cleanup fails, report server deletion success and local cleanup failure separately.
 
-- [ ] **Step 4: Copy and verify deployment files**
-
-Add to `preparePagesSite`:
+- [ ] **Step 4: Copy deployment files and strengthen CI**
 
 ```js
 await cp(path.join(rootDir, 'service-worker.js'), path.join(outputDir, 'service-worker.js'));
 ```
 
-Add CI `test -f` checks for every file in the Pages test list.
+Add CI `test -f` checks for every file in the Pages test.
 
-- [ ] **Step 5: Run syntax, tests, and Pages build**
+- [ ] **Step 5: Run final automated verification**
 
 ```bash
 node --check src/offline-entry-domain.js
@@ -954,19 +921,19 @@ FIREBASE_APP_ID=1:123456789:web:test \
 npm run prepare:pages
 ```
 
-Expected: every command exits `0`; `_site/service-worker.js` and all offline modules exist.
+Expected: all commands exit `0`; `_site/service-worker.js` and all offline modules exist.
 
 - [ ] **Step 6: Manual browser verification**
 
-1. Online manual save → `기록을 서버에 저장했습니다` toast.
-2. DevTools offline manual save → `기기에 안전하게 저장했습니다` toast and pending badge.
-3. Offline reload → same user, last menu/tab, cached categories, pending record remain.
-4. Offline timer start/stop → timer clears only after local record succeeds.
-5. Network restoration → one sync-complete toast, badge disappears, no duplicate.
-6. Reopen from each dashboard/record/budget/statistics internal state → same state restores, future periods remain clamped.
-7. Another account login → previous user's queue/snapshot/UI state invisible.
-8. Permanent category delete with pending record → warning counts server and pending, both removed.
-9. iPhone home-screen app airplane mode → app opens after one prior online run and records safely.
+1. Online manual save shows server-saved toast.
+2. Offline manual save shows device-saved toast and pending badge.
+3. Offline reload keeps same user, menu/tab, cached categories, pending record.
+4. Offline timer start/stop clears only after local record succeeds.
+5. Network restoration shows one sync toast, removes badge, creates no duplicate.
+6. Dashboard/record/budget/statistics internal states restore; future periods are clamped.
+7. Another account cannot see the first account's queue/snapshot/UI state.
+8. Permanent category deletion counts and removes server and pending records.
+9. iPhone home-screen app opens and records in airplane mode after one prior online run.
 
 - [ ] **Step 7: Commit**
 
@@ -979,12 +946,12 @@ git commit -m "test: verify offline recording and deployment"
 
 ## Final Review Checklist
 
-- [ ] IndexedDB succeeds before any record success UI or form reset.
-- [ ] Manual and timer paths share one runtime and one `localId`/Firestore ID rule.
+- [ ] IndexedDB succeeds before success UI or form reset.
+- [ ] Manual and timer paths share one runtime and one `localId` rule.
 - [ ] Retryable errors remain pending; permanent errors remain failed until explicit retry.
 - [ ] One user has at most one active flush Promise.
 - [ ] Pending records appear immediately after local save in history, dashboard, and statistics.
-- [ ] Firestore transaction reads active timer before setting/deleting documents.
+- [ ] Firestore transaction reads active timer before writes.
 - [ ] Remote active timer deletion requires matching UID and `startedAt`.
 - [ ] Queue, snapshot, and UI state never cross user IDs.
 - [ ] Service worker never caches Firestore/Auth API responses.
