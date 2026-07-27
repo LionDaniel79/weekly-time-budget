@@ -23,6 +23,14 @@ test('기록 기간 통합 모듈은 공통 인덱스와 local-first 기록을 �
   assert.ok(source.includes('weekly-time-budget:data-changed'));
 });
 
+test('대시보드와 통계 캐시를 모두 합쳐 최신 기록 기간을 만든다', async () => {
+  const source = await read('src/recorded-period-navigation.js');
+  assert.ok(source.includes('cachedRemoteEntries'));
+  assert.ok(source.includes('snapshot?.entries'));
+  assert.ok(source.includes('snapshot?.statisticsData?.entries'));
+  assert.match(source, /cachedRemoteEntries\(snapshot\)[\s\S]*runtime\.mergedEntries/);
+});
+
 test('대시보드와 통계는 기록 기간 목적지와 disabled 상태를 사용한다', async () => {
   const source = await read('src/recorded-period-navigation.js');
   for (const token of [
