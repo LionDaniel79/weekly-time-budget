@@ -484,6 +484,7 @@ authModule.onAuthStateChanged(auth, async (user) => {
     state.entries = [];
     state.weekly = [];
     state.daily = [];
+    state.defaultDayWeights = { ...EQUAL_DAY_WEIGHTS };
     return;
   }
   state.runtime = await getOfflineRuntime({ userId: user.uid, firestore: store, db });
