@@ -1,6 +1,5 @@
 import { cacheModuleGraph } from './src/service-worker-cache.js';
 
-// Previous shell cache: weekly-time-budget-shell-v5
 const SHELL_CACHE = 'weekly-time-budget-shell-v6';
 const RUNTIME_CACHE = 'weekly-time-budget-runtime-v1';
 const APP_CACHE_PREFIX = 'weekly-time-budget-';
