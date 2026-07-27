@@ -93,6 +93,21 @@ test('앱은 마지막 메뉴와 모든 내부 상태를 사용자별로 저장�
   }
 });
 
+test('사용자 전환 시 화면 모듈은 이전 사용자의 캐시 데이터를 비운다', async () => {
+  const [budgetSource, timerSource] = await Promise.all([
+    read('src/time-budget-feature.js'),
+    read('src/persistent-timer-ui.js'),
+  ]);
+  assert.match(
+    budgetSource,
+    /if \(!user\) \{[\s\S]*state\.categories = \[\];[\s\S]*state\.archived = \[\];[\s\S]*state\.entries = \[\];[\s\S]*state\.weekly = \[\];[\s\S]*state\.daily = \[\];/,
+  );
+  assert.match(
+    timerSource,
+    /if \(!user\) \{[\s\S]*state\.categories = \[\];[\s\S]*state\.archived = \[\];/,
+  );
+});
+
 test('서비스 워커는 앱 셸을 캐시하고 인증·Firestore API 응답은 캐시하지 않는다', async () => {
   const [html, serviceWorker] = await Promise.all([
     read('index.html'),
