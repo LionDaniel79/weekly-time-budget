@@ -124,9 +124,9 @@ export function createFirestoreEntryRemote({ firestore, db }) {
         let activeSnapshot = null;
         if (record.clearActiveTimer) activeSnapshot = await transaction.get(activeRef);
 
+        const { id: _localId, syncStatus: _syncStatus, syncError: _syncError, ...entryPayload } = record.entry;
         transaction.set(entryRef, {
-          ...record.entry,
-          id: undefined,
+          ...entryPayload,
           localCreatedAt: record.createdAt,
           createdAt: firestore.serverTimestamp(),
         }, { merge: true });
