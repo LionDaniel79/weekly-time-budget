@@ -174,9 +174,14 @@ function optionMarkup(option, selectedMonth) {
   return `<option value="${option.month}"${selected}${disabled}>${label}</option>`;
 }
 
-function replaceSelectOptions(select, html, selectedValue) {
+function replaceSelectOptions(select, html, selectedValue, signature) {
   if (!select) return;
-  if (select.innerHTML !== html) select.innerHTML = html;
+  if (select.dataset.recordedPeriodOptionsSignature === signature) {
+    select.value = String(selectedValue);
+    return;
+  }
+  select.innerHTML = html;
+  select.dataset.recordedPeriodOptionsSignature = signature;
   select.value = String(selectedValue);
 }
 
@@ -209,7 +214,8 @@ function patchMonthlyStatistics(view) {
   const yearHtml = years.map((year) => (
     `<option value="${year}"${year === normalized.year ? ' selected' : ''}>${year}년</option>`
   )).join('');
-  replaceSelectOptions(yearSelect, yearHtml, normalized.year);
+  const yearSignature = `years:${years.join(',')}`;
+  replaceSelectOptions(yearSelect, yearHtml, normalized.year, yearSignature);
 
   const months = monthOptionStates({
     recordedMonths: state.periods.months,
@@ -221,6 +227,7 @@ function patchMonthlyStatistics(view) {
     monthSelect,
     months.map((option) => optionMarkup(option, normalized.month)).join(''),
     normalized.month,
+    `months:${normalized.year}:${months.map((option) => `${option.month}:${option.enabled ? 1 : 0}:${option.current ? 1 : 0}`).join('|')}`,
   );
 }
 
