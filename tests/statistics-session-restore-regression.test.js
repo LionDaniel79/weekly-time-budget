@@ -12,3 +12,12 @@ test('통계 화면이 이미 보이지만 로딩 중이면 통계 메뉴를 다
   assert.match(source, /if \(!view\.querySelector\('\[data-stat-mode\]'\)\) return;/);
   assert.doesNotMatch(source, /view\.classList\.contains\('hidden'\) \|\| !view\.querySelector\('\[data-stat-mode\]'\)/);
 });
+
+test('통계 로딩이 끝나 탭 DOM이 생기면 저장된 탭과 기간 복원을 다시 시도한다', async () => {
+  const source = await read('src/statistics-session-state.js');
+
+  assert.match(
+    source,
+    /new MutationObserver\(\(\) => \{[\s\S]*desiredState\?\.activeView === 'statistics'[\s\S]*scheduleRestore\(\);[\s\S]*\}\)/,
+  );
+});
