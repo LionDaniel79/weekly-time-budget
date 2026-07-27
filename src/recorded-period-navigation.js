@@ -36,6 +36,12 @@ const todayKey = () => toDateKey(new Date());
 const currentWeekStart = () => getWeekRange(new Date(`${todayKey()}T12:00:00`)).start;
 const dateFromText = (value = '') => String(value).match(/\d{4}-\d{2}-\d{2}/)?.[0] || null;
 
+function cachedRemoteEntries(snapshot = {}) {
+  if (Array.isArray(snapshot?.entries)) return snapshot.entries;
+  if (Array.isArray(snapshot?.statisticsData?.entries)) return snapshot.statisticsData.entries;
+  return [];
+}
+
 function mergedUiState(partial = {}) {
   const current = globalThis.window?.__weeklyTimeBudgetUiState || {};
   const merged = {
@@ -267,9 +273,7 @@ async function refreshPeriods() {
       return;
     }
     const snapshot = await runtime.store.getSnapshot(userId);
-    const remoteEntries = Array.isArray(snapshot?.statisticsData?.entries)
-      ? snapshot.statisticsData.entries
-      : (Array.isArray(snapshot?.entries) ? snapshot.entries : []);
+    const remoteEntries = cachedRemoteEntries(snapshot);
     const entries = await runtime.mergedEntries(remoteEntries);
     if (auth.currentUser?.uid !== userId || sequence !== state.refreshSequence) return;
     state.userId = userId;
