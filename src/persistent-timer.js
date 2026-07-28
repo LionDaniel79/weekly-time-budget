@@ -1,3 +1,5 @@
+import { timerDisplayMilliseconds } from './countdown-timer-domain.js';
+
 const safeParse = (value) => {
   try { return value ? JSON.parse(value) : null; }
   catch { return null; }
@@ -21,6 +23,12 @@ const positiveTimestamp = (value, fallback = null) => {
   return Number.isFinite(number) && number > 0 ? number : fallback;
 };
 
+const normalizeMode = (mode) => mode === 'countdown' ? 'countdown' : 'countup';
+const finiteNumber = (value, fallback = null) => {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+};
+
 export function normalizeTimerSnapshot(timer) {
   if (!timer) return null;
   const startedAt = positiveTimestamp(timer.startedAt);
@@ -37,6 +45,7 @@ export function normalizeTimerSnapshot(timer) {
     timer.stateChangedAt,
     positiveTimestamp(pausedAt, positiveTimestamp(resumedAt, startedAt)),
   );
+  const mode = normalizeMode(timer.mode);
   return {
     ...timer,
     startedAt,
@@ -45,20 +54,51 @@ export function normalizeTimerSnapshot(timer) {
     pausedAt,
     stateChangedAt,
     running,
+    mode,
+    ...(mode === 'countdown' ? {
+      budgetDate: timer.budgetDate || timer.startedDate || localDateKey(new Date(startedAt)),
+      initialBudgetMinutes: Math.max(0, finiteNumber(timer.initialBudgetMinutes, 0)),
+      priorRecordedMinutes: Math.max(0, finiteNumber(timer.priorRecordedMinutes, 0)),
+      initialRemainingMs: finiteNumber(timer.initialRemainingMs, null),
+    } : {}),
   };
 }
 
-export function createTimerSnapshot({ userId, categoryId, note = '', startedAt = Date.now(), startedDate }) {
+export function createTimerSnapshot({
+  userId,
+  categoryId,
+  note = '',
+  startedAt = Date.now(),
+  startedDate,
+  mode = 'countup',
+  budgetDate,
+  initialBudgetMinutes,
+  priorRecordedMinutes,
+  initialRemainingMs,
+}) {
   if (!userId) throw new Error('사용자 정보가 필요합니다.');
   if (!categoryId) throw new Error('대분류를 선택하세요.');
   const timestamp = Number(startedAt);
   if (!Number.isFinite(timestamp) || timestamp <= 0) throw new Error('타이머 시작 시각이 올바르지 않습니다.');
+  const normalizedMode = normalizeMode(mode);
+  const date = startedDate || localDateKey(new Date(timestamp));
+  const countdownRemaining = finiteNumber(initialRemainingMs, null);
+  if (normalizedMode === 'countdown' && countdownRemaining === null) {
+    throw new Error('카운트다운 시작 시간이 올바르지 않습니다.');
+  }
   return {
     userId,
     categoryId,
     note: String(note || '').trim(),
     startedAt: timestamp,
-    startedDate: startedDate || localDateKey(new Date(timestamp)),
+    startedDate: date,
+    mode: normalizedMode,
+    ...(normalizedMode === 'countdown' ? {
+      budgetDate: budgetDate || date,
+      initialBudgetMinutes: Math.max(0, finiteNumber(initialBudgetMinutes, 0)),
+      priorRecordedMinutes: Math.max(0, finiteNumber(priorRecordedMinutes, 0)),
+      initialRemainingMs: countdownRemaining,
+    } : {}),
     accumulatedMs: 0,
     resumedAt: timestamp,
     pausedAt: null,
@@ -255,6 +295,10 @@ export function createPersistentTimerController({
 
     elapsedSeconds() {
       return elapsedSeconds(active, now());
+    },
+
+    displayMilliseconds() {
+      return timerDisplayMilliseconds(active, elapsedMilliseconds(active, now()));
     },
   };
 }
