@@ -30,6 +30,7 @@ const state = {
   selectedCategoryId: '',
   previewBaseline: null,
   budgetReady: false,
+  transitioning: false,
   controller: null,
   runtime: null,
   interval: null,
@@ -313,14 +314,15 @@ function renderTimer() {
     ? '예산 계산 중'
     : formatSignedTimerMilliseconds(displayMs, { countdown: mode === 'countdown' });
   const isNegative = !isCalculating && displayMs < 0;
-  const categoryLocked = Boolean(timer && (timer.mode !== 'countdown' || timer.running !== false));
+  const categoryLocked = Boolean(state.transitioning || (timer && (timer.mode !== 'countdown' || timer.running !== false)));
   const pauseButton = timer
-    ? `<button id="timer-pause" class="secondary-button">${timer.running !== false ? '멈춤' : '계속'}</button>`
+    ? `<button id="timer-pause" class="secondary-button" ${state.transitioning ? 'disabled aria-disabled="true"' : ''}>${timer.running !== false ? '멈춤' : '계속'}</button>`
     : '';
   const saveLabel = timer?.mode === 'countdown' ? '저장' : '종료하고 저장';
-  const countdownDisabled = Boolean(timer && mode !== 'countdown');
-  const countupDisabled = Boolean(timer && mode !== 'countup');
-  const startDisabled = !timer && mode === 'countdown' && (!state.budgetReady || (selectedId && !state.previewBaseline));
+  const countdownDisabled = Boolean(state.transitioning || (timer && mode !== 'countdown'));
+  const countupDisabled = Boolean(state.transitioning || (timer && mode !== 'countup'));
+  const startDisabled = state.transitioning || (!timer && mode === 'countdown' && (!state.budgetReady || (selectedId && !state.previewBaseline)));
+  const cancelDisabled = state.transitioning ? 'disabled aria-disabled="true"' : '';
 
   card.innerHTML = `<div data-feature-ui="persistent-timer">
     <div class="timer-mode-tabs" role="tablist" aria-label="타이머 방식">
@@ -329,10 +331,10 @@ function renderTimer() {
     </div>
     <div class="form-grid">
       <label>대분류<select id="timer-category" ${categoryLocked ? 'disabled' : ''}><option value="">선택하세요</option>${categoryOptions(selectedId)}</select></label>
-      <label>메모(선택)<textarea id="timer-note" rows="2" ${timer ? 'disabled' : ''}>${escapeHtml(timer?.note || '')}</textarea></label>
+      <label>메모(선택)<textarea id="timer-note" rows="2" ${timer || state.transitioning ? 'disabled' : ''}>${escapeHtml(timer?.note || '')}</textarea></label>
     </div>
     <div id="timer-display" class="timer${isNegative ? ' is-negative' : ''}" aria-live="polite">${displayText}</div>
-    <div class="actions">${pauseButton}<button id="timer-action" class="primary-button" ${startDisabled ? 'disabled' : ''}>${timer ? saveLabel : '타이머 시작'}</button>${timer ? '<button id="timer-cancel" class="secondary-button">취소</button>' : ''}</div>
+    <div class="actions">${pauseButton}<button id="timer-action" class="primary-button" ${startDisabled ? 'disabled aria-disabled="true"' : ''}>${timer ? saveLabel : '타이머 시작'}</button>${timer ? `<button id="timer-cancel" class="secondary-button" ${cancelDisabled}>취소</button>` : ''}</div>
   </div>`;
   startDisplay();
 }
@@ -382,7 +384,7 @@ async function saveActiveTimer({ refreshData = true, rerender = true } = {}) {
 }
 
 async function handleAction(button) {
-  if (!state.controller || button.disabled) return;
+  if (!state.controller || state.transitioning || button.disabled) return;
   button.disabled = true;
   try {
     const active = state.controller.active;
@@ -449,7 +451,7 @@ async function recoverAfterConflict() {
 
 async function handlePauseToggle(button) {
   const active = state.controller?.active;
-  if (!active || button.disabled) return;
+  if (!active || state.transitioning || button.disabled) return;
   button.disabled = true;
   try {
     const wasRunning = active.running !== false;
@@ -483,6 +485,7 @@ async function handlePauseToggle(button) {
 }
 
 async function handleCancel(button) {
+  if (state.transitioning || button.disabled) return;
   if (!confirm('진행 중인 타이머를 취소할까요? 기록은 저장되지 않습니다.')) return;
   button.disabled = true;
   try {
@@ -503,7 +506,7 @@ async function handleCancel(button) {
 }
 
 function handleModeChange(button) {
-  if (state.controller?.active || button.disabled) return;
+  if (state.transitioning || state.controller?.active || button.disabled) return;
   state.selectedMode = button.dataset.timerMode === 'countup' ? 'countup' : 'countdown';
   updatePreviewBaseline();
   renderTimer();
@@ -511,23 +514,39 @@ function handleModeChange(button) {
 
 async function handleCountdownCategoryChange(nextCategoryId) {
   const timer = state.controller?.active;
+  if (state.transitioning) return;
   if (!timer || timer.mode !== 'countdown' || timer.running !== false) return;
+
+  state.transitioning = true;
+  renderTimer();
+  let switched = false;
   try {
     await saveActiveTimer({ refreshData: false, rerender: false });
-    await refreshTimerData();
+    await restoreCachedTimerData();
     state.selectedMode = 'countdown';
     state.selectedCategoryId = nextCategoryId;
     if (nextCategoryId) localStorage.setItem(LAST_CATEGORY_KEY, nextCategoryId);
     updatePreviewBaseline();
-    renderTimer();
+    switched = true;
   } catch (error) {
     console.error(error);
-    renderTimer();
     showToast({
       type: 'error',
       title: '기존 카운트다운을 저장하지 못했습니다.',
       message: error.message,
     });
+  } finally {
+    state.transitioning = false;
+    renderTimer();
+  }
+
+  if (switched) {
+    refreshTimerData().then(() => {
+      if (!state.user || state.controller?.active) return;
+      updatePreviewBaseline();
+      if (timerTabIsActive()) renderTimer();
+      else schedulePatch();
+    }).catch((error) => console.error('타이머 예산 자료 갱신 실패', error));
   }
 }
 
@@ -555,7 +574,7 @@ document.addEventListener('click', (event) => {
 
 document.addEventListener('change', (event) => {
   const select = event.target.closest('#timer-category');
-  if (!select || !state.user) return;
+  if (!select || !state.user || state.transitioning) return;
   const nextCategoryId = select.value;
   const timer = state.controller?.active;
   if (timer) {
@@ -592,6 +611,7 @@ function schedulePatch() {
 new MutationObserver(schedulePatch).observe(document.body, { childList: true, subtree: true });
 authModule.onAuthStateChanged(auth, async (user) => {
   state.user = user;
+  state.transitioning = false;
   stopDisplay();
   state.recoveryPromise = null;
   state.recoveryUserId = null;
