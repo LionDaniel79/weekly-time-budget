@@ -1,0 +1,1 @@
+test: define immutable restraint category management
