@@ -1,3 +1,12 @@
+import {
+  calculateGoalAchievement,
+  calculateGoalComplianceScore,
+  calculateGoalContribution,
+  calculateGoalProgress,
+  categoryDisplayName,
+  normalizeGoalType,
+} from './goal-domain.js';
+
 const pad = (value) => String(value).padStart(2, '0');
 
 export function toDateKey(date) {
@@ -118,20 +127,29 @@ export function calculateAchievement(budgetMinutes, actualMinutes) {
   };
 }
 
-function calculateBudgetAchievement(budgetMinutes, actualMinutes) {
-  const budget = Number(budgetMinutes) || 0;
-  const actual = Number(actualMinutes) || 0;
-  if (budget <= 0) {
+function categoryGoalSummary(category, budgetMinutes, actualMinutes) {
+  const goalType = normalizeGoalType(category?.goalType);
+  const achievement = calculateGoalAchievement({ goalType, budgetMinutes, actualMinutes });
+  return {
+    goalType,
+    name: categoryDisplayName(category),
+    ...achievement,
+    contributionScore: calculateGoalContribution(achievement),
+    progress: calculateGoalProgress({ goalType, budgetMinutes, actualMinutes }),
+  };
+}
+
+function totalDifferenceStatus(totalBudgetMinutes, totalActualMinutes) {
+  const differenceMinutes = totalActualMinutes - totalBudgetMinutes;
+  if (totalBudgetMinutes <= 0) {
     return {
-      percentage: actual > 0 ? null : 0,
-      differenceMinutes: actual,
-      status: actual > 0 ? 'unbudgeted' : 'remaining',
-      hasBudget: false,
+      differenceMinutes,
+      status: totalActualMinutes > 0 ? 'unbudgeted' : 'remaining',
     };
   }
   return {
-    ...calculateAchievement(budget, actual),
-    hasBudget: true,
+    differenceMinutes,
+    status: differenceMinutes > 0 ? 'exceeded' : differenceMinutes === 0 ? 'exact' : 'remaining',
   };
 }
 
@@ -149,12 +167,12 @@ export function summarizeCategories(categories, entries, start, end) {
     const actualMinutes = entries
       .filter((entry) => entry.categoryId === category.id && entry.date >= start && entry.date <= end)
       .reduce((sum, entry) => sum + Number(entry.durationMinutes || 0), 0);
+    const budgetMinutes = category.budgetMinutes || 0;
     return {
       id: category.id,
-      name: category.name,
-      budgetMinutes: category.budgetMinutes || 0,
+      budgetMinutes,
       actualMinutes,
-      ...calculateAchievement(category.budgetMinutes || 0, actualMinutes),
+      ...categoryGoalSummary(category, budgetMinutes, actualMinutes),
     };
   });
 }
@@ -219,10 +237,14 @@ function finalizeBudgetSummary(entries, categoryList, categoryById, budgetById, 
     isDateKey(entry.date) && entry.date >= start && entry.date <= end
   ));
   const actualById = new Map();
+  const entryGoalTypeById = new Map();
   const days = new Set();
   filteredEntries.forEach((entry) => {
     const minutes = Number(entry.durationMinutes || 0);
     actualById.set(entry.categoryId, (actualById.get(entry.categoryId) || 0) + minutes);
+    if (!entryGoalTypeById.has(entry.categoryId) && entry.goalType !== undefined) {
+      entryGoalTypeById.set(entry.categoryId, normalizeGoalType(entry.goalType));
+    }
     days.add(entry.date);
   });
 
@@ -231,34 +253,40 @@ function finalizeBudgetSummary(entries, categoryList, categoryById, budgetById, 
     const actualMinutes = Math.round(actualById.get(category.id) || 0);
     return {
       id: category.id,
-      name: category.name,
       budgetMinutes,
       actualMinutes,
-      ...calculateBudgetAchievement(budgetMinutes, actualMinutes),
+      ...categoryGoalSummary(category, budgetMinutes, actualMinutes),
     };
   });
 
   actualById.forEach((actualMinutes, categoryId) => {
     if (categoryById.has(categoryId)) return;
+    const category = {
+      name: '삭제된 대분류',
+      goalType: entryGoalTypeById.get(categoryId),
+    };
+    const roundedActual = Math.round(actualMinutes);
     categorySummaries.push({
       id: categoryId,
-      name: '삭제된 대분류',
       budgetMinutes: 0,
-      actualMinutes: Math.round(actualMinutes),
-      ...calculateBudgetAchievement(0, actualMinutes),
+      actualMinutes: roundedActual,
+      ...categoryGoalSummary(category, 0, roundedActual),
     });
   });
 
   const totalBudgetMinutes = categorySummaries.reduce((sum, item) => sum + item.budgetMinutes, 0);
   const totalActualMinutes = categorySummaries.reduce((sum, item) => sum + item.actualMinutes, 0);
-  const achievement = calculateBudgetAchievement(totalBudgetMinutes, totalActualMinutes);
+  const compliance = calculateGoalComplianceScore(categorySummaries);
+  const difference = totalDifferenceStatus(totalBudgetMinutes, totalActualMinutes);
   const recordDays = days.size;
   return {
     totalBudgetMinutes,
     totalActualMinutes,
-    percentage: achievement.percentage,
-    differenceMinutes: achievement.differenceMinutes,
-    status: achievement.status,
+    goalComplianceScore: compliance.score,
+    goalComplianceStatus: compliance.status,
+    percentage: compliance.score,
+    differenceMinutes: difference.differenceMinutes,
+    status: difference.status,
     recordDays,
     dailyAverageMinutes: recordDays ? Math.round(totalActualMinutes / recordDays) : 0,
     categorySummaries,
@@ -315,6 +343,7 @@ function combineBudgetSummaries(summaries, categories, recordDates) {
   const totals = new Map(categoryList.map((category) => [category.id, {
     id: category.id,
     name: category.name,
+    goalType: normalizeGoalType(category.goalType),
     budgetMinutes: 0,
     actualMinutes: 0,
   }]));
@@ -324,6 +353,7 @@ function combineBudgetSummaries(summaries, categories, recordDates) {
       const current = totals.get(item.id) || {
         id: item.id,
         name: item.name,
+        goalType: normalizeGoalType(item.goalType),
         budgetMinutes: 0,
         actualMinutes: 0,
       };
@@ -334,19 +364,24 @@ function combineBudgetSummaries(summaries, categories, recordDates) {
   });
 
   const categorySummaries = [...totals.values()].map((item) => ({
-    ...item,
-    ...calculateBudgetAchievement(item.budgetMinutes, item.actualMinutes),
+    id: item.id,
+    budgetMinutes: item.budgetMinutes,
+    actualMinutes: item.actualMinutes,
+    ...categoryGoalSummary(item, item.budgetMinutes, item.actualMinutes),
   }));
   const totalBudgetMinutes = categorySummaries.reduce((sum, item) => sum + item.budgetMinutes, 0);
   const totalActualMinutes = categorySummaries.reduce((sum, item) => sum + item.actualMinutes, 0);
-  const achievement = calculateBudgetAchievement(totalBudgetMinutes, totalActualMinutes);
+  const compliance = calculateGoalComplianceScore(categorySummaries);
+  const difference = totalDifferenceStatus(totalBudgetMinutes, totalActualMinutes);
   const recordDays = recordDates.size;
   return {
     totalBudgetMinutes,
     totalActualMinutes,
-    percentage: achievement.percentage,
-    differenceMinutes: achievement.differenceMinutes,
-    status: achievement.status,
+    goalComplianceScore: compliance.score,
+    goalComplianceStatus: compliance.status,
+    percentage: compliance.score,
+    differenceMinutes: difference.differenceMinutes,
+    status: difference.status,
     recordDays,
     dailyAverageMinutes: recordDays ? Math.round(totalActualMinutes / recordDays) : 0,
     categorySummaries,
