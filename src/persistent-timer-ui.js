@@ -301,7 +301,7 @@ function renderTimer() {
       : 0;
   const displayText = isCalculating
     ? '예산 계산 중'
-    : formatSignedTimerMilliseconds(displayMs);
+    : formatSignedTimerMilliseconds(displayMs, { countdown: mode === 'countdown' });
   const isNegative = !isCalculating && displayMs < 0;
   const categoryLocked = Boolean(timer && (timer.mode !== 'countdown' || timer.running !== false));
   const pauseButton = timer
@@ -343,9 +343,10 @@ function stopDisplay() {
 
 function updateDisplay() {
   const display = document.querySelector('#timer-display');
-  if (!display || !state.controller?.active) return;
+  const active = state.controller?.active;
+  if (!display || !active) return;
   const value = state.controller.displayMilliseconds();
-  display.textContent = formatSignedTimerMilliseconds(value);
+  display.textContent = formatSignedTimerMilliseconds(value, { countdown: active.mode === 'countdown' });
   display.classList.toggle('is-negative', value < 0);
 }
 
@@ -361,6 +362,7 @@ async function saveActiveTimer({ refreshData = true, rerender = true } = {}) {
     timerMode: timer.mode,
   }));
   stopDisplay();
+  state.selectedMode = 'countdown';
   showEntrySaveResult(result.completion);
   dispatchEntryChange();
   if (refreshData) await refreshTimerData();
@@ -476,6 +478,7 @@ async function handleCancel(button) {
   try {
     await state.controller.cancel();
     stopDisplay();
+    state.selectedMode = 'countdown';
     updatePreviewBaseline();
     renderTimer();
   } catch (error) {
