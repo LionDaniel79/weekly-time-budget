@@ -90,26 +90,30 @@ function updatePreviewBaseline() {
   state.previewBaseline = countdownBaselineFor(state.selectedCategoryId);
 }
 
+async function restoreCachedTimerData(user = state.user) {
+  if (!user || !state.runtime) return false;
+  const cached = await state.runtime.store.getSnapshot(user.uid);
+  if (!cached || state.user?.uid !== user.uid) return false;
+  if (Array.isArray(cached.categories)) state.categories = cached.categories;
+  if (Array.isArray(cached.archivedCategories)) state.archived = cached.archivedCategories;
+  if (Array.isArray(cached.weeklyBudgets)) state.weekly = cached.weeklyBudgets;
+  if (Array.isArray(cached.dailyBudgets)) state.daily = cached.dailyBudgets;
+  if (cached.defaultDayWeights) {
+    state.defaultDayWeights = effectiveDayWeights(null, cached.defaultDayWeights);
+  }
+  state.entries = await state.runtime.mergedEntries(Array.isArray(cached.entries) ? cached.entries : []);
+  state.budgetReady = true;
+  updatePreviewBaseline();
+  return true;
+}
+
 async function refreshTimerData() {
   const user = state.user;
   if (!user || !state.runtime) return;
   if (state.dataPromise && state.dataUserId === user.uid) return state.dataPromise;
 
   const promise = (async () => {
-    const cached = await state.runtime.store.getSnapshot(user.uid);
-    const hadCache = Boolean(cached);
-    if (Array.isArray(cached?.categories)) state.categories = cached.categories;
-    if (Array.isArray(cached?.archivedCategories)) state.archived = cached.archivedCategories;
-    if (Array.isArray(cached?.weeklyBudgets)) state.weekly = cached.weeklyBudgets;
-    if (Array.isArray(cached?.dailyBudgets)) state.daily = cached.dailyBudgets;
-    if (cached?.defaultDayWeights) {
-      state.defaultDayWeights = effectiveDayWeights(null, cached.defaultDayWeights);
-    }
-    if (cached) {
-      state.entries = await state.runtime.mergedEntries(Array.isArray(cached.entries) ? cached.entries : []);
-      state.budgetReady = true;
-    }
-
+    const hadCache = await restoreCachedTimerData(user) || state.budgetReady;
     const root = ['users', user.uid];
     try {
       const [categories, archived, entries, weekly, daily, settings] = await Promise.all([
@@ -248,7 +252,6 @@ async function refreshTimerFromRemote({ refreshData = false } = {}) {
   if (state.recoveryPromise && state.recoveryUserId === user.uid) return state.recoveryPromise;
 
   const promise = (async () => {
-    if (refreshData) await refreshTimerData();
     const timer = await controller.recover();
     if (state.user?.uid !== user.uid || state.controller !== controller) return timer;
     if (timer) {
@@ -263,6 +266,13 @@ async function refreshTimerFromRemote({ refreshData = false } = {}) {
     }
     if (timerTabIsActive()) renderTimer();
     else schedulePatch();
+    if (refreshData) {
+      refreshTimerData().then(() => {
+        if (state.user?.uid !== user.uid || state.controller !== controller) return;
+        if (timerTabIsActive()) renderTimer();
+        else schedulePatch();
+      }).catch((error) => console.error('타이머 예산 자료 갱신 실패', error));
+    }
     return timer;
   })();
 
@@ -605,9 +615,14 @@ authModule.onAuthStateChanged(auth, async (user) => {
   try {
     state.runtime = await getOfflineRuntime({ userId: user.uid, firestore: store, db });
     state.selectedCategoryId = localStorage.getItem(LAST_CATEGORY_KEY) || '';
-    await refreshTimerData();
+    await restoreCachedTimerData(user);
     configureController();
     await refreshTimerFromRemote();
+    refreshTimerData().then(() => {
+      if (state.user?.uid !== user.uid) return;
+      if (timerTabIsActive()) renderTimer();
+      else schedulePatch();
+    }).catch((error) => console.error('타이머 예산 자료 갱신 실패', error));
   } catch (error) {
     console.error('타이머 복구 실패', error);
     showToast({ type: 'error', title: '진행 중 타이머를 확인하지 못했습니다.', message: '네트워크와 기기 저장소 상태를 확인하세요.' });
