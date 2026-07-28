@@ -139,7 +139,11 @@ test('일간 요약은 직접·자동 예산과 실제 기록을 계산한다', 
   assert.equal(result.totalBudgetMinutes, 120);
   assert.equal(result.totalActualMinutes, 60);
   assert.equal(result.percentage, 50);
+  assert.equal(result.goalComplianceScore, 50);
+  assert.equal(result.goalComplianceStatus, 'scored');
+  assert.equal(result.categorySummaries[0].goalType, 'growth');
   assert.equal(result.categorySummaries[0].budgetSource, 'direct');
+  assert.deepEqual(result.categorySummaries[0].progress, { mode: 'growth', fillPercentage: 50 });
 });
 
 test('활성·보관 대분류에 없는 고아 예산 참조를 제거한다', () => {
@@ -149,4 +153,36 @@ test('활성·보관 대분류에 없는 고아 예산 참조를 제거한다', 
     new Set(['reading', 'thesis']),
   );
   assert.deepEqual(cleaned, { reading: 420, thesis: 30 });
+});
+
+
+test('일간 요약은 절제 목표와 전체 목표 준수를 계산한다', () => {
+  const result = summarizeDailyCategories({
+    categories: [
+      { id: 'prayer', name: '기도', defaultBudgetMinutes: 1260 },
+      { id: 'reading', name: '독서', defaultBudgetMinutes: 420 },
+      { id: 'phone', name: '스마트폰', goalType: 'restraint', defaultBudgetMinutes: 1260 },
+    ],
+    entries: [
+      { categoryId: 'prayer', date: '2026-07-27', durationMinutes: 180 },
+      { categoryId: 'reading', date: '2026-07-27', durationMinutes: 60 },
+      { categoryId: 'phone', date: '2026-07-27', durationMinutes: 240, goalType: 'restraint' },
+    ],
+    date: '2026-07-27',
+    weekDocument: {
+      budgets: { prayer: 1260, reading: 420, phone: 1260 },
+      dayWeights: { mon: 1, tue: 0, wed: 0, thu: 0, fri: 0, sat: 0, sun: 0 },
+    },
+    dailyDocument: {
+      overrides: { prayer: 180, reading: 60, phone: 180 },
+    },
+  });
+  const phone = result.categorySummaries.find((item) => item.id === 'phone');
+  assert.equal(phone.name, '스마트폰 (절제)');
+  assert.equal(phone.percentage, -33);
+  assert.equal(phone.contributionScore, 0);
+  assert.deepEqual(phone.progress, { mode: 'overage', fillPercentage: 33 });
+  assert.equal(result.goalComplianceScore, 57);
+  assert.equal(result.totalBudgetMinutes, 420);
+  assert.equal(result.totalActualMinutes, 480);
 });

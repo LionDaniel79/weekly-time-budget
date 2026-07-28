@@ -75,11 +75,15 @@ test('대분류별 실제 시간과 달성률에 주일 기록을 포함한다',
   assert.deepEqual(summarizeCategories(categories, entries, '2026-07-20', '2026-07-26'), [
     {
       id: 'thesis', name: '논문', budgetMinutes: 900, actualMinutes: 360,
-      percentage: 40, differenceMinutes: -540, status: 'remaining',
+      goalType: 'growth', percentage: 40, differenceMinutes: -540, status: 'remaining',
+      hasBudget: true, contributionScore: 40,
+      progress: { mode: 'growth', fillPercentage: 40 },
     },
     {
       id: 'sermon', name: '설교', budgetMinutes: 480, actualMinutes: 500,
-      percentage: 104, differenceMinutes: 20, status: 'exceeded',
+      goalType: 'growth', percentage: 104, differenceMinutes: 20, status: 'exceeded',
+      hasBudget: true, contributionScore: 100,
+      progress: { mode: 'growth', fillPercentage: 100 },
     },
   ]);
 });
@@ -128,10 +132,13 @@ test('월 경계에 걸친 주간 예산은 해당 월의 날짜 수만큼 나�
       name: '독서',
       budgetMinutes: 2060,
       actualMinutes: 600,
+      goalType: 'growth',
       percentage: 29,
       differenceMinutes: -1460,
       status: 'remaining',
       hasBudget: true,
+      contributionScore: 29,
+      progress: { mode: 'growth', fillPercentage: 29 },
     },
   ]);
 });
@@ -149,11 +156,16 @@ test('예산이 없는 대분류의 실제 기록은 예산 미설정 상태로 
     name: '독서',
     budgetMinutes: 0,
     actualMinutes: 60,
+    goalType: 'growth',
     percentage: null,
     differenceMinutes: 60,
-    status: 'unbudgeted',
+    status: 'excluded',
     hasBudget: false,
+    contributionScore: null,
+    progress: { mode: 'excluded', fillPercentage: 0 },
   });
+  assert.equal(result.goalComplianceScore, null);
+  assert.equal(result.goalComplianceStatus, 'excluded');
 });
 
 test('독서 1시간 기록은 해당 월 통계에 반영된다', () => {
@@ -305,4 +317,33 @@ test('기존 월별과 연도별 총합 비교도 유지한다', () => {
     { year: 2025, totalMinutes: 60 },
     { year: 2026, totalMinutes: 240 },
   ]);
+});
+
+
+test('주간 요약은 성장과 절제를 다르게 계산하고 예산시간으로 가중한다', () => {
+  const summary = summarizeBudgetPeriod(
+    [
+      { categoryId: 'prayer', date: '2026-07-27', durationMinutes: 180, goalType: 'growth' },
+      { categoryId: 'reading', date: '2026-07-27', durationMinutes: 60, goalType: 'growth' },
+      { categoryId: 'phone', date: '2026-07-27', durationMinutes: 240, goalType: 'restraint' },
+    ],
+    [
+      { id: 'prayer', name: '기도', defaultBudgetMinutes: 180 },
+      { id: 'reading', name: '독서', defaultBudgetMinutes: 60 },
+      { id: 'phone', name: '스마트폰', goalType: 'restraint', defaultBudgetMinutes: 180 },
+    ],
+    [{ weekStart: '2026-07-27', budgets: { prayer: 180, reading: 60, phone: 180 } }],
+    '2026-07-27',
+    '2026-08-02',
+  );
+  const phone = summary.categorySummaries.find((item) => item.id === 'phone');
+  assert.equal(phone.name, '스마트폰 (절제)');
+  assert.equal(phone.goalType, 'restraint');
+  assert.equal(phone.percentage, -33);
+  assert.equal(phone.contributionScore, 0);
+  assert.deepEqual(phone.progress, { mode: 'overage', fillPercentage: 33 });
+  assert.equal(summary.goalComplianceScore, 57);
+  assert.equal(summary.goalComplianceStatus, 'scored');
+  assert.equal(summary.totalBudgetMinutes, 420);
+  assert.equal(summary.totalActualMinutes, 480);
 });
