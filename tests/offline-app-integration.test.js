@@ -24,6 +24,7 @@ test('오프라인 모듈은 올바른 자바스크립트 문법이다', async (
     '../src/orphan-local-timer-cleanup.js',
     '../src/local-timer-removal-reload.js',
     '../src/category-bulk-editor.js',
+    '../src/countdown-timer-domain.js',
     '../src/persistent-timer.js',
     '../src/persistent-timer-ui.js',
     '../service-worker.js',
@@ -111,8 +112,9 @@ test('사용자 전환 시 화면 모듈은 이전 사용자의 캐시 데이터
   assert.ok(budgetSource.includes('state.defaultDayWeights = { ...EQUAL_DAY_WEIGHTS };'));
   assert.match(
     timerSource,
-    /if \(!user\) \{[\s\S]*state\.categories = \[\];[\s\S]*state\.archived = \[\];/,
+    /if \(!user\) \{[\s\S]*state\.categories = \[\];[\s\S]*state\.archived = \[\];[\s\S]*state\.entries = \[\];[\s\S]*state\.weekly = \[\];[\s\S]*state\.daily = \[\];/,
   );
+  assert.ok(timerSource.includes("state.selectedMode = 'countdown';"));
 });
 
 test('서비스 워커는 앱 셸을 캐시하고 인증·Firestore API 응답은 캐시하지 않는다', async () => {
@@ -125,7 +127,7 @@ test('서비스 워커는 앱 셸을 캐시하고 인증·Firestore API 응답�
   assert.ok(html.includes('./src/mobile-compact.css'));
   assert.ok(html.includes('./src/category-bulk-editor.js'));
   for (const token of [
-    'weekly-time-budget-shell-v7',
+    'weekly-time-budget-shell-v8',
     'firebase-firestore.js',
     'firestore.googleapis.com',
     'identitytoolkit.googleapis.com',
@@ -136,6 +138,7 @@ test('서비스 워커는 앱 셸을 캐시하고 인증·Firestore API 응답�
     'recorded-period-navigation.js',
     'mobile-compact.css',
     'category-bulk-editor.js',
+    'countdown-timer-domain.js',
   ]) assert.ok(serviceWorker.includes(token), token);
 });
 
