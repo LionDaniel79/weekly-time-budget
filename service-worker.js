@@ -1,6 +1,6 @@
 import { cacheModuleGraph } from './src/service-worker-cache.js';
 
-const SHELL_CACHE = 'weekly-time-budget-shell-v7';
+const SHELL_CACHE = 'weekly-time-budget-shell-v8';
 const RUNTIME_CACHE = 'weekly-time-budget-runtime-v1';
 const APP_CACHE_PREFIX = 'weekly-time-budget-';
 const FIREBASE_VERSION_ROOT = 'https://www.gstatic.com/firebasejs/11.10.0/';
@@ -24,6 +24,7 @@ const SHELL_URLS = [
   './src/category-delete-guard.js',
   './src/orphan-local-timer-cleanup.js',
   './src/local-timer-removal-reload.js',
+  './src/countdown-timer-domain.js',
   './src/time-budget-domain.js',
   './src/time-budget-ui.js',
   './src/time-budget-feature.js',
@@ -120,15 +121,16 @@ self.addEventListener('fetch', (event) => {
   const request = event.request;
   if (request.method !== 'GET') return;
   const url = new URL(request.url);
-  if (isSensitiveApi(url)) {
-    event.respondWith(fetch(request));
-    return;
-  }
+  if (isSensitiveApi(url)) return;
   if (request.mode === 'navigate') {
     event.respondWith(navigationResponse(request));
     return;
   }
-  if (url.origin === self.location.origin || isCacheableModule(url)) {
+  if (isCacheableModule(url)) {
+    event.respondWith(cacheFirst(request));
+    return;
+  }
+  if (url.origin === self.location.origin) {
     event.respondWith(cacheFirst(request));
   }
 });
