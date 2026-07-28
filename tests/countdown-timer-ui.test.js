@@ -31,9 +31,35 @@ test('카운트다운은 오늘 예산과 기록 기준값을 불러온다', asy
 test('카운트다운은 저장, 카운트업은 종료하고 저장 문구를 사용한다', async () => {
   const source = await read('src/persistent-timer-ui.js');
   assert.ok(source.includes("timer?.mode === 'countdown' ? '저장' : '종료하고 저장'"));
+  assert.ok(source.includes('timerMode: timer.mode'));
+});
+
+test('실행 중 대분류를 잠그고 멈춘 카운트다운 변경은 자동 저장한다', async () => {
+  const source = await read('src/persistent-timer-ui.js');
+  assert.ok(source.includes('handleCountdownCategoryChange'));
+  assert.ok(source.includes('await saveActiveTimer({ refreshData: false, rerender: false })'));
+  assert.match(source, /timer\.mode !== 'countdown' \|\| timer\.running !== false/);
+  assert.match(source, /categoryLocked = Boolean\(timer && \(timer\.mode !== 'countdown' \|\| timer\.running !== false\)\)/);
+  assert.ok(source.includes('await refreshTimerData()'));
+});
+
+test('방식 변경은 활성 타이머가 없을 때만 허용한다', async () => {
+  const source = await read('src/persistent-timer-ui.js');
+  assert.match(source, /function handleModeChange\(button\)[\s\S]*state\.controller\?\.active[\s\S]*return/);
 });
 
 test('0 도달 알람과 선택창을 만들지 않는다', async () => {
   const source = await read('src/persistent-timer-ui.js');
   assert.doesNotMatch(source, /AudioContext|new Audio|\.vibrate\(|Notification\(|중단하고 저장|계속할지/);
+});
+
+test('분할 탭 스타일과 v8 앱 셸을 제공한다', async () => {
+  const [css, worker] = await Promise.all([
+    read('src/mobile-compact.css'),
+    read('service-worker.js'),
+  ]);
+  assert.ok(css.includes('.timer-mode-tabs'));
+  assert.ok(css.includes('grid-template-columns: repeat(2, minmax(0, 1fr))'));
+  assert.ok(worker.includes('weekly-time-budget-shell-v8'));
+  assert.ok(worker.includes('./src/countdown-timer-domain.js'));
 });
