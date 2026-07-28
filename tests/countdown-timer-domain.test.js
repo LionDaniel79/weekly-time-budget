@@ -23,9 +23,15 @@ test('예산보다 기록이 많으면 시작 전부터 음수다', () => {
 
 test('0을 지나 음수로 계속 표시한다', () => {
   const timer = { mode: 'countdown', initialRemainingMs: 2_000 };
-  assert.equal(formatSignedTimerMilliseconds(timerDisplayMilliseconds(timer, 1_000)), '00:00:01');
-  assert.equal(formatSignedTimerMilliseconds(timerDisplayMilliseconds(timer, 2_000)), '00:00:00');
-  assert.equal(formatSignedTimerMilliseconds(timerDisplayMilliseconds(timer, 3_000)), '-00:00:01');
+  assert.equal(formatSignedTimerMilliseconds(timerDisplayMilliseconds(timer, 1_000), { countdown: true }), '00:00:01');
+  assert.equal(formatSignedTimerMilliseconds(timerDisplayMilliseconds(timer, 2_000), { countdown: true }), '00:00:00');
+  assert.equal(formatSignedTimerMilliseconds(timerDisplayMilliseconds(timer, 3_000), { countdown: true }), '-00:00:01');
+});
+
+test('카운트다운은 0 전후의 일부 초도 한 초로 표시한다', () => {
+  assert.equal(formatSignedTimerMilliseconds(999, { countdown: true }), '00:00:01');
+  assert.equal(formatSignedTimerMilliseconds(-1, { countdown: true }), '-00:00:01');
+  assert.equal(formatSignedTimerMilliseconds(999), '00:00:00');
 });
 
 test('countup은 경과 시간을 그대로 표시한다', () => {
