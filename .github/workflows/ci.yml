@@ -10,6 +10,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Upload temporary source snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: source-snapshot
+          path: |
+            src
+            tests
+            scripts
+            index.html
+            styles.css
+            service-worker.js
+            package.json
+            manifest.webmanifest
+            firebase-config.example.js
+            .github/workflows/ci.yml
+          include-hidden-files: true
+          retention-days: 1
       - uses: actions/setup-node@v4
         with:
           node-version: 22
