@@ -49,13 +49,27 @@ test('실행 중 대분류를 잠그고 멈춘 카운트다운 변경은 자동 
   assert.ok(source.includes('handleCountdownCategoryChange'));
   assert.ok(source.includes('await saveActiveTimer({ refreshData: false, rerender: false })'));
   assert.match(source, /timer\.mode !== 'countdown' \|\| timer\.running !== false/);
-  assert.match(source, /categoryLocked = Boolean\(timer && \(timer\.mode !== 'countdown' \|\| timer\.running !== false\)\)/);
-  assert.ok(source.includes('await refreshTimerData()'));
+  assert.match(source, /categoryLocked = Boolean\(state\.transitioning \|\| \(timer && \(timer\.mode !== 'countdown' \|\| timer\.running !== false\)\)\)/);
 });
 
-test('방식 변경은 활성 타이머가 없을 때만 허용한다', async () => {
+test('대분류 자동 저장은 중복 조작을 잠그고 로컬 기록으로 즉시 전환한다', async () => {
   const source = await read('src/persistent-timer-ui.js');
-  assert.match(source, /function handleModeChange\(button\)[\s\S]*state\.controller\?\.active[\s\S]*return/);
+  assert.ok(source.includes('transitioning: false'));
+  const start = source.indexOf('async function handleCountdownCategoryChange');
+  const end = source.indexOf("document.addEventListener('click'", start);
+  const transitionSource = source.slice(start, end);
+  assert.ok(transitionSource.includes('if (state.transitioning) return;'));
+  assert.ok(transitionSource.includes('state.transitioning = true;'));
+  assert.ok(transitionSource.includes('await restoreCachedTimerData()'));
+  assert.ok(transitionSource.includes('state.selectedCategoryId = nextCategoryId'));
+  assert.ok(transitionSource.includes('refreshTimerData().then'));
+  assert.ok(transitionSource.includes('state.transitioning = false;'));
+  assert.doesNotMatch(transitionSource, /await refreshTimerData\(\)/);
+});
+
+test('방식 변경은 활성 타이머가 없고 전환 중이 아닐 때만 허용한다', async () => {
+  const source = await read('src/persistent-timer-ui.js');
+  assert.match(source, /function handleModeChange\(button\)[\s\S]*state\.transitioning[\s\S]*state\.controller\?\.active[\s\S]*return/);
 });
 
 test('0 도달 알람과 선택창을 만들지 않는다', async () => {
