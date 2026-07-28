@@ -5,39 +5,11 @@ on:
   push:
     branches: [main]
 
-permissions:
-  contents: write
-
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.ref || github.ref }}
-          fetch-depth: 0
-      - name: Apply queued feature patch
-        if: github.event_name == 'pull_request' && (hashFiles('.agent/queued.patch') != '' || hashFiles('.agent/apply.py') != '')
-        run: |
-          commit_message="$(cat .agent/commit-message.txt)"
-          if test -f .agent/apply.py; then
-            python .agent/apply.py
-          else
-            git apply --whitespace=fix .agent/queued.patch
-          fi
-          rm -rf .agent
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -m "$commit_message"
-          git push origin HEAD:${{ github.event.pull_request.head.ref }}
-      - name: Upload temporary source snapshot
-        uses: actions/upload-artifact@v4
-        with:
-          name: source-snapshot
-          path: .
-          include-hidden-files: true
-          retention-days: 1
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -57,6 +29,7 @@ jobs:
           test -f _site/index.html
           test -f _site/styles.css
           test -f _site/service-worker.js
+          test -f _site/src/goal-domain.js
           test -f _site/src/recorded-period-domain.js
           test -f _site/src/recorded-period-navigation.js
           test -f _site/src/time-budget-domain.js
