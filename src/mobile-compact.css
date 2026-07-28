@@ -1,3 +1,47 @@
+.timer-mode-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  margin-bottom: 16px;
+  padding: 4px;
+  border-radius: 12px;
+  background: rgba(23, 59, 51, .08);
+}
+
+.timer-mode-tabs [data-timer-mode] {
+  min-width: 0;
+  min-height: 42px;
+  border: 0;
+  border-radius: 9px;
+  padding: 9px 12px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 800;
+  white-space: nowrap;
+  word-break: keep-all;
+  cursor: pointer;
+}
+
+.timer-mode-tabs [data-timer-mode][aria-selected="true"] {
+  background: #173b33;
+  color: #fff;
+}
+
+.timer-mode-tabs [data-timer-mode]:disabled {
+  cursor: not-allowed;
+  opacity: .55;
+}
+
+.timer-mode-tabs [data-timer-mode][aria-selected="true"]:disabled {
+  opacity: 1;
+}
+
+.timer.is-negative {
+  font-variant-numeric: tabular-nums;
+  font-weight: 900;
+}
+
 @media (max-width: 800px) {
   .topbar > div {
     min-width: 0;
@@ -12,6 +56,15 @@
 }
 
 @media (max-width: 600px) {
+  .timer-mode-tabs {
+    margin-bottom: 12px;
+  }
+
+  .timer-mode-tabs [data-timer-mode] {
+    min-height: 40px;
+    padding: 8px 6px;
+  }
+
   #history-view .entry {
     grid-template-columns: auto minmax(0, 1fr) auto;
     gap: 8px;

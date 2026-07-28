@@ -40,6 +40,39 @@ test('기존 실행 중 타이머를 일시정지 모델로 정규화한다', ()
   assert.equal(timer.running, true);
 });
 
+test('mode 없는 기존 타이머와 저수준 시작 호출은 countup이다', () => {
+  const legacy = normalizeTimerSnapshot({ userId: 'u1', categoryId: 'legacy', startedAt: 1_000 });
+  const created = createTimerSnapshot({ userId: 'u1', categoryId: 'reading', startedAt: 1_000 });
+  assert.equal(legacy.mode, 'countup');
+  assert.equal(created.mode, 'countup');
+});
+
+test('명시한 countdown 기준값을 저장한다', () => {
+  const timer = createTimerSnapshot({
+    userId: 'u1',
+    categoryId: 'reading',
+    startedAt: 1_000,
+    startedDate: '2026-07-28',
+    mode: 'countdown',
+    budgetDate: '2026-07-28',
+    initialBudgetMinutes: 120,
+    priorRecordedMinutes: 45,
+    initialRemainingMs: 75 * 60_000,
+  });
+  assert.equal(timer.mode, 'countdown');
+  assert.equal(timer.budgetDate, '2026-07-28');
+  assert.equal(timer.initialBudgetMinutes, 120);
+  assert.equal(timer.priorRecordedMinutes, 45);
+  assert.equal(timer.initialRemainingMs, 75 * 60_000);
+});
+
+test('카운트다운 기준값이 없으면 시작을 막는다', () => {
+  assert.throws(
+    () => createTimerSnapshot({ userId: 'u1', categoryId: 'reading', startedAt: 1_000, mode: 'countdown' }),
+    /카운트다운 시작 시간/,
+  );
+});
+
 test('실행 중에는 현재 구간을 더하고 일시정지 중에는 누적시간만 계산한다', () => {
   assert.equal(elapsedMilliseconds({ startedAt: 1_000, resumedAt: 2_000, accumulatedMs: 3_000, running: true }, 7_000), 8_000);
   assert.equal(elapsedMilliseconds({ startedAt: 1_000, accumulatedMs: 3_000, running: false }, 7_000), 3_000);
@@ -142,6 +175,27 @@ test('타이머를 멈춘 동안 시간이 증가하지 않고 계속 후 새 �
   assert.equal(controller.active.running, true);
   clock = 181_000;
   assert.equal(controller.elapsedSeconds(), 120);
+});
+
+test('카운트다운은 멈춘 동안 고정되고 계속 후 음수로 진행한다', async () => {
+  let clock = 1_000;
+  const controller = createPersistentTimerController({ remote: remoteStore(), storage: memoryStorage(), storageKey: 'timer', now: () => clock });
+  await controller.start({
+    userId: 'u1',
+    categoryId: 'reading',
+    mode: 'countdown',
+    initialBudgetMinutes: 2,
+    priorRecordedMinutes: 0,
+    initialRemainingMs: 120_000,
+  });
+  clock = 61_000;
+  assert.equal(controller.displayMilliseconds(), 60_000);
+  await controller.pause();
+  clock = 121_000;
+  assert.equal(controller.displayMilliseconds(), 60_000);
+  await controller.resume();
+  clock = 182_000;
+  assert.equal(controller.displayMilliseconds(), -1_000);
 });
 
 test('일시정지 원격 저장이 일시적 실패여도 로컬 일시정지를 유지한다', async () => {
