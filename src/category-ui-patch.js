@@ -1,4 +1,5 @@
 import { firebaseConfig } from '../firebase-config.js';
+import { categoryDisplayName, normalizeGoalType } from './goal-domain.js';
 
 const appModule = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js');
 const authModule = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js');
@@ -70,7 +71,7 @@ function renderChoiceModal(category, entryCount) {
   const modal = ensureModal();
   const content = modal.querySelector('#lifecycle-content');
   content.innerHTML = `
-    <h2 id="lifecycle-title">${escapeHtml(category.name)} 처리</h2>
+    <h2 id="lifecycle-title">${escapeHtml(categoryDisplayName(category))} 처리</h2>
     <p>이 대분류를 완전히 삭제하거나 보관할 수 있습니다.</p>
     <div class="warning-box">
       <strong>삭제</strong>: 대분류와 연결된 시간 기록 ${entryCount}건, 주간 예산 데이터를 완전히 삭제합니다.<br>
@@ -96,7 +97,7 @@ function renderDeleteWarning(category, entryCount) {
   content.innerHTML = `
     <h2 id="lifecycle-title">정말 완전히 삭제할까요?</h2>
     <div class="warning-box">
-      <strong>${escapeHtml(category.name)}</strong>에 연결된 시간 기록 <strong>${entryCount}건</strong>이 있습니다.<br>
+      <strong>${escapeHtml(categoryDisplayName(category))}</strong>에 연결된 시간 기록 <strong>${entryCount}건</strong>이 있습니다.<br>
       삭제하면 대분류, 시간 기록, 주간 예산 데이터가 모두 사라지며 복구할 수 없습니다.
     </div>
     <div class="lifecycle-modal-actions">
@@ -110,7 +111,7 @@ function renderDeleteWarning(category, entryCount) {
 async function openLifecycleModal(categoryId, name) {
   const user = auth.currentUser;
   if (!user) return alert('로그인이 필요합니다.');
-  selectedCategory = { id: categoryId, name };
+  selectedCategory = { id: categoryId, name, goalType: normalizeGoalType(document.querySelector(`.category-edit-row[data-id="${categoryId}"]`)?.dataset.goalType) };
   const modal = ensureModal();
   modal.querySelector('#lifecycle-content').innerHTML = '<h2>데이터를 확인하는 중…</h2>';
   modal.classList.remove('hidden');
@@ -185,7 +186,7 @@ async function permanentlyDeleteCategory(category, entryCount) {
     }
 
     closeModal();
-    alert(`${category.name} 대분류와 연결된 시간 기록 ${entryCount}건을 완전히 삭제했습니다.`);
+    alert(`${categoryDisplayName(category)} 대분류와 연결된 시간 기록 ${entryCount}건을 완전히 삭제했습니다.`);
     location.reload();
   } catch (error) {
     console.error(error);
@@ -207,6 +208,7 @@ async function restoreCategory(categoryId) {
       name: data.name,
       defaultBudgetMinutes: Number(data.defaultBudgetMinutes ?? data.budgetMinutes ?? 0),
       order: data.order || 999,
+      goalType: normalizeGoalType(data.goalType),
     });
     batch.delete(archivedRef);
     await batch.commit();
@@ -230,7 +232,7 @@ async function renderArchivedCategories() {
       card.id = 'archived-categories-card';
       card.className = 'card';
       card.style.marginTop = '18px';
-      card.innerHTML = `<div class="section-title"><div><h2>보관된 대분류</h2><p class="muted">과거 기록과 검색에는 유지되며 새 기록과 예산에서는 숨겨집니다.</p></div><span class="badge">${snapshot.size}개</span></div><div class="archived-list">${snapshot.docs.map((docSnapshot) => `<div class="archived-row"><div><strong>${escapeHtml(docSnapshot.data().name)}</strong><div class="muted">기본 ${Math.round(Number(docSnapshot.data().defaultBudgetMinutes ?? docSnapshot.data().budgetMinutes ?? 0) / 60 * 10) / 10}시간</div></div><button type="button" class="secondary-button archived-restore" data-id="${docSnapshot.id}">복원</button></div>`).join('')}</div>`;
+      card.innerHTML = `<div class="section-title"><div><h2>보관된 대분류</h2><p class="muted">과거 기록과 검색에는 유지되며 새 기록과 예산에서는 숨겨집니다.</p></div><span class="badge">${snapshot.size}개</span></div><div class="archived-list">${snapshot.docs.map((docSnapshot) => { const data = docSnapshot.data(); return `<div class="archived-row"><div><strong>${escapeHtml(categoryDisplayName(data))}</strong><div class="muted">기본 ${Math.round(Number(data.defaultBudgetMinutes ?? data.budgetMinutes ?? 0) / 60 * 10) / 10}시간</div></div><button type="button" class="secondary-button archived-restore" data-id="${docSnapshot.id}">복원</button></div>`; }).join('')}</div>`;
       card.querySelectorAll('.archived-restore').forEach((button) => {
         button.onclick = () => restoreCategory(button.dataset.id);
       });
@@ -258,17 +260,18 @@ async function patchHistoryView() {
       storeModule.getDocs(storeModule.collection(db, 'users', user.uid, 'categories')),
       storeModule.getDocs(storeModule.collection(db, 'users', user.uid, 'archivedCategories')),
     ]);
-    const activeNames = new Map(activeSnapshot.docs.map((docSnapshot) => [docSnapshot.id, docSnapshot.data().name]));
-    const archivedNames = new Map(archivedSnapshot.docs.map((docSnapshot) => [docSnapshot.id, docSnapshot.data().name]));
+    const activeCategories = new Map(activeSnapshot.docs.map((docSnapshot) => [docSnapshot.id, { id: docSnapshot.id, ...docSnapshot.data() }]));
+    const archivedCategories = new Map(archivedSnapshot.docs.map((docSnapshot) => [docSnapshot.id, { id: docSnapshot.id, ...docSnapshot.data() }]));
     const entries = entriesSnapshot.docs.map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }));
 
     view.dataset.archiveAware = 'true';
     view.innerHTML = `<div class="card"><div class="section-title"><h2>최근 기록</h2><span class="badge">${entries.length}건</span></div><div class="history-tools"><input id="history-category-search" type="search" placeholder="대분류 이름 또는 메모 검색" aria-label="기록 검색"></div><div id="archive-aware-entry-list">${entries.length ? entries.map((entry) => {
-      const activeName = activeNames.get(entry.categoryId);
-      const archivedName = archivedNames.get(entry.categoryId);
-      const name = activeName || archivedName || '삭제된 대분류';
+      const activeCategory = activeCategories.get(entry.categoryId);
+      const archivedCategory = archivedCategories.get(entry.categoryId);
+      const category = activeCategory || archivedCategory;
+      const name = category ? categoryDisplayName(category) : '삭제된 대분류';
       const searchable = `${name} ${entry.note || ''} ${entry.date || ''}`.toLowerCase();
-      return `<div class="entry archive-aware-entry" data-search="${escapeHtml(searchable)}"><strong>${escapeHtml(entry.date || '')}</strong><div><strong>${escapeHtml(name)}</strong>${archivedName ? '<span class="archived-badge">보관</span>' : ''}<div>${escapeHtml(entry.startTime || '')}–${escapeHtml(entry.endTime || '')} · ${Math.round(Number(entry.durationMinutes) || 0)}분</div>${entry.note ? `<p class="muted">${escapeHtml(entry.note)}</p>` : ''}</div><div class="entry-actions"><button class="text-button lifecycle-delete-entry" data-id="${entry.id}">삭제</button></div></div>`;
+      return `<div class="entry archive-aware-entry" data-search="${escapeHtml(searchable)}"><strong>${escapeHtml(entry.date || '')}</strong><div><strong>${escapeHtml(name)}</strong>${archivedCategory ? '<span class="archived-badge">보관</span>' : ''}<div>${escapeHtml(entry.startTime || '')}–${escapeHtml(entry.endTime || '')} · ${Math.round(Number(entry.durationMinutes) || 0)}분</div>${entry.note ? `<p class="muted">${escapeHtml(entry.note)}</p>` : ''}</div><div class="entry-actions"><button class="text-button lifecycle-delete-entry" data-id="${entry.id}">삭제</button></div></div>`;
     }).join('') : '<div class="empty-state"><h3>아직 기록이 없습니다.</h3><p>타이머 또는 수동 입력으로 첫 시간을 기록하세요.</p></div>'}</div></div>`;
 
     view.querySelector('#history-category-search')?.addEventListener('input', (event) => {

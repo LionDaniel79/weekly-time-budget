@@ -1,6 +1,6 @@
 import { cacheModuleGraph } from './src/service-worker-cache.js';
 
-const SHELL_CACHE = 'weekly-time-budget-shell-v8';
+const SHELL_CACHE = 'weekly-time-budget-shell-v9';
 const RUNTIME_CACHE = 'weekly-time-budget-runtime-v1';
 const APP_CACHE_PREFIX = 'weekly-time-budget-';
 const FIREBASE_VERSION_ROOT = 'https://www.gstatic.com/firebasejs/11.10.0/';
@@ -15,6 +15,7 @@ const SHELL_URLS = [
   './icons/apple-touch-icon.png',
   './icons/icon-192.png',
   './icons/icon-512.png',
+  './src/goal-domain.js',
   './src/domain.js',
   './src/manual-entry.js',
   './src/app.js',

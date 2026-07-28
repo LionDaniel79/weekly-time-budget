@@ -11,6 +11,7 @@ import {
   summarizeWeeklyBudgetPeriod,
 } from './domain.js';
 import { getExistingOfflineRuntime } from './offline-runtime.js';
+import { categoryDisplayName } from './goal-domain.js';
 
 const appModule = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js');
 const authModule = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js');
@@ -137,22 +138,25 @@ async function fetchServerStatistics(user) {
 
 function allCategories() {
   const map = new Map();
-  (state.data?.archivedCategories || []).forEach((category) => map.set(category.id, category));
-  (state.data?.activeCategories || []).forEach((category) => map.set(category.id, category));
+  (state.data?.archivedCategories || []).forEach((category) => map.set(category.id, { ...category, displayName: categoryDisplayName(category) }));
+  (state.data?.activeCategories || []).forEach((category) => map.set(category.id, { ...category, displayName: categoryDisplayName(category) }));
   return [...map.values()];
 }
 
 function overallAchievement(summary) {
-  if (summary.totalBudgetMinutes <= 0 && summary.totalActualMinutes > 0) return '예산 미설정';
-  return `${summary.percentage ?? 0}%`;
+  if (summary?.goalComplianceStatus === 'excluded') return '계산 제외';
+  return `${summary?.goalComplianceScore ?? 0}점`;
 }
 
 function differenceText(item) {
-  if (item.status === 'unbudgeted') {
-    return `예산 미설정 · ${formatMinutes(item.actualMinutes ?? item.totalActualMinutes)} 기록`;
+  if (!item?.hasBudget) return '달성률 계산 제외';
+  if (item.goalType === 'restraint') {
+    if (item.status === 'overage') return `${formatMinutes(item.differenceMinutes)} 초과 사용`;
+    if (item.status === 'exact') return '예산 소진';
+    return `${formatMinutes(Math.abs(item.differenceMinutes))} 남음`;
   }
   const difference = Number(item.differenceMinutes) || 0;
-  if (difference > 0) return `${formatMinutes(difference)} 초과`;
+  if (difference > 0) return `${formatMinutes(difference)} 초과 달성`;
   if (difference < 0) return `${formatMinutes(Math.abs(difference))} 남음`;
   return '예산과 일치';
 }
@@ -164,7 +168,7 @@ function summaryCards(summary, yearly = false) {
   return `<div class="statistics-summary">
     <article class="card"><p class="muted">기간 예산</p><div class="metric">${formatMinutes(summary.totalBudgetMinutes)}</div></article>
     <article class="card"><p class="muted">실제 기록</p><div class="metric">${formatMinutes(summary.totalActualMinutes)}</div></article>
-    <article class="card"><p class="muted">전체 달성률</p><div class="metric">${overallAchievement(summary)}</div><p class="stat-card-note">${differenceText({ ...summary, actualMinutes: summary.totalActualMinutes })}</p></article>
+    <article class="card"><p class="muted">목표 준수</p><div class="metric">${overallAchievement(summary)}</div><p class="stat-card-note">실제 기록과 예산 합계는 별도 시간 지표입니다.</p></article>
     <article class="card"><p class="muted">기록 일수</p><div class="metric">${summary.recordDays || 0}일</div></article>
     <article class="card"><p class="muted">기록한 날 기준 하루 평균</p><div class="metric">${formatMinutes(summary.dailyAverageMinutes)}</div></article>
     ${yearly ? `<article class="card"><p class="muted">기록이 있는 달 기준 월평균</p><div class="metric">${formatMinutes(monthlyAverage)}</div></article>` : ''}
@@ -181,7 +185,7 @@ function categoryTable(summary, title) {
       <td data-label="대분류"><strong>${escapeHtml(row.name)}</strong></td>
       <td data-label="기간 예산">${formatMinutes(row.budgetMinutes)}</td>
       <td data-label="실제 기록">${formatMinutes(row.actualMinutes)}</td>
-      <td data-label="달성률">${row.hasBudget ? `${row.percentage}%` : row.actualMinutes > 0 ? '예산 미설정' : '—'}</td>
+      <td data-label="달성률">${row.hasBudget ? `${row.percentage}%` : '달성률 계산 제외'}</td>
       <td data-label="차이">${differenceText(row)}</td>
     </tr>`).join('')}</tbody></table>` : '<div class="empty-statistics">해당 기간에 표시할 통계가 없습니다.</div>'}
   </div>`;
@@ -200,11 +204,11 @@ function comparisonTable(items, key, label, changeLabel) {
     return '<div class="card statistics-card"><div class="empty-statistics">비교할 기록이 없습니다.</div></div>';
   }
   return `<div class="card statistics-card"><div class="section-title"><h2>기간별 예산과 실제 기록</h2></div>
-    <table class="statistics-rescue-table"><thead><tr><th>기간</th><th>기간 예산</th><th>실제 기록</th><th>달성률</th><th>기록 일수</th><th>${changeLabel}</th></tr></thead><tbody>${items.map((item) => `<tr>
+    <table class="statistics-rescue-table"><thead><tr><th>기간</th><th>기간 예산</th><th>실제 기록</th><th>목표 준수</th><th>기록 일수</th><th>${changeLabel}</th></tr></thead><tbody>${items.map((item) => `<tr>
       <td data-label="기간"><strong>${label(item[key])}</strong></td>
       <td data-label="기간 예산">${formatMinutes(item.totalBudgetMinutes)}</td>
       <td data-label="실제 기록">${formatMinutes(item.totalActualMinutes)}</td>
-      <td data-label="달성률">${overallAchievement(item)}</td>
+      <td data-label="목표 준수">${overallAchievement(item)}</td>
       <td data-label="기록 일수">${item.recordDays || 0}일</td>
       <td data-label="${changeLabel}">${formatChange(item)}</td>
     </tr>`).join('')}</tbody></table>

@@ -9,6 +9,7 @@ import {
 import { formatSignedTimerMilliseconds } from './countdown-timer-domain.js';
 import { getOfflineRuntime } from './offline-runtime.js';
 import { showEntrySaveResult, showToast } from './app-toast.js';
+import { categoryDisplayName, normalizeGoalType } from './goal-domain.js';
 
 const appModule = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js');
 const authModule = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js');
@@ -235,9 +236,9 @@ function configureController() {
 
 function categoryOptions(selectedId) {
   const all = new Map([...state.archived, ...state.categories].map((item) => [item.id, item]));
-  const options = state.categories.map((category) => `<option value="${category.id}" ${category.id === selectedId ? 'selected' : ''}>${escapeHtml(category.name)}</option>`);
+  const options = state.categories.map((category) => `<option value="${category.id}" ${category.id === selectedId ? 'selected' : ''}>${escapeHtml(categoryDisplayName(category))}</option>`);
   if (selectedId && !state.categories.some((category) => category.id === selectedId)) {
-    options.unshift(`<option value="${selectedId}" selected>${escapeHtml(all.get(selectedId)?.name || '보관된 대분류')}</option>`);
+    options.unshift(`<option value="${selectedId}" selected>${escapeHtml(all.get(selectedId) ? categoryDisplayName(all.get(selectedId)) : '보관된 대분류')}</option>`);
   }
   return options.join('');
 }
@@ -314,6 +315,9 @@ function renderTimer() {
     ? '예산 계산 중'
     : formatSignedTimerMilliseconds(displayMs, { countdown: mode === 'countdown' });
   const isNegative = !isCalculating && displayMs < 0;
+  const activeCategory = knownCategory(timer?.categoryId || selectedId);
+  const goalType = normalizeGoalType(activeCategory?.goalType);
+  const isRestraintOverage = mode === 'countdown' && goalType === 'restraint' && isNegative;
   const categoryLocked = Boolean(state.transitioning || (timer && (timer.mode !== 'countdown' || timer.running !== false)));
   const pauseButton = timer
     ? `<button id="timer-pause" class="secondary-button" ${state.transitioning ? 'disabled aria-disabled="true"' : ''}>${timer.running !== false ? '멈춤' : '계속'}</button>`
@@ -333,7 +337,7 @@ function renderTimer() {
       <label>대분류<select id="timer-category" ${categoryLocked ? 'disabled' : ''}><option value="">선택하세요</option>${categoryOptions(selectedId)}</select></label>
       <label>메모(선택)<textarea id="timer-note" rows="2" ${timer || state.transitioning ? 'disabled' : ''}>${escapeHtml(timer?.note || '')}</textarea></label>
     </div>
-    <div id="timer-display" class="timer${isNegative ? ' is-negative' : ''}" aria-live="polite">${displayText}</div>
+    <div id="timer-display" class="timer${isNegative ? ' is-negative' : ''}${isRestraintOverage ? ' is-restraint-overage' : ''}" aria-live="polite">${displayText}</div><p id="timer-goal-note" class="timer-goal-note restraint-overage-copy${isRestraintOverage ? '' : ' hidden'}">초과 사용시간</p>
     <div class="actions">${pauseButton}<button id="timer-action" class="primary-button" ${startDisabled ? 'disabled aria-disabled="true"' : ''}>${timer ? saveLabel : '타이머 시작'}</button>${timer ? `<button id="timer-cancel" class="secondary-button" ${cancelDisabled}>취소</button>` : ''}</div>
   </div>`;
   startDisplay();
@@ -359,7 +363,14 @@ function updateDisplay() {
   if (!display || !active) return;
   const value = state.controller.displayMilliseconds();
   display.textContent = formatSignedTimerMilliseconds(value, { countdown: active.mode === 'countdown' });
-  display.classList.toggle('is-negative', value < 0);
+  const isNegative = value < 0;
+  const category = knownCategory(active.categoryId);
+  const isRestraintOverage = active.mode === 'countdown'
+    && normalizeGoalType(category?.goalType) === 'restraint'
+    && isNegative;
+  display.classList.toggle('is-negative', isNegative);
+  display.classList.toggle('is-restraint-overage', isRestraintOverage);
+  document.querySelector('#timer-goal-note')?.classList.toggle('hidden', !isRestraintOverage);
 }
 
 async function saveActiveTimer({ refreshData = true, rerender = true } = {}) {
@@ -371,6 +382,7 @@ async function saveActiveTimer({ refreshData = true, rerender = true } = {}) {
     startTime: new Date(timer.startedAt).toTimeString().slice(0, 5),
     endTime: new Date(endedAt).toTimeString().slice(0, 5),
     source: 'timer',
+    goalType: normalizeGoalType(knownCategory(timer.categoryId)?.goalType),
     timerMode: timer.mode,
   }));
   stopDisplay();

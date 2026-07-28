@@ -24,6 +24,11 @@ import {
   mergeUiState,
   normalizeUiState,
 } from './ui-session-state.js';
+import {
+  calculateGoalComplianceScore,
+  categoryDisplayName,
+  normalizeGoalType,
+} from './goal-domain.js';
 
 const configured = !Object.values(firebaseConfig).some((value) => String(value).includes('REPLACE_ME'));
 const views = ['dashboard', 'record', 'budget', 'history', 'statistics', 'categories'];
@@ -77,7 +82,7 @@ const categoriesForSummary = () => state.categories.map((category) => ({
   budgetMinutes: effectiveBudgetMinutes(category),
 }));
 const optionHtml = (selectedId = '') => state.categories
-  .map((category) => `<option value="${category.id}" ${category.id === selectedId ? 'selected' : ''}>${escapeHtml(category.name)}</option>`)
+  .map((category) => `<option value="${category.id}" ${category.id === selectedId ? 'selected' : ''}>${escapeHtml(categoryDisplayName(category))}</option>`)
   .join('');
 
 function plainEntry(doc) {
@@ -219,14 +224,18 @@ async function loadData() {
   }
 }
 
-async function saveCategory({ id, name, defaultBudgetMinutes: budget }) {
+async function saveCategory({ id, name, defaultBudgetMinutes: budget, goalType }) {
   const trimmedName = String(name || '').trim();
   if (!trimmedName) throw new Error('대분류 이름을 입력하세요.');
   const existing = state.categories.find((category) => category.id === id);
-  const payload = { name: trimmedName, defaultBudgetMinutes: Number(budget) || 0, order: existing?.order || state.categories.length + 1 };
+  const basePayload = {
+    name: trimmedName,
+    defaultBudgetMinutes: Number(budget) || 0,
+    order: existing?.order || state.categories.length + 1,
+  };
   const collectionRef = firebase.collection(db, 'users', state.user.uid, 'categories');
-  if (id) await firebase.setDoc(firebase.doc(collectionRef, id), payload, { merge: true });
-  else await firebase.addDoc(collectionRef, payload);
+  if (id) await firebase.setDoc(firebase.doc(collectionRef, id), basePayload, { merge: true });
+  else await firebase.addDoc(collectionRef, { ...basePayload, goalType: normalizeGoalType(goalType) });
   await loadData(); renderAll();
 }
 
@@ -246,10 +255,16 @@ async function deleteCategory(id) {
 
 async function saveEntry(entry, { onLocalSaved } = {}) {
   if (!state.offlineRuntime) throw new Error('오프라인 저장소가 준비되지 않았습니다.');
+  const category = state.categories.find((item) => item.id === entry.categoryId);
+  const normalizedEntry = {
+    ...entry,
+    goalType: normalizeGoalType(entry.goalType ?? category?.goalType),
+    createdAt: Date.now(),
+  };
   try {
     const result = await state.offlineRuntime.repository.saveEntryLocalFirst({
       userId: state.user.uid,
-      entry: { ...entry, createdAt: Date.now() },
+      entry: normalizedEntry,
       onLocalSaved: async (record) => {
         await refreshMergedEntries();
         renderDashboard(); renderHistory();
@@ -308,18 +323,43 @@ function renderAll() {
   renderDashboard(); renderRecord(); renderBudget(); renderHistory(); renderCategories();
 }
 
+function legacyGoalProgressHtml(item) {
+  const progress = item.progress || { mode: 'growth', fillPercentage: 0 };
+  const className = progress.mode === 'remaining'
+    ? 'restraint-progress restraint-remaining'
+    : progress.mode === 'overage'
+      ? 'restraint-progress restraint-overage'
+      : progress.mode === 'exact' || progress.mode === 'excluded'
+        ? 'restraint-progress restraint-exact'
+        : 'growth-progress';
+  return `<div class="progress ${className}"><span style="width:${progress.fillPercentage}%"></span></div>`;
+}
+
+function legacyGoalDetail(item) {
+  if (!item.hasBudget) return '달성률 계산 제외';
+  if (item.goalType === 'restraint') {
+    if (item.status === 'overage') return `${formatMinutes(item.differenceMinutes)} 초과 사용`;
+    if (item.status === 'exact') return '예산 소진';
+    return `${formatMinutes(Math.abs(item.differenceMinutes))} 남음`;
+  }
+  if (item.differenceMinutes > 0) return `${formatMinutes(item.differenceMinutes)} 초과 달성`;
+  if (item.differenceMinutes < 0) return `${formatMinutes(Math.abs(item.differenceMinutes))} 남음`;
+  return '예산과 일치';
+}
+
 function renderDashboard() {
   const range = getWeekRange();
   const summary = summarizeCategories(categoriesForSummary(), state.entries, range.start, range.end);
   const totalBudget = summary.reduce((sum, item) => sum + item.budgetMinutes, 0);
   const totalActual = summary.reduce((sum, item) => sum + item.actualMinutes, 0);
-  const totalRate = totalBudget ? Math.round((totalActual / totalBudget) * 100) : 0;
+  const compliance = calculateGoalComplianceScore(summary);
+  const scoreText = compliance.status === 'excluded' ? '계산 제외' : `${compliance.score}점`;
   $('#dashboard-view').innerHTML = `<div class="grid grid-3">
-    <article class="card"><p class="muted">전체 달성률</p><div class="metric">${totalRate}%</div><div class="progress"><span style="width:${Math.min(totalRate, 100)}%"></span></div></article>
+    <article class="card"><p class="muted">목표 준수</p><div class="metric">${scoreText}</div></article>
     <article class="card"><p class="muted">이번 주 예산</p><div class="metric">${formatMinutes(totalBudget)}</div><p class="muted">월요일부터 주일까지</p></article>
     <article class="card"><p class="muted">실제 기록</p><div class="metric">${formatMinutes(totalActual)}</div><p class="muted">월요일부터 주일까지 모두 포함</p></article>
   </div><div class="card" style="margin-top:18px"><div class="section-title"><h2>대분류별 달성률</h2><span class="badge">${summary.length}개 분야</span></div>
-  ${summary.length ? summary.map((item) => `<div class="budget-row"><div><strong>${escapeHtml(item.name)}</strong><div class="progress"><span style="width:${Math.min(item.percentage, 100)}%"></span></div></div><div>${formatMinutes(item.actualMinutes)} / ${formatMinutes(item.budgetMinutes)}</div><strong>${item.percentage}%</strong><span class="muted">${item.status === 'exceeded' ? `${formatMinutes(item.differenceMinutes)} 초과` : `${formatMinutes(item.differenceMinutes)} 남음`}</span></div>`).join('') : $('#empty-template').innerHTML}</div>`;
+  ${summary.length ? summary.map((item) => `<div class="budget-row"><div><strong>${escapeHtml(item.name)}</strong>${legacyGoalProgressHtml(item)}</div><div>${formatMinutes(item.actualMinutes)} / ${formatMinutes(item.budgetMinutes)}</div><strong>${item.hasBudget ? `${item.percentage}%` : '—'}</strong><span class="muted">${legacyGoalDetail(item)}</span></div>`).join('') : $('#empty-template').innerHTML}</div>`;
 }
 
 function renderRecord() {
@@ -410,20 +450,40 @@ function bindManual() {
 }
 
 function renderBudget() {
-  $('#budget-view').innerHTML = `<div class="card"><div class="section-title"><div><h2>이번 주 시간 예산</h2><p class="muted">이번 주에만 적용됩니다. 다음 주에는 대분류의 기본 예산이 다시 표시됩니다.</p></div></div>${state.categories.length ? `<form id="budget-bulk-form"><div class="category-list">${state.categories.map((category) => `<div class="category-item budget-edit-row" data-id="${category.id}"><div><strong>${escapeHtml(category.name)}</strong><div class="muted">기본 ${formatMinutes(defaultBudgetMinutes(category))}</div></div><input type="number" name="hours" min="0" step="0.5" value="${effectiveBudgetMinutes(category) / 60}" aria-label="${escapeHtml(category.name)} 이번 주 예산 시간"></div>`).join('')}</div><div class="bulk-save-actions"><button class="primary-button" type="submit">이번 주 예산 저장</button></div></form>` : $('#empty-template').innerHTML}</div>`;
+  $('#budget-view').innerHTML = `<div class="card"><div class="section-title"><div><h2>이번 주 시간 예산</h2><p class="muted">이번 주에만 적용됩니다. 다음 주에는 대분류의 기본 예산이 다시 표시됩니다.</p></div></div>${state.categories.length ? `<form id="budget-bulk-form"><div class="category-list">${state.categories.map((category) => `<div class="category-item budget-edit-row" data-id="${category.id}"><div><strong>${escapeHtml(categoryDisplayName(category))}</strong><div class="muted">기본 ${formatMinutes(defaultBudgetMinutes(category))}</div></div><input type="number" name="hours" min="0" step="0.5" value="${effectiveBudgetMinutes(category) / 60}" aria-label="${escapeHtml(categoryDisplayName(category))} 이번 주 예산 시간"></div>`).join('')}</div><div class="bulk-save-actions"><button class="primary-button" type="submit">이번 주 예산 저장</button></div></form>` : $('#empty-template').innerHTML}</div>`;
   if ($('#budget-bulk-form')) $('#budget-bulk-form').onsubmit = async (event) => { event.preventDefault(); const budgets = {}; document.querySelectorAll('.budget-edit-row').forEach((row) => { budgets[row.dataset.id] = Number(row.querySelector('[name="hours"]').value) * 60; }); await saveWeeklyBudget(budgets); alert('이번 주 예산을 저장했습니다.'); };
 }
 
 function renderHistory() {
-  $('#history-view').innerHTML = `<div class="card"><div class="section-title"><h2>최근 기록</h2><span class="badge">${state.entries.length}건</span></div>${state.entries.length ? state.entries.map((entry) => { const category = state.categories.find((item) => item.id === entry.categoryId); const timeDescription = manualEntryTimeLabel(entry, formatMinutes); const pending = entry.syncStatus === 'pending'; const failed = entry.syncStatus === 'failed'; return `<div class="entry"><strong>${entry.date}</strong><div><strong>${escapeHtml(category?.name || '삭제된 대분류')}</strong><div>${escapeHtml(timeDescription)}</div>${entry.note ? `<p class="muted">${escapeHtml(entry.note)}</p>` : ''}${pending ? '<span class="sync-status pending">동기화 대기</span>' : ''}${failed ? `<span class="sync-status failed">동기화 실패</span><button class="sync-retry" data-id="${entry.id}" type="button">다시 시도</button>` : ''}</div><div class="entry-actions"><button class="text-button delete-entry" data-id="${entry.id}">삭제</button></div></div>`; }).join('') : '<div class="empty-state"><h3>아직 기록이 없습니다.</h3><p>타이머 또는 수동 입력으로 첫 시간을 기록하세요.</p></div>'}</div>`;
+  $('#history-view').innerHTML = `<div class="card"><div class="section-title"><h2>최근 기록</h2><span class="badge">${state.entries.length}건</span></div>${state.entries.length ? state.entries.map((entry) => { const category = state.categories.find((item) => item.id === entry.categoryId); const timeDescription = manualEntryTimeLabel(entry, formatMinutes); const pending = entry.syncStatus === 'pending'; const failed = entry.syncStatus === 'failed'; return `<div class="entry"><strong>${entry.date}</strong><div><strong>${escapeHtml(category ? categoryDisplayName(category) : '삭제된 대분류')}</strong><div>${escapeHtml(timeDescription)}</div>${entry.note ? `<p class="muted">${escapeHtml(entry.note)}</p>` : ''}${pending ? '<span class="sync-status pending">동기화 대기</span>' : ''}${failed ? `<span class="sync-status failed">동기화 실패</span><button class="sync-retry" data-id="${entry.id}" type="button">다시 시도</button>` : ''}</div><div class="entry-actions"><button class="text-button delete-entry" data-id="${entry.id}">삭제</button></div></div>`; }).join('') : '<div class="empty-state"><h3>아직 기록이 없습니다.</h3><p>타이머 또는 수동 입력으로 첫 시간을 기록하세요.</p></div>'}</div>`;
   document.querySelectorAll('.delete-entry').forEach((button) => { button.onclick = () => deleteEntry(button.dataset.id); });
   document.querySelectorAll('.sync-retry').forEach((button) => { button.onclick = () => retryEntry(button.dataset.id).catch((error) => showToast({ type: 'error', title: '동기화하지 못했습니다.', message: error.message })); });
 }
 
 function renderCategories() {
-  $('#categories-view').innerHTML = `<div class="grid grid-2"><div class="card"><h2>대분류 추가</h2><form id="category-add" class="form-grid"><label>이름<input name="name" placeholder="예: 논문" required maxlength="30"></label><label>기본 주간 예산(시간)<input name="hours" type="number" min="0" step="0.5" value="0"></label><button class="primary-button">추가</button></form></div><div class="card"><h2>등록된 대분류</h2>${state.categories.length ? `<div class="category-list">${state.categories.map((category) => `<form class="category-item category-edit-row" data-id="${category.id}"><input name="name" value="${escapeHtml(category.name)}" required aria-label="대분류 이름"><input name="hours" type="number" min="0" step="0.5" value="${defaultBudgetMinutes(category) / 60}" aria-label="${escapeHtml(category.name)} 기본 예산 시간"><div class="category-row-actions"><button class="secondary-button" type="submit">수정</button><button class="danger-button category-delete" type="button">삭제</button></div></form>`).join('')}</div>` : $('#empty-template').innerHTML}</div></div>`;
-  $('#category-add').onsubmit = async (event) => { event.preventDefault(); const data = new FormData(event.currentTarget); await saveCategory({ name: data.get('name'), defaultBudgetMinutes: Number(data.get('hours')) * 60 }); $('#category-add input[name="name"]')?.focus(); };
-  document.querySelectorAll('.category-edit-row').forEach((form) => { form.onsubmit = async (event) => { event.preventDefault(); await saveCategory({ id: form.dataset.id, name: form.querySelector('[name="name"]').value, defaultBudgetMinutes: Number(form.querySelector('[name="hours"]').value) * 60 }); alert('대분류를 수정했습니다.'); }; form.querySelector('.category-delete').onclick = () => deleteCategory(form.dataset.id); });
+  $('#categories-view').innerHTML = `<div class="grid grid-2"><div class="card"><h2>대분류 추가</h2><form id="category-add" class="form-grid"><label>이름<input name="name" placeholder="예: 논문" required maxlength="30"></label><label>기본 주간 예산(시간)<input name="hours" type="number" min="0" step="0.5" value="0"></label><label class="restraint-goal-option"><input name="restraint" type="checkbox"><span><strong>절제 목표</strong><small>설정한 예산시간 이하로 사용하는 것이 목표입니다.</small></span></label><button class="primary-button">추가</button></form></div><div class="card"><h2>등록된 대분류</h2>${state.categories.length ? `<div class="category-list">${state.categories.map((category) => `<form class="category-item category-edit-row" data-id="${category.id}" data-goal-type="${normalizeGoalType(category.goalType)}"><span class="category-name-edit"><input name="name" value="${escapeHtml(category.name)}" required aria-label="대분류 이름">${normalizeGoalType(category.goalType) === 'restraint' ? '<span class="goal-type-label">(절제)</span>' : ''}</span><input name="hours" type="number" min="0" step="0.5" value="${defaultBudgetMinutes(category) / 60}" aria-label="${escapeHtml(categoryDisplayName(category))} 기본 예산 시간"><div class="category-row-actions"><button class="secondary-button" type="submit">수정</button><button class="danger-button category-delete" type="button">삭제</button></div></form>`).join('')}</div>` : $('#empty-template').innerHTML}</div></div>`;
+  $('#category-add').onsubmit = async (event) => {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    await saveCategory({
+      name: data.get('name'),
+      defaultBudgetMinutes: Number(data.get('hours')) * 60,
+      goalType: data.get('restraint') === 'on' ? 'restraint' : 'growth',
+    });
+    $('#category-add input[name="name"]')?.focus();
+  };
+  document.querySelectorAll('.category-edit-row').forEach((form) => {
+    form.onsubmit = async (event) => {
+      event.preventDefault();
+      await saveCategory({
+        id: form.dataset.id,
+        name: form.querySelector('[name="name"]').value,
+        defaultBudgetMinutes: Number(form.querySelector('[name="hours"]').value) * 60,
+      });
+      alert('대분류를 수정했습니다.');
+    };
+    form.querySelector('.category-delete').onclick = () => deleteCategory(form.dataset.id);
+  });
 }
 
 function formatClock(seconds) { const h = Math.floor(seconds / 3600); const m = Math.floor((seconds % 3600) / 60); const s = seconds % 60; return [h, m, s].map((value) => String(value).padStart(2, '0')).join(':'); }
