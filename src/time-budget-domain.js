@@ -3,6 +3,7 @@ import {
   nextRecordedPeriodOrCurrent,
   previousRecordedPeriod,
 } from './recorded-period-domain.js';
+import { buildCountdownBaseline } from './countdown-timer-domain.js';
 
 export const DAY_KEYS = Object.freeze(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']);
 
@@ -125,6 +126,30 @@ export function resolveDailyBudget({
     effectiveDayWeights(weekDocument, defaultDayWeights),
   );
   return { minutes: distributed[dateKeyToDayKey(date)] || 0, source: 'day-weight' };
+}
+
+export function resolveCountdownBudgetBaseline({
+  category,
+  date,
+  entries = [],
+  weekDocument,
+  dailyDocument,
+  defaultDayWeights = EQUAL_DAY_WEIGHTS,
+}) {
+  const budget = resolveDailyBudget({
+    category,
+    date,
+    weekDocument,
+    dailyDocument,
+    defaultDayWeights,
+  });
+  const recordedMinutes = entries
+    .filter((entry) => entry.date === date && entry.categoryId === category.id)
+    .reduce((sum, entry) => sum + Math.max(0, Number(entry.durationMinutes) || 0), 0);
+  return {
+    ...buildCountdownBaseline({ budgetMinutes: budget.minutes, recordedMinutes }),
+    budgetSource: budget.source,
+  };
 }
 
 export function recordedDateKeys(entries, today) {
