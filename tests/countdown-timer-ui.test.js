@@ -19,6 +19,16 @@ test('새 화면 기본값은 countdown이고 시작할 때 mode를 명시한다
   assert.ok(source.includes('mode: state.selectedMode'));
 });
 
+test('저장이나 취소로 종료한 뒤 새 타이머 기본값은 countdown이다', async () => {
+  const source = await read('src/persistent-timer-ui.js');
+  const saveStart = source.indexOf('async function saveActiveTimer');
+  const saveEnd = source.indexOf('async function handleAction', saveStart);
+  const cancelStart = source.indexOf('async function handleCancel');
+  const cancelEnd = source.indexOf('function handleModeChange', cancelStart);
+  assert.ok(source.slice(saveStart, saveEnd).includes("state.selectedMode = 'countdown';"));
+  assert.ok(source.slice(cancelStart, cancelEnd).includes("state.selectedMode = 'countdown';"));
+});
+
 test('카운트다운은 오늘 예산과 기록 기준값을 불러온다', async () => {
   const source = await read('src/persistent-timer-ui.js');
   assert.ok(source.includes('resolveCountdownBudgetBaseline'));
