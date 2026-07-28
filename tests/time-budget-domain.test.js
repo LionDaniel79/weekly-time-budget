@@ -99,7 +99,7 @@ test('카운트다운 기준값은 예산 초과를 음수로 보존한다', () 
     date: '2026-07-28',
     entries: [{ categoryId: 'reading', date: '2026-07-28', durationMinutes: 145 }],
     weekDocument: null,
-    dailyDocument: null,
+    dailyDocument: { overrides: { reading: 120 } },
   });
   assert.equal(result.initialBudgetMinutes, 120);
   assert.equal(result.priorRecordedMinutes, 145);
