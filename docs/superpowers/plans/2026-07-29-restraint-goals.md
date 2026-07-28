@@ -4,43 +4,44 @@
 
 **Goal:** 기존 성장 목표를 그대로 보존하면서, 새 대분류에만 선택 가능한 절제 목표와 예산시간 가중 `목표 준수` 점수를 추가한다.
 
-**Architecture:** 목표 방식·달성률·전체 반영 점수·진행 막대 계산을 새 순수 도메인 모듈로 분리한다. 기존 요약 도메인은 이 모듈을 호출해 성장·절제를 동일한 결과 모델로 반환하고, 대시보드·통계·시간예산·기록·타이머 UI는 공통 결과만 렌더링한다. 대분류의 `goalType`은 생성 시 한 번 저장하며 수정 경로에서는 절대 덮어쓰지 않는다.
+**Architecture:** 목표 방식·달성률·전체 반영 점수·진행 막대 계산을 `src/goal-domain.js`의 순수 함수로 분리한다. 기존 일간·주간·월간·연간 요약은 이 모듈을 호출하여 동일한 결과 모델을 반환하고, 온라인·오프라인 UI는 그 결과만 렌더링한다. `goalType`은 대분류 생성 시 한 번 저장하며 수정·일괄 수정·보관·복원 경로에서는 값을 보존한다.
 
 **Tech Stack:** ES modules, Firebase 11.10.0 Auth/Firestore, IndexedDB local-first runtime, Node.js `node:test`, GitHub Pages PWA.
 
 ## Global Constraints
 
 - 목표 방식 값은 `growth | restraint`이다.
-- 기존 대분류와 잘못된 `goalType` 값은 모두 `growth`로 정규화한다.
-- `절제 목표` 체크박스는 `대분류 추가`에만 표시한다.
-- 생성된 목표 방식은 이후 변경할 수 없다.
-- 성장 목표 이름에는 접미사를 붙이지 않고, 절제 목표만 `대분류 이름 (절제)`로 표시한다.
+- 기존 대분류, 기존 기록, 잘못된 값은 모두 `growth`로 정규화한다.
+- `절제 목표` 체크박스는 `대분류 추가` 폼에만 표시한다.
+- 대분류 수정 화면에는 목표 방식 입력을 제공하지 않는다.
+- 생성한 목표 방식은 보관·복원 후에도 바뀌지 않는다.
+- 성장 이름은 그대로, 절제 이름은 렌더링 시에만 `이름 (절제)`로 표시한다.
 - 절제 예산 `B > 0`, 실제 `A <= B`: `round(200 - A / B * 100)`.
 - 절제 예산 `B > 0`, 실제 `A > B`: `-max(1, round((A - B) / B * 100))`.
-- 예산 0은 성장·절제 모두 달성률과 목표 준수 점수에서 제외한다.
+- 예산 0은 성장·절제 모두 달성률과 목표 준수 계산에서 제외한다.
 - 전체 반영 점수는 개별 달성률을 `0..100`으로 제한한다. 절제 음수는 0점이다.
 - 전체 목표 준수는 예산시간 가중 평균이며 최종 범위는 `0..100점`이다.
-- 실제 기록 합계와 예산 합계는 기존처럼 양수 시간의 단순 합계다.
-- 절제 막대는 예산 안에서 파란 잔여량이 100%에서 감소하고, 초과 시 파란색을 제거한 뒤 빨간 초과량이 왼쪽부터 증가한다.
-- 모든 새 타이머·수동 입력·자동 저장 기록에 정규화된 `goalType`을 저장한다.
-- 카운트다운·카운트업·오프라인·교차 기기 복구 동작을 변경하지 않는다.
+- 실제 기록 합계와 예산 합계는 목표 방식과 관계없이 양수 시간의 단순 합계다.
+- 절제 막대는 예산 안에서 파란 잔여량이 100%에서 감소하고, 정확히 소진하면 빈 막대가 되며, 초과 시 빨간 초과량이 왼쪽부터 증가한다.
+- 모든 새 수동 입력·타이머·자동 저장 기록에 정규화된 `goalType`을 저장한다.
+- 카운트다운·카운트업·일시정지·오프라인·교차 기기 복구 동작을 변경하지 않는다.
 - 서비스 워커 셸 캐시는 `weekly-time-budget-shell-v9`로 올린다.
 - 새 외부 의존성을 추가하지 않는다.
 
----
-
 ## File Structure
 
-- Create `src/goal-domain.js`: 목표 방식 정규화, 이름 표시, 개별 달성률, 전체 반영 점수, 목표 준수 가중 평균, 진행 막대 계산.
-- Modify `src/domain.js`: 주간·월간·연간 요약에 목표 방식과 목표 준수 점수를 통합.
-- Modify `src/time-budget-domain.js`: 일간 요약에도 동일한 목표 계산 결과를 사용.
-- Modify `src/app.js`: 대분류 추가·수정 불변성, 공통 이름, 수동 기록 메타데이터, 기본 화면의 목표 준수 표시.
-- Modify `src/category-bulk-editor.js`: 일괄 수정에서 `goalType` 보존, 절제 행 표시 보조.
-- Modify `src/time-budget-ui.js`: 일간·주간 예산과 대시보드에서 공통 이름·점수·절제 막대 렌더링.
-- Modify `src/statistics-ui.js`: 통계의 목표 준수 점수, 절제 막대, 상태 문구, 공통 이름.
-- Modify `src/persistent-timer-ui.js`: 타이머 선택 이름, 새 타이머 기록 `goalType`, 절제 카운트다운 음수 경고색.
-- Modify `src/mobile-compact.css` and `styles.css`: 절제 체크·배지·파란 잔여 막대·빨간 초과 막대 스타일.
-- Modify `service-worker.js`: 새 도메인 모듈 캐시 및 v9 갱신.
+- Create `src/goal-domain.js`: 목표 정규화, 표시 이름, 개별 달성률, 전체 반영 점수, 목표 준수, 진행 막대.
+- Modify `src/domain.js`: 주간·월간·연간 요약에 목표 결과 통합.
+- Modify `src/time-budget-domain.js`: 일간 요약에 목표 결과 통합.
+- Modify `src/app.js`: 생성 전용 절제 선택, 수정 불변성, 공통 이름, 수동 기록 메타데이터, 초기 대시보드.
+- Modify `src/category-bulk-editor.js`: 일괄 수정에서 목표 방식 보존.
+- Modify `src/category-ui-patch.js`: 보관·복원 시 `goalType` 보존, 보관 목록·기록 내역 이름 표시.
+- Modify `src/time-budget-ui.js`: 시간예산과 일간·주간 대시보드.
+- Modify `src/statistics-ui.js`: 온라인 통계.
+- Modify `src/statistics-offline-rescue.js`: 기기 캐시 기반 오프라인 통계.
+- Modify `src/persistent-timer-ui.js`: 타이머 이름, 기록 스냅샷, 절제 초과 표시.
+- Modify `styles.css`, `src/mobile-compact.css`: 체크박스·배지·파란 잔여·빨간 초과 스타일.
+- Modify `service-worker.js`: 새 모듈과 v9 앱 셸.
 
 ---
 
@@ -70,32 +71,25 @@ import {
 
 test('기존 목표 방식은 성장으로 정규화한다', () => {
   assert.equal(normalizeGoalType(undefined), 'growth');
-  assert.equal(normalizeGoalType('other'), 'growth');
+  assert.equal(normalizeGoalType('invalid'), 'growth');
   assert.equal(normalizeGoalType('restraint'), 'restraint');
 });
 
-test('절제 목표만 이름에 접미사를 붙인다', () => {
+test('절제 목표만 이름에 접미사를 한 번 붙인다', () => {
   assert.equal(categoryDisplayName({ name: '기도' }), '기도');
   assert.equal(categoryDisplayName({ name: '스마트폰', goalType: 'restraint' }), '스마트폰 (절제)');
   assert.equal(categoryDisplayName({ name: '스마트폰 (절제)', goalType: 'restraint' }), '스마트폰 (절제)');
 });
 
-test('절제 3시간 예산은 0·1·2·3·4·5·6시간을 엄격하게 계산한다', () => {
-  const percentages = [0, 60, 120, 180, 240, 300, 360].map((actualMinutes) => (
-    calculateGoalAchievement({ goalType: 'restraint', budgetMinutes: 180, actualMinutes }).percentage
-  ));
-  assert.deepEqual(percentages, [200, 167, 133, 100, -33, -67, -100]);
+test('절제 3시간 예산은 엄격한 달성률을 계산한다', () => {
+  const actuals = [0, 60, 120, 180, 240, 300, 360];
+  assert.deepEqual(actuals.map((actualMinutes) => calculateGoalAchievement({
+    goalType: 'restraint', budgetMinutes: 180, actualMinutes,
+  }).percentage), [200, 167, 133, 100, -33, -67, -100]);
 });
 
-test('절제 목표는 조금이라도 넘으면 즉시 음수다', () => {
+test('절제는 아주 조금만 넘겨도 즉시 음수다', () => {
   assert.equal(calculateGoalAchievement({ goalType: 'restraint', budgetMinutes: 180, actualMinutes: 180.01 }).percentage, -1);
-});
-
-test('전체 반영 점수는 100 초과를 제한하고 음수를 0으로 만든다', () => {
-  assert.equal(calculateGoalContribution({ hasBudget: true, percentage: 167 }), 100);
-  assert.equal(calculateGoalContribution({ hasBudget: true, percentage: 50 }), 50);
-  assert.equal(calculateGoalContribution({ hasBudget: true, percentage: -33 }), 0);
-  assert.equal(calculateGoalContribution({ hasBudget: false, percentage: null }), null);
 });
 ```
 
@@ -108,11 +102,7 @@ Expected: FAIL with `ERR_MODULE_NOT_FOUND`.
 - [ ] **Step 3: 최소 구현 작성**
 
 ```js
-export const GOAL_TYPES = Object.freeze({
-  GROWTH: 'growth',
-  RESTRAINT: 'restraint',
-});
-
+export const GOAL_TYPES = Object.freeze({ GROWTH: 'growth', RESTRAINT: 'restraint' });
 const nonNegative = (value) => Math.max(0, Number(value) || 0);
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
@@ -127,31 +117,21 @@ export function categoryDisplayName(category = {}) {
 }
 
 export function calculateGoalAchievement({ goalType, budgetMinutes, actualMinutes }) {
-  const normalizedGoalType = normalizeGoalType(goalType);
+  const type = normalizeGoalType(goalType);
   const budget = nonNegative(budgetMinutes);
   const actual = nonNegative(actualMinutes);
-  if (budget <= 0) {
-    return {
-      goalType: normalizedGoalType,
-      percentage: null,
-      differenceMinutes: actual,
-      status: 'excluded',
-      hasBudget: false,
-    };
-  }
+  if (!budget) return { goalType: type, percentage: null, differenceMinutes: actual, status: 'excluded', hasBudget: false };
   const differenceMinutes = actual - budget;
-  if (normalizedGoalType === GOAL_TYPES.RESTRAINT) {
-    if (actual > budget) {
-      return {
-        goalType: normalizedGoalType,
-        percentage: -Math.max(1, Math.round((actual - budget) / budget * 100)),
-        differenceMinutes,
-        status: 'overage',
-        hasBudget: true,
-      };
-    }
+  if (type === GOAL_TYPES.RESTRAINT) {
+    if (actual > budget) return {
+      goalType: type,
+      percentage: -Math.max(1, Math.round((actual - budget) / budget * 100)),
+      differenceMinutes,
+      status: 'overage',
+      hasBudget: true,
+    };
     return {
-      goalType: normalizedGoalType,
+      goalType: type,
       percentage: Math.round(200 - actual / budget * 100),
       differenceMinutes,
       status: actual === budget ? 'exact' : 'remaining',
@@ -159,45 +139,41 @@ export function calculateGoalAchievement({ goalType, budgetMinutes, actualMinute
     };
   }
   return {
-    goalType: normalizedGoalType,
+    goalType: type,
     percentage: Math.round(actual / budget * 100),
     differenceMinutes,
     status: differenceMinutes > 0 ? 'exceeded' : differenceMinutes === 0 ? 'exact' : 'remaining',
     hasBudget: true,
   };
 }
-
-export function calculateGoalContribution(achievement) {
-  if (!achievement?.hasBudget || achievement.percentage === null) return null;
-  return clamp(Number(achievement.percentage) || 0, 0, 100);
-}
 ```
 
 - [ ] **Step 4: 가중 평균·진행 막대·기록 우선순위 테스트 추가**
 
 ```js
-test('예산시간으로 가중한 목표 준수 점수를 계산한다', () => {
-  const score = calculateGoalComplianceScore([
+test('전체 반영 점수는 100 초과를 제한하고 음수를 0으로 만든다', () => {
+  assert.equal(calculateGoalContribution({ hasBudget: true, percentage: 167 }), 100);
+  assert.equal(calculateGoalContribution({ hasBudget: true, percentage: 50 }), 50);
+  assert.equal(calculateGoalContribution({ hasBudget: true, percentage: -33 }), 0);
+  assert.equal(calculateGoalContribution({ hasBudget: false, percentage: null }), null);
+});
+
+test('예산시간으로 목표 준수를 가중 계산한다', () => {
+  assert.deepEqual(calculateGoalComplianceScore([
     { budgetMinutes: 180, hasBudget: true, percentage: 100 },
     { budgetMinutes: 60, hasBudget: true, percentage: 100 },
     { budgetMinutes: 180, hasBudget: true, percentage: -33 },
-  ]);
-  assert.deepEqual(score, {
-    score: 57,
-    weightedTotal: 24000,
-    totalWeightMinutes: 420,
-    status: 'scored',
-  });
+  ]), { score: 57, weightedTotal: 24000, totalWeightMinutes: 420, status: 'scored' });
 });
 
-test('예산 0 항목은 가중치와 분모에서 제외한다', () => {
+test('예산 0은 가중치와 분모에서 제외한다', () => {
   assert.equal(calculateGoalComplianceScore([
     { budgetMinutes: 180, hasBudget: true, percentage: 50 },
     { budgetMinutes: 0, hasBudget: false, percentage: null },
   ]).score, 50);
 });
 
-test('절제 막대는 파란 잔여량 뒤 빨간 초과량으로 전환한다', () => {
+test('절제 막대는 파란 잔여 뒤 빨간 초과로 전환한다', () => {
   assert.deepEqual(calculateGoalProgress({ goalType: 'restraint', budgetMinutes: 180, actualMinutes: 0 }), { mode: 'remaining', fillPercentage: 100 });
   assert.deepEqual(calculateGoalProgress({ goalType: 'restraint', budgetMinutes: 180, actualMinutes: 60 }), { mode: 'remaining', fillPercentage: 67 });
   assert.deepEqual(calculateGoalProgress({ goalType: 'restraint', budgetMinutes: 180, actualMinutes: 180 }), { mode: 'exact', fillPercentage: 0 });
@@ -205,16 +181,21 @@ test('절제 막대는 파란 잔여량 뒤 빨간 초과량으로 전환한다'
   assert.deepEqual(calculateGoalProgress({ goalType: 'restraint', budgetMinutes: 180, actualMinutes: 420 }), { mode: 'overage', fillPercentage: 100 });
 });
 
-test('기록 당시 방식이 현재 대분류보다 우선한다', () => {
+test('기록 당시 목표 방식이 현재 대분류보다 우선한다', () => {
   assert.equal(resolveEntryGoalType({ goalType: 'restraint' }, { goalType: 'growth' }), 'restraint');
   assert.equal(resolveEntryGoalType({}, { goalType: 'restraint' }), 'restraint');
   assert.equal(resolveEntryGoalType({}, null), 'growth');
 });
 ```
 
-- [ ] **Step 5: 나머지 구현 작성**
+- [ ] **Step 5: 나머지 함수 구현**
 
 ```js
+export function calculateGoalContribution(achievement) {
+  if (!achievement?.hasBudget || achievement.percentage === null) return null;
+  return clamp(Number(achievement.percentage) || 0, 0, 100);
+}
+
 export function calculateGoalComplianceScore(items = []) {
   let weightedTotal = 0;
   let totalWeightMinutes = 0;
@@ -239,12 +220,8 @@ export function calculateGoalProgress({ goalType, budgetMinutes, actualMinutes }
   const budget = nonNegative(budgetMinutes);
   const actual = nonNegative(actualMinutes);
   if (!budget) return { mode: 'excluded', fillPercentage: 0 };
-  if (type === GOAL_TYPES.GROWTH) {
-    return { mode: 'growth', fillPercentage: Math.round(clamp(actual / budget * 100, 0, 100)) };
-  }
-  if (actual < budget) {
-    return { mode: 'remaining', fillPercentage: Math.round((budget - actual) / budget * 100) };
-  }
+  if (type === GOAL_TYPES.GROWTH) return { mode: 'growth', fillPercentage: Math.round(clamp(actual / budget * 100, 0, 100)) };
+  if (actual < budget) return { mode: 'remaining', fillPercentage: Math.round((budget - actual) / budget * 100) };
   if (actual === budget) return { mode: 'exact', fillPercentage: 0 };
   return { mode: 'overage', fillPercentage: Math.round(clamp((actual - budget) / budget * 100, 0, 100)) };
 }
@@ -267,7 +244,7 @@ git commit -m "feat: add growth and restraint goal calculations"
 
 ---
 
-### Task 2: 주간·일간·월간 요약에 목표 계산 통합
+### Task 2: 모든 기간 요약에 목표 계산 통합
 
 **Files:**
 - Modify: `src/domain.js`
@@ -276,13 +253,14 @@ git commit -m "feat: add growth and restraint goal calculations"
 - Modify: `tests/time-budget-domain.test.js`
 
 **Interfaces:**
-- Consumes: all exports from `src/goal-domain.js`.
-- Produces: every summary item with `goalType`, `name`, `percentage`, `differenceMinutes`, `status`, `hasBudget`, `contributionScore`, `progress`; every period summary with `goalComplianceScore`, `goalComplianceStatus`.
+- Consumes: Task 1 exports.
+- Produces category summary fields: `goalType`, formatted `name`, `percentage`, `differenceMinutes`, `status`, `hasBudget`, `contributionScore`, `progress`.
+- Produces period summary fields: existing time totals and period counts plus `goalComplianceScore`, `goalComplianceStatus`; `percentage` remains a temporary compatibility alias to `goalComplianceScore`.
 
 - [ ] **Step 1: 실패 테스트 작성**
 
 ```js
-test('주간 요약은 성장과 절제를 다르게 계산하고 예산시간 가중 점수를 반환한다', () => {
+test('주간 요약은 성장과 절제를 다르게 계산한다', () => {
   const summary = summarizeBudgetPeriod(
     [
       { categoryId: 'prayer', date: '2026-07-27', durationMinutes: 180, goalType: 'growth' },
@@ -290,20 +268,21 @@ test('주간 요약은 성장과 절제를 다르게 계산하고 예산시간 �
       { categoryId: 'phone', date: '2026-07-27', durationMinutes: 240, goalType: 'restraint' },
     ],
     [
-      { id: 'prayer', name: '기도', goalType: 'growth', defaultBudgetMinutes: 180 },
-      { id: 'reading', name: '독서', goalType: 'growth', defaultBudgetMinutes: 60 },
+      { id: 'prayer', name: '기도', defaultBudgetMinutes: 180 },
+      { id: 'reading', name: '독서', defaultBudgetMinutes: 60 },
       { id: 'phone', name: '스마트폰', goalType: 'restraint', defaultBudgetMinutes: 180 },
     ],
     [{ weekStart: '2026-07-27', budgets: { prayer: 180, reading: 60, phone: 180 } }],
-    '2026-07-27',
-    '2026-08-02',
+    '2026-07-27', '2026-08-02',
   );
   const phone = summary.categorySummaries.find((item) => item.id === 'phone');
   assert.equal(phone.name, '스마트폰 (절제)');
   assert.equal(phone.percentage, -33);
   assert.equal(phone.contributionScore, 0);
-  assert.equal(phone.progress.mode, 'overage');
+  assert.deepEqual(phone.progress, { mode: 'overage', fillPercentage: 33 });
   assert.equal(summary.goalComplianceScore, 57);
+  assert.equal(summary.totalBudgetMinutes, 420);
+  assert.equal(summary.totalActualMinutes, 480);
 });
 ```
 
@@ -313,9 +292,7 @@ Run: `node --test tests/domain.test.js tests/time-budget-domain.test.js --test-n
 
 Expected: FAIL because goal fields are absent.
 
-- [ ] **Step 3: `domain.js` 요약 통합**
-
-Replace the old budget-only achievement helper with a shared builder:
+- [ ] **Step 3: 공통 category summary builder 추가**
 
 ```js
 import {
@@ -340,28 +317,26 @@ function categoryGoalSummary(category, budgetMinutes, actualMinutes) {
 }
 ```
 
-In `summarizeCategories` and `finalizeBudgetSummary`, merge `categoryGoalSummary(...)` instead of `calculateAchievement(...)` or `calculateBudgetAchievement(...)`.
+Use it in `summarizeCategories`, `finalizeBudgetSummary`, and `summarizeDailyCategories`.
 
-After category summaries are complete:
+- [ ] **Step 4: 기간 요약 반환값 추가**
+
+After `categorySummaries`, `totalBudgetMinutes`, `totalActualMinutes` are computed:
 
 ```js
 const compliance = calculateGoalComplianceScore(categorySummaries);
-return {
-  totalBudgetMinutes,
-  totalActualMinutes,
-  goalComplianceScore: compliance.score,
-  goalComplianceStatus: compliance.status,
-  percentage: compliance.score,
-  ...existingPeriodFields,
-  categorySummaries,
-};
 ```
 
-Keep `percentage` as a compatibility alias during this change so comparison code does not break before Task 6.
+Preserve each function's current fields exactly:
 
-- [ ] **Step 4: 삭제 대분류의 기록 방식 보존**
+- `summarizeCategories`: return its category array only, with enriched item fields.
+- `summarizeDailyCategories`: return `totalBudgetMinutes`, `totalActualMinutes`, `goalComplianceScore`, `goalComplianceStatus`, `percentage: compliance.score`, `categorySummaries`.
+- `finalizeBudgetSummary`: return `totalBudgetMinutes`, `totalActualMinutes`, `goalComplianceScore`, `goalComplianceStatus`, `percentage: compliance.score`, `differenceMinutes: totalActualMinutes - totalBudgetMinutes`, `status`, `recordDays`, `dailyAverageMinutes`, `categorySummaries`.
+- monthly/yearly wrappers keep their existing `recordWeekCount`, `recordMonthCount`, comparison, and change fields.
 
-For categories missing from `categoryById`, derive the deleted category goal type from its entries:
+- [ ] **Step 5: 삭제 대분류 목표 방식 처리**
+
+For a category missing from active and archived maps, inspect its filtered entries:
 
 ```js
 const deletedEntries = filteredEntries.filter((entry) => entry.categoryId === categoryId);
@@ -379,89 +354,57 @@ categorySummaries.push({
 });
 ```
 
-- [ ] **Step 5: `time-budget-domain.js` 일간 요약 통합**
+- [ ] **Step 6: 테스트와 커밋**
 
-Use the same goal helpers inside `summarizeDailyCategories`:
+Run: `node --test tests/domain.test.js tests/time-budget-domain.test.js tests/goal-domain.test.js tests/countdown-timer-domain.test.js`
 
-```js
-const goalType = normalizeGoalType(category.goalType);
-const achievement = calculateGoalAchievement({
-  goalType,
-  budgetMinutes: budget.minutes,
-  actualMinutes,
-});
-return {
-  id: category.id,
-  name: categoryDisplayName(category),
-  goalType,
-  budgetMinutes: budget.minutes,
-  actualMinutes,
-  budgetSource: budget.source,
-  ...achievement,
-  contributionScore: calculateGoalContribution(achievement),
-  progress: calculateGoalProgress({ goalType, budgetMinutes: budget.minutes, actualMinutes }),
-};
-```
-
-Return `goalComplianceScore` and `goalComplianceStatus` from the daily summary using `calculateGoalComplianceScore(categorySummaries)`.
-
-- [ ] **Step 6: 회귀 테스트 실행 및 커밋**
-
-Run: `node --test tests/domain.test.js tests/time-budget-domain.test.js tests/countdown-timer-domain.test.js`
-
-Expected: PASS. Existing total budget and total actual minute assertions remain unchanged.
+Expected: PASS; time totals remain unchanged.
 
 ```bash
 git add src/domain.js src/time-budget-domain.js tests/domain.test.js tests/time-budget-domain.test.js
-git commit -m "feat: summarize restraint goals across budget periods"
+git commit -m "feat: summarize restraint goals across all periods"
 ```
 
 ---
 
-### Task 3: 대분류 추가에서만 절제 선택 및 수정 불변성
+### Task 3: 생성 전용 절제 선택과 목표 방식 불변성
 
 **Files:**
 - Modify: `src/app.js`
 - Modify: `src/category-bulk-editor.js`
+- Modify: `src/category-ui-patch.js`
 - Create: `tests/restraint-category-management.test.js`
 
 **Interfaces:**
 - Consumes: `normalizeGoalType`, `categoryDisplayName`.
-- Produces: creation payload with immutable `goalType`; edit payloads that omit `goalType`.
+- Produces: creation payload with `goalType`; edit payloads that omit it; archive/restore paths that preserve it.
 
-- [ ] **Step 1: 정적 계약 실패 테스트 작성**
+- [ ] **Step 1: 실패 테스트 작성**
 
 ```js
-import test from 'node:test';
-import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
-
-const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
-
 test('절제 체크박스는 대분류 추가 폼에만 있다', async () => {
   const source = await read('src/app.js');
-  const addStart = source.indexOf('function renderCategories');
-  const addEnd = source.indexOf('function formatClock', addStart);
-  const categoriesSource = source.slice(addStart, addEnd);
-  assert.ok(categoriesSource.includes('name="restraint"'));
-  assert.ok(categoriesSource.includes('절제 목표'));
-  assert.doesNotMatch(categoriesSource, /category-edit-row[\s\S]*name="restraint"/);
+  const start = source.indexOf('function renderCategories');
+  const end = source.indexOf('function formatClock', start);
+  const block = source.slice(start, end);
+  assert.ok(block.includes('name="restraint"'));
+  assert.ok(block.includes('절제 목표'));
+  const editRows = block.slice(block.indexOf('category-edit-row'));
+  assert.ok(!editRows.includes('name="restraint"'));
 });
 
-test('기존 대분류 수정과 일괄 저장은 goalType을 쓰지 않는다', async () => {
-  const [app, bulk] = await Promise.all([read('src/app.js'), read('src/category-bulk-editor.js')]);
-  assert.match(app, /if \(id\)[\s\S]*setDoc[\s\S]*name:[\s\S]*defaultBudgetMinutes:[\s\S]*order:/);
+test('수정·일괄 수정은 goalType을 쓰지 않고 보관 복원은 보존한다', async () => {
+  const [app, bulk, lifecycle] = await Promise.all([
+    read('src/app.js'), read('src/category-bulk-editor.js'), read('src/category-ui-patch.js'),
+  ]);
   assert.doesNotMatch(bulk, /goalType\s*:/);
+  assert.match(lifecycle, /archiveCategory[\s\S]*\.\.\.snapshot\.data\(\)/);
+  assert.match(lifecycle, /restoreCategory[\s\S]*goalType:\s*normalizeGoalType\(data\.goalType\)/);
+  assert.match(app, /if \(id\)[\s\S]*setDoc[\s\S]*basePayload/);
 });
 ```
 
-- [ ] **Step 2: 실패 확인**
-
-Run: `node --test tests/restraint-category-management.test.js`
-
-Expected: FAIL because add-only restraint control is absent.
-
-- [ ] **Step 3: `saveCategory` 생성·수정 경로 분리**
+- [ ] **Step 2: 생성·수정 경로 분리**
 
 ```js
 async function saveCategory({ id, name, defaultBudgetMinutes: budget, goalType }) {
@@ -474,20 +417,14 @@ async function saveCategory({ id, name, defaultBudgetMinutes: budget, goalType }
     order: existing?.order || state.categories.length + 1,
   };
   const collectionRef = firebase.collection(db, 'users', state.user.uid, 'categories');
-  if (id) {
-    await firebase.setDoc(firebase.doc(collectionRef, id), basePayload, { merge: true });
-  } else {
-    await firebase.addDoc(collectionRef, {
-      ...basePayload,
-      goalType: normalizeGoalType(goalType),
-    });
-  }
+  if (id) await firebase.setDoc(firebase.doc(collectionRef, id), basePayload, { merge: true });
+  else await firebase.addDoc(collectionRef, { ...basePayload, goalType: normalizeGoalType(goalType) });
   await loadData();
   renderAll();
 }
 ```
 
-- [ ] **Step 4: 추가 폼에만 체크박스 연결**
+- [ ] **Step 3: 추가 폼에만 체크박스 연결**
 
 ```html
 <label class="restraint-goal-option">
@@ -495,8 +432,6 @@ async function saveCategory({ id, name, defaultBudgetMinutes: budget, goalType }
   <span><strong>절제 목표</strong><small>설정한 예산시간 이하로 사용하는 것이 목표입니다.</small></span>
 </label>
 ```
-
-Submit mapping:
 
 ```js
 await saveCategory({
@@ -506,126 +441,122 @@ await saveCategory({
 });
 ```
 
-Registered edit rows keep raw `category.name` in the text input and append a non-editable suffix outside the input:
+Edit rows keep raw `category.name` in the input and add a non-editable `(절제)` suffix outside the input.
+
+- [ ] **Step 4: 보관·복원·보관목록 표시 수정**
+
+Import goal helpers into `src/category-ui-patch.js`.
+
+Restore payload:
 
 ```js
-${normalizeGoalType(category.goalType) === 'restraint'
-  ? '<span class="goal-type-label">(절제)</span>'
-  : ''}
+batch.set(storeModule.doc(db, 'users', user.uid, 'categories', categoryId), {
+  name: data.name,
+  defaultBudgetMinutes: Number(data.defaultBudgetMinutes ?? data.budgetMinutes ?? 0),
+  order: data.order || 999,
+  goalType: normalizeGoalType(data.goalType),
+});
 ```
 
-- [ ] **Step 5: 일괄 저장 보존 테스트와 UI 테스트 통과**
+Use `categoryDisplayName({ ...data, id })` in lifecycle modal, archived list, and archive-aware history. Preserve raw name when writing documents.
 
-Run: `node --test tests/restraint-category-management.test.js tests/category-save-copy.test.js tests/category-bulk-order.test.js`
+- [ ] **Step 5: 테스트와 커밋**
+
+Run: `node --test tests/restraint-category-management.test.js tests/category-save-copy.test.js tests/category-bulk-order.test.js tests/category-lifecycle.test.js`
 
 Expected: PASS.
 
-- [ ] **Step 6: 커밋**
-
 ```bash
-git add src/app.js src/category-bulk-editor.js tests/restraint-category-management.test.js
-git commit -m "feat: select restraint goals only when creating categories"
+git add src/app.js src/category-bulk-editor.js src/category-ui-patch.js tests/restraint-category-management.test.js
+git commit -m "feat: make restraint type immutable after category creation"
 ```
 
 ---
 
-### Task 4: 공통 이름 표시와 모든 새 기록의 목표 방식 스냅샷
+### Task 4: 모든 화면의 이름과 모든 새 기록의 목표 스냅샷
 
 **Files:**
 - Modify: `src/app.js`
-- Modify: `src/persistent-timer-ui.js`
 - Modify: `src/time-budget-ui.js`
-- Modify: `tests/restraint-category-management.test.js`
+- Modify: `src/persistent-timer-ui.js`
+- Modify: `src/category-ui-patch.js`
 - Create: `tests/restraint-entry-metadata.test.js`
 
 **Interfaces:**
 - Consumes: `categoryDisplayName`, `normalizeGoalType`.
-- Produces: all option/row labels with `(절제)` and every new entry with `goalType`.
+- Produces: `(절제)` labels across record, budget, history, timer; every new record with `goalType`.
 
 - [ ] **Step 1: 실패 테스트 작성**
 
 ```js
-test('앱의 선택·예산·기록 화면은 공통 이름 함수를 사용한다', async () => {
-  const source = await read('src/app.js');
-  assert.ok(source.includes('categoryDisplayName(category)'));
-  assert.match(source, /optionHtml[\s\S]*categoryDisplayName/);
-  assert.match(source, /renderBudget[\s\S]*categoryDisplayName/);
-  assert.match(source, /renderHistory[\s\S]*categoryDisplayName/);
+test('선택·예산·기록 화면은 공통 이름 함수를 사용한다', async () => {
+  const [app, budget, timer, lifecycle] = await Promise.all([
+    read('src/app.js'), read('src/time-budget-ui.js'), read('src/persistent-timer-ui.js'), read('src/category-ui-patch.js'),
+  ]);
+  for (const source of [app, budget, timer, lifecycle]) assert.ok(source.includes('categoryDisplayName'));
 });
 
 test('모든 새 기록은 goalType을 저장한다', async () => {
   const [app, timer] = await Promise.all([read('src/app.js'), read('src/persistent-timer-ui.js')]);
-  assert.match(app, /saveEntry\(entry[\s\S]*goalType/);
+  assert.match(app, /normalizedEntry[\s\S]*goalType:/);
   assert.match(timer, /source: 'timer'[\s\S]*goalType:/);
 });
 ```
 
 - [ ] **Step 2: `app.js` 공통 이름 적용**
 
-Add imports:
-
 ```js
 import { categoryDisplayName, normalizeGoalType } from './goal-domain.js';
-```
 
-Update options:
-
-```js
 const optionHtml = (selectedId = '') => state.categories
   .map((category) => `<option value="${category.id}" ${category.id === selectedId ? 'selected' : ''}>${escapeHtml(categoryDisplayName(category))}</option>`)
   .join('');
 ```
 
-Use `categoryDisplayName(category)` for budget rows, history rows, and read-only category labels. Keep edit input values as raw `category.name`.
+Use `categoryDisplayName` in legacy dashboard, budget, history, and registered-category read-only suffixes. Edit input values remain raw.
 
 - [ ] **Step 3: `saveEntry`에서 목표 방식 강제 주입**
 
 ```js
-async function saveEntry(entry, options = {}) {
-  const category = state.categories.find((item) => item.id === entry.categoryId);
-  const normalizedEntry = {
-    ...entry,
-    goalType: normalizeGoalType(entry.goalType ?? category?.goalType),
-  };
-  // pass normalizedEntry to repository.saveEntryLocalFirst
-}
+const category = state.categories.find((item) => item.id === entry.categoryId);
+const normalizedEntry = {
+  ...entry,
+  goalType: normalizeGoalType(entry.goalType ?? category?.goalType),
+  createdAt: Date.now(),
+};
 ```
 
-This catches both manual input modes and any remaining legacy in-page timer path.
+Pass `normalizedEntry` to `saveEntryLocalFirst`. This covers both manual modes and the legacy in-page timer.
 
-- [ ] **Step 4: 영속 타이머 기록과 선택 이름 적용**
+- [ ] **Step 4: 시간예산·영속 타이머 이름과 기록 적용**
 
-In `src/persistent-timer-ui.js`:
-
-```js
-import { categoryDisplayName, normalizeGoalType } from './goal-domain.js';
-```
-
-Use `categoryDisplayName(category)` in `categoryOptions(...)`.
-
-Inside `saveActiveTimer` completion payload:
+- `src/time-budget-ui.js`: replace both category display sites and aria labels with `categoryDisplayName(category)`.
+- `src/persistent-timer-ui.js`: use `categoryDisplayName(category)` in `categoryOptions`.
+- `saveActiveTimer` completion payload:
 
 ```js
 const category = knownCategory(timer.categoryId);
 return {
-  ...existingEntryFields,
+  categoryId: timer.categoryId,
+  note: timer.note,
+  date: timer.startedDate,
+  durationMinutes,
+  startTime: new Date(timer.startedAt).toTimeString().slice(0, 5),
+  endTime: new Date(endedAt).toTimeString().slice(0, 5),
+  source: 'timer',
   timerMode: timer.mode,
   goalType: normalizeGoalType(category?.goalType),
 };
 ```
 
-- [ ] **Step 5: 시간예산 이름 적용**
+- [ ] **Step 5: 테스트와 커밋**
 
-Import `categoryDisplayName` into `src/time-budget-ui.js` and replace both `category.name` display sites and their aria labels with the formatted name.
-
-- [ ] **Step 6: 테스트와 커밋**
-
-Run: `node --test tests/restraint-category-management.test.js tests/restraint-entry-metadata.test.js tests/countdown-timer-ui.test.js tests/manual-entry.test.js`
+Run: `node --test tests/restraint-entry-metadata.test.js tests/countdown-timer-ui.test.js tests/manual-entry.test.js tests/offline-entry-repository.test.js`
 
 Expected: PASS.
 
 ```bash
-git add src/app.js src/persistent-timer-ui.js src/time-budget-ui.js tests/restraint-category-management.test.js tests/restraint-entry-metadata.test.js
+git add src/app.js src/time-budget-ui.js src/persistent-timer-ui.js src/category-ui-patch.js tests/restraint-entry-metadata.test.js
 git commit -m "feat: label restraint categories and snapshot entry goal types"
 ```
 
@@ -641,33 +572,29 @@ git commit -m "feat: label restraint categories and snapshot entry goal types"
 - Create: `tests/restraint-dashboard-ui.test.js`
 
 **Interfaces:**
-- Consumes: summary `goalComplianceScore`, item `progress`, `goalType`, `status`, `percentage`.
-- Produces: `목표 준수 N점`, blue remaining bars, empty exact bar, red overage bars.
+- Consumes: summary `goalComplianceScore`, `goalComplianceStatus`; item `progress`, `goalType`, `status`, `percentage`.
+- Produces: `목표 준수 N점`, 파란 잔여 막대, 빈 정확 소진 막대, 빨간 초과 막대.
 
-- [ ] **Step 1: UI 계약 실패 테스트 작성**
+- [ ] **Step 1: 실패 테스트 작성**
 
 ```js
 test('대시보드는 전체 달성률 대신 목표 준수 점수를 표시한다', async () => {
   const source = await read('src/time-budget-ui.js');
   assert.ok(source.includes('목표 준수'));
   assert.ok(source.includes('goalComplianceScore'));
-  assert.ok(source.includes('점'));
   assert.ok(!source.includes('<p class="muted">전체 달성률</p>'));
 });
 
-test('절제 진행 막대는 remaining과 overage 클래스를 분리한다', async () => {
+test('절제 막대는 remaining과 overage 클래스를 분리한다', async () => {
   const [ui, css] = await Promise.all([read('src/time-budget-ui.js'), read('styles.css')]);
-  assert.ok(ui.includes('restraint-progress'));
   assert.ok(ui.includes('restraint-remaining'));
   assert.ok(ui.includes('restraint-overage'));
-  assert.ok(css.includes('.restraint-progress.restraint-remaining'));
-  assert.ok(css.includes('.restraint-progress.restraint-overage'));
+  assert.ok(css.includes('.restraint-remaining'));
+  assert.ok(css.includes('.restraint-overage'));
 });
 ```
 
-- [ ] **Step 2: 공통 렌더 헬퍼 작성**
-
-Inside `src/time-budget-ui.js`:
+- [ ] **Step 2: 렌더 헬퍼 작성**
 
 ```js
 const goalScoreText = (summary) => summary?.goalComplianceStatus === 'excluded'
@@ -685,11 +612,7 @@ function categoryProgressHtml(item) {
         : 'growth-progress';
   return `<div class="progress ${className}"><span style="width:${progress.fillPercentage}%"></span></div>`;
 }
-```
 
-Status copy:
-
-```js
 function categoryGoalDetail(item) {
   if (!item.hasBudget) return '달성률 계산 제외';
   if (item.goalType === 'restraint') {
@@ -703,36 +626,34 @@ function categoryGoalDetail(item) {
 }
 ```
 
-- [ ] **Step 3: 요약 카드·대분류 행 변경**
+- [ ] **Step 3: 요약 카드와 대분류 행 변경**
 
-```js
-<article class="card">
-  <p class="muted">목표 준수</p>
-  <div class="metric">${goalScoreText(summary)}</div>
-</article>
+```html
+<article class="card"><p class="muted">목표 준수</p><div class="metric">${goalScoreText(summary)}</div></article>
 ```
 
-Each category row uses `categoryProgressHtml(item)`, `${item.percentage}%` when budget exists, and `categoryGoalDetail(item)`.
-
-Update the legacy `renderDashboard()` in `src/app.js` to use the same summary fields so no cached/early render briefly shows the old `전체 달성률` card.
+Each row uses `categoryProgressHtml(item)`, budget-aware achievement text, and `categoryGoalDetail(item)`. Update the legacy `renderDashboard()` in `src/app.js` too, so cached first paint never shows the old label.
 
 - [ ] **Step 4: 스타일 작성**
 
 ```css
-.progress.restraint-progress > span { transition: width .2s ease; }
-.progress.restraint-remaining > span { background: #2f6fb2; }
-.progress.restraint-overage > span { background: #c23b36; }
-.progress.restraint-exact > span { width: 0 !important; }
-.goal-type-label { color: #8d3d35; font-weight: 800; white-space: nowrap; }
-.restraint-goal-option { display:flex; gap:10px; align-items:flex-start; }
-.restraint-goal-option input { width:auto; margin-top:3px; }
-.restraint-goal-option span { display:grid; gap:3px; }
-.restraint-goal-option small { color:#68736e; font-weight:400; }
+.progress.restraint-progress > span{transition:width .2s ease}
+.progress.restraint-remaining > span{background:#2f6fb2}
+.progress.restraint-overage > span{background:#c23b36}
+.progress.restraint-exact > span{width:0!important}
+.goal-type-label{color:#8d3d35;font-weight:800;white-space:nowrap}
+.restraint-goal-option{display:flex;gap:10px;align-items:flex-start}
+.restraint-goal-option input{width:auto;margin-top:3px}
+.restraint-goal-option span{display:grid;gap:3px}
+.restraint-goal-option small{color:#68736e;font-weight:400}
 ```
 
-- [ ] **Step 5: 수치 예시 렌더 테스트**
+- [ ] **Step 5: 수치 예시 테스트**
 
-Add assertions that a summary with phone 1/3 hours renders blue 67%, 167%, and 100-point overall; phone 4/3 hours renders red 33%, -33%, and 57-point overall.
+Assert:
+
+- 기도 3h, 독서 1h, 스마트폰 절제 3h에서 스마트폰 1h: blue 67%, individual 167%, overall 100 points.
+- same budgets with phone 4h: red 33%, individual -33%, overall 57 points.
 
 - [ ] **Step 6: 테스트와 커밋**
 
@@ -747,28 +668,34 @@ git commit -m "feat: show weighted goal compliance and restraint progress"
 
 ---
 
-### Task 6: 통계 화면의 성장·절제 의미 반영
+### Task 6: 온라인·오프라인 통계에 목표 의미 적용
 
 **Files:**
 - Modify: `src/statistics-ui.js`
+- Modify: `src/statistics-offline-rescue.js`
 - Modify: `tests/statistics-ui.test.js`
+- Modify: `tests/statistics-offline-rescue.test.js`
 - Create: `tests/restraint-statistics-ui.test.js`
 
 **Interfaces:**
-- Consumes: period summary goal fields from Task 2.
-- Produces: all weekly/monthly/yearly statistics using `목표 준수 N점` and goal-aware category progress/copy.
+- Consumes: enriched period summaries from Task 2 and `categoryDisplayName` for matrix headers.
+- Produces: weekly/monthly/yearly online and offline statistics using `목표 준수 N점` and goal-aware copy.
 
 - [ ] **Step 1: 실패 테스트 작성**
 
 ```js
-test('통계 요약은 전체 달성률 대신 목표 준수를 표시한다', async () => {
-  const source = await read('src/statistics-ui.js');
-  assert.ok(source.includes('목표 준수'));
-  assert.ok(source.includes('goalComplianceScore'));
-  assert.ok(!source.includes('<p class="muted">전체 달성률</p>'));
+test('온라인과 오프라인 통계는 목표 준수 점수를 표시한다', async () => {
+  const [online, offline] = await Promise.all([
+    read('src/statistics-ui.js'), read('src/statistics-offline-rescue.js'),
+  ]);
+  for (const source of [online, offline]) {
+    assert.ok(source.includes('목표 준수'));
+    assert.ok(source.includes('goalComplianceScore'));
+    assert.ok(!source.includes('<p class="muted">전체 달성률</p>'));
+  }
 });
 
-test('절제 통계는 파란 잔여·빨간 초과 막대와 계산 제외 문구를 지원한다', async () => {
+test('절제 통계는 파란 잔여와 빨간 초과를 지원한다', async () => {
   const source = await read('src/statistics-ui.js');
   assert.ok(source.includes('restraint-remaining'));
   assert.ok(source.includes('restraint-overage'));
@@ -777,7 +704,7 @@ test('절제 통계는 파란 잔여·빨간 초과 막대와 계산 제외 문�
 });
 ```
 
-- [ ] **Step 2: 통계 헬퍼 교체**
+- [ ] **Step 2: 온라인 통계 헬퍼 교체**
 
 ```js
 function overallAchievementText(summary) {
@@ -787,8 +714,7 @@ function overallAchievementText(summary) {
 }
 
 function achievementText(item) {
-  if (!item.hasBudget) return '달성률 계산 제외';
-  return `${item.percentage}%`;
+  return item.hasBudget ? `${item.percentage}%` : '달성률 계산 제외';
 }
 
 function achievementWidth(item) {
@@ -804,7 +730,7 @@ function achievementBarClass(item) {
 }
 ```
 
-`differenceText` must distinguish restraint:
+`differenceText` for restraint:
 
 ```js
 if (!item.hasBudget) return '달성률 계산 제외';
@@ -815,16 +741,20 @@ if (item.goalType === 'restraint') {
 }
 ```
 
-- [ ] **Step 3: 표·비교·행렬 용어 변경**
+- [ ] **Step 3: 표·비교·행렬 변경**
 
 - Summary card label: `목표 준수`.
-- Category table explanation: growth 100% is budget achievement; restraint 100% is budget exact use, above 100% is remaining allowance, negative is overage.
-- Comparison rows and detailed table label: `목표 준수` and unit `점`.
-- Category names already arrive formatted from domain summaries; matrix headers use `categoryDisplayName(category)` for active/archived source categories.
+- Detailed comparison header: `목표 준수` rather than `달성률` for overall cells.
+- Category tables keep `달성률` because individual values remain percentages.
+- Matrix category headers use `categoryDisplayName(category)`.
+- Comparison chart time bars remain budget vs actual time; text beside them shows `목표 준수 N점`.
+- Actual-time change fields remain minutes and are not reinterpreted as goal score changes.
 
-- [ ] **Step 4: 통계 스타일 적용**
+- [ ] **Step 4: 오프라인 통계에 동일 규칙 적용**
 
-In injected CSS:
+Import `categoryDisplayName` and reuse equivalent `overallAchievement`, `differenceText`, and category table copy. Cached categories retain `goalType`; existing cached data without it normalizes to growth through the summary domain.
+
+- [ ] **Step 5: 통계 스타일 추가**
 
 ```css
 .stat-bar-fill.restraint-remaining{background:#2f6fb2}
@@ -833,22 +763,20 @@ In injected CSS:
 .difference.overage{color:#b3261e}
 ```
 
-- [ ] **Step 5: 통계 회귀 테스트 실행**
+- [ ] **Step 6: 테스트와 커밋**
 
 Run: `node --test tests/restraint-statistics-ui.test.js tests/statistics-ui.test.js tests/statistics-offline-rescue.test.js tests/statistics-monthly-timer-resume-regression.test.js`
 
-Expected: PASS. Week/month/year navigation remains unchanged.
-
-- [ ] **Step 6: 커밋**
+Expected: PASS; period navigation and offline timeout behavior remain unchanged.
 
 ```bash
-git add src/statistics-ui.js tests/statistics-ui.test.js tests/restraint-statistics-ui.test.js
-git commit -m "feat: apply restraint goals to statistics"
+git add src/statistics-ui.js src/statistics-offline-rescue.js tests/statistics-ui.test.js tests/statistics-offline-rescue.test.js tests/restraint-statistics-ui.test.js
+git commit -m "feat: apply restraint goals to online and offline statistics"
 ```
 
 ---
 
-### Task 7: 타이머 절제 표시와 기록 메타데이터 회귀 보호
+### Task 7: 타이머 절제 초과 표시와 회귀 보호
 
 **Files:**
 - Modify: `src/persistent-timer-ui.js`
@@ -857,8 +785,8 @@ git commit -m "feat: apply restraint goals to statistics"
 - Modify: `tests/restraint-entry-metadata.test.js`
 
 **Interfaces:**
-- Consumes: selected category `goalType` and `categoryDisplayName`.
-- Produces: restraint countdown negative display with red semantic class; saved entry goal metadata.
+- Consumes: selected category `goalType`.
+- Produces: restraint countdown negative display with red semantic class; saved timer entries with `goalType`.
 
 - [ ] **Step 1: 실패 테스트 작성**
 
@@ -867,6 +795,7 @@ test('절제 카운트다운 음수는 초과 사용 경고 클래스를 사용�
   const source = await read('src/persistent-timer-ui.js');
   assert.ok(source.includes('is-restraint-overage'));
   assert.ok(source.includes("goalType === 'restraint'"));
+  assert.doesNotMatch(source, /AudioContext|new Audio|\.vibrate\(|Notification\(/);
 });
 ```
 
@@ -878,44 +807,36 @@ const goalType = normalizeGoalType(activeCategory?.goalType);
 const isRestraintOverage = mode === 'countdown' && goalType === 'restraint' && displayMs < 0;
 ```
 
-Timer class:
+Timer class and note:
 
 ```js
 class="timer${isNegative ? ' is-negative' : ''}${isRestraintOverage ? ' is-restraint-overage' : ''}"
-```
-
-Optional inline copy below the number:
-
-```js
 ${isRestraintOverage ? '<p class="timer-goal-note restraint-overage-copy">초과 사용시간</p>' : ''}
 ```
-
-Do not add alerts, audio, vibration, or auto-stop.
 
 - [ ] **Step 3: 스타일 작성**
 
 ```css
-.timer.is-restraint-overage,
-.restraint-overage-copy { color:#b3261e; }
-.timer-goal-note { margin:4px 0 0; text-align:center; font-weight:800; }
+.timer.is-restraint-overage,.restraint-overage-copy{color:#b3261e}
+.timer-goal-note{margin:4px 0 0;text-align:center;font-weight:800}
 ```
 
 - [ ] **Step 4: 전체 타이머 회귀 실행**
 
 Run: `node --test tests/countdown-timer-ui.test.js tests/persistent-timer.test.js tests/persistent-timer-cross-device.test.js tests/statistics-monthly-timer-resume-regression.test.js tests/restraint-entry-metadata.test.js`
 
-Expected: PASS with no changes to timer duration, pause, recovery, or mode defaults.
+Expected: PASS; duration, pause, recovery, default mode, and category auto-save semantics remain unchanged.
 
 - [ ] **Step 5: 커밋**
 
 ```bash
 git add src/persistent-timer-ui.js src/mobile-compact.css tests/countdown-timer-ui.test.js tests/restraint-entry-metadata.test.js
-git commit -m "feat: mark restraint timer overage and preserve goal metadata"
+git commit -m "feat: mark restraint timer overage"
 ```
 
 ---
 
-### Task 8: PWA 캐시, Pages 산출물, 전체 검증
+### Task 8: PWA, Pages, 전체 검증
 
 **Files:**
 - Modify: `service-worker.js`
@@ -924,7 +845,7 @@ git commit -m "feat: mark restraint timer overage and preserve goal metadata"
 - Modify: `tests/category-save-copy.test.js`
 
 **Interfaces:**
-- Consumes: `src/goal-domain.js` and all modified UI modules.
+- Consumes: `src/goal-domain.js` and all modified modules.
 - Produces: v9 offline app shell and deployable Pages artifact.
 
 - [ ] **Step 1: 실패 테스트 작성**
@@ -932,7 +853,7 @@ git commit -m "feat: mark restraint timer overage and preserve goal metadata"
 ```js
 test('절제 목표 도메인과 v9 앱 셸을 배포한다', async () => {
   const worker = await read('service-worker.js');
-  assert.ok(worker.includes("weekly-time-budget-shell-v9"));
+  assert.ok(worker.includes('weekly-time-budget-shell-v9'));
   assert.ok(worker.includes('./src/goal-domain.js'));
 });
 ```
@@ -951,13 +872,13 @@ assert.ok(serviceWorker.includes('./src/goal-domain.js'));
 const SHELL_CACHE = 'weekly-time-budget-shell-v9';
 ```
 
-Add `./src/goal-domain.js` to `SHELL_URLS` before modules that import it.
+Add `./src/goal-domain.js` to `SHELL_URLS` before `domain.js`, `time-budget-domain.js`, and UI importers.
 
-- [ ] **Step 3: 전체 테스트 실행**
+- [ ] **Step 3: 전체 테스트**
 
 Run: `npm test`
 
-Expected: all existing and new tests PASS.
+Expected: all tests PASS.
 
 - [ ] **Step 4: 문법 검사**
 
@@ -967,8 +888,10 @@ node --check src/domain.js
 node --check src/time-budget-domain.js
 node --check src/app.js
 node --check src/category-bulk-editor.js
+node --check src/category-ui-patch.js
 node --check src/time-budget-ui.js
 node --check src/statistics-ui.js
+node --check src/statistics-offline-rescue.js
 node --check src/persistent-timer-ui.js
 node --check service-worker.js
 ```
@@ -989,22 +912,21 @@ Expected: all commands exit 0.
 
 - [ ] **Step 6: 최종 요구사항 검사**
 
-Verify in the final diff and tests:
-
-- existing and invalid goal types normalize to growth;
-- restraint checkbox exists only in category-add form;
-- edit and bulk-save payloads never write `goalType`;
-- restraint name appears in dashboard, timer, manual input, budget, history, statistics, and category management;
-- all new entries carry `goalType`;
-- restraint values for 3-hour budget are exactly `200, 167, 133, 100, -33, -67, -100`;
-- 3 hours plus any positive fraction becomes negative;
-- budget 0 is excluded from individual and overall scores;
-- overall score uses budget minutes as weights;
-- phone 1 hour example is 100 points, phone 4 hours example is 57 points;
-- restraint negative contributes 0, never subtracts another category score;
-- blue bar starts full and decreases; exact budget is empty; red overage restarts from the left;
-- actual and budget time totals remain simple positive sums;
-- timer countup/countdown and offline recovery tests remain green;
+- existing/invalid types normalize to growth;
+- restraint checkbox is only in category-add;
+- edit and bulk save never write `goalType`;
+- archive and restore preserve `goalType`;
+- restraint names appear in dashboard, timer, manual input, budget, online/offline history, online/offline statistics, category management;
+- every new entry carries `goalType`;
+- 3-hour restraint values are exactly `200, 167, 133, 100, -33, -67, -100`;
+- any positive overage is negative;
+- zero budget is excluded;
+- overall score uses budget-minute weights;
+- phone 1-hour example is 100 points and phone 4-hour example is 57 points;
+- restraint negative contributes 0 and never subtracts another category score;
+- blue remaining bar decreases, exact is empty, red overage restarts from left;
+- actual/budget time totals remain positive sums;
+- timer and offline regressions remain green;
 - service worker uses v9 only;
 - no unrelated refactor or dependency is included.
 
@@ -1015,13 +937,13 @@ git add -A
 git commit -m "feat: add immutable restraint goals"
 ```
 
-PR body must explicitly state:
+PR body must state:
 
 ```markdown
 - 기존 대분류와 goalType 없는 데이터: growth
 - 절제 선택 위치: 대분류 추가 폼만
-- 목표 방식 변경: 생성 후 불가
+- 목표 방식 변경: 생성 후 불가, 보관·복원 시 보존
 - 전체 목표 준수: 예산시간 가중, 0~100점
-- 절제 음수의 전체 반영: 해당 항목 0점, 다른 목표 점수 차감 없음
-- 절제 막대: 파란 잔여량 감소 → 빈 막대 → 빨간 초과량 증가
+- 절제 음수의 전체 반영: 해당 항목 0점, 다른 목표 차감 없음
+- 절제 막대: 파란 잔여 감소 → 빈 막대 → 빨간 초과 증가
 ```
