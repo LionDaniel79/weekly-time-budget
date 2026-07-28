@@ -4,6 +4,14 @@ import {
   previousRecordedPeriod,
 } from './recorded-period-domain.js';
 import { buildCountdownBaseline } from './countdown-timer-domain.js';
+import {
+  calculateGoalAchievement,
+  calculateGoalComplianceScore,
+  calculateGoalContribution,
+  calculateGoalProgress,
+  categoryDisplayName,
+  normalizeGoalType,
+} from './goal-domain.js';
 
 export const DAY_KEYS = Object.freeze(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']);
 
@@ -178,20 +186,6 @@ export function calendarMonthCells(year, month, recordedDates, today) {
   return cells;
 }
 
-function achievement(budgetMinutes, actualMinutes) {
-  if (budgetMinutes <= 0) {
-    return actualMinutes > 0
-      ? { percentage: null, differenceMinutes: actualMinutes, status: 'unbudgeted' }
-      : { percentage: null, differenceMinutes: 0, status: 'unbudgeted' };
-  }
-  const differenceMinutes = actualMinutes - budgetMinutes;
-  return {
-    percentage: Math.round((actualMinutes / budgetMinutes) * 100),
-    differenceMinutes,
-    status: differenceMinutes > 0 ? 'exceeded' : 'remaining',
-  };
-}
-
 export function summarizeDailyCategories({
   categories,
   entries,
@@ -212,21 +206,39 @@ export function summarizeDailyCategories({
     const actualMinutes = relevant
       .filter((entry) => entry.categoryId === category.id)
       .reduce((sum, entry) => sum + Math.max(0, Number(entry.durationMinutes) || 0), 0);
+    const goalType = normalizeGoalType(category.goalType);
+    const achievement = calculateGoalAchievement({
+      goalType,
+      budgetMinutes: budget.minutes,
+      actualMinutes,
+    });
     return {
       id: category.id,
-      name: category.name,
+      name: categoryDisplayName(category),
+      goalType,
       budgetMinutes: budget.minutes,
       actualMinutes,
       budgetSource: budget.source,
-      ...achievement(budget.minutes, actualMinutes),
+      ...achievement,
+      contributionScore: calculateGoalContribution(achievement),
+      progress: calculateGoalProgress({
+        goalType,
+        budgetMinutes: budget.minutes,
+        actualMinutes,
+      }),
     };
   });
   const totalBudgetMinutes = categorySummaries.reduce((sum, item) => sum + item.budgetMinutes, 0);
   const totalActualMinutes = categorySummaries.reduce((sum, item) => sum + item.actualMinutes, 0);
+  const compliance = calculateGoalComplianceScore(categorySummaries);
   return {
     totalBudgetMinutes,
     totalActualMinutes,
-    ...achievement(totalBudgetMinutes, totalActualMinutes),
+    goalComplianceScore: compliance.score,
+    goalComplianceStatus: compliance.status,
+    percentage: compliance.score,
+    differenceMinutes: totalActualMinutes - totalBudgetMinutes,
+    status: compliance.status === 'excluded' ? 'excluded' : totalActualMinutes > totalBudgetMinutes ? 'exceeded' : totalActualMinutes === totalBudgetMinutes ? 'exact' : 'remaining',
     categorySummaries,
   };
 }

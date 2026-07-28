@@ -94,3 +94,10 @@
     margin: 2px 0 0;
   }
 }
+
+
+@media (max-width: 600px) {
+  .restraint-goal-option { align-items: flex-start; }
+  .category-name-edit { width: 100%; }
+  .goal-type-label { font-size: .82rem; }
+}

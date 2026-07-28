@@ -29,6 +29,7 @@ jobs:
           test -f _site/index.html
           test -f _site/styles.css
           test -f _site/service-worker.js
+          test -f _site/src/goal-domain.js
           test -f _site/src/recorded-period-domain.js
           test -f _site/src/recorded-period-navigation.js
           test -f _site/src/time-budget-domain.js

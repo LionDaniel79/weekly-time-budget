@@ -7,6 +7,7 @@ import {
   resolveDailyBudget,
   resolveWeeklyBudgetMinutes,
 } from './time-budget-domain.js';
+import { categoryDisplayName } from './goal-domain.js';
 
 const DAY_LABELS = Object.freeze({
   mon: '월', tue: '화', wed: '수', thu: '목', fri: '금', sat: '토', sun: '일',
@@ -33,12 +34,36 @@ const formatMinutes = (minutes) => {
 };
 
 const percentageText = (value) => value === null || value === undefined ? '—' : `${value}%`;
-const achievementText = (summary) => Number(summary?.totalBudgetMinutes) <= 0 && Number(summary?.totalActualMinutes) > 0
-  ? '예산 미설정'
-  : percentageText(summary?.percentage);
-const categoryAchievementText = (item) => Number(item?.budgetMinutes) <= 0 && Number(item?.actualMinutes) > 0
-  ? '예산 미설정'
-  : percentageText(item?.percentage);
+const goalScoreText = (summary) => summary?.goalComplianceStatus === 'excluded'
+  ? '계산 제외'
+  : `${summary?.goalComplianceScore ?? 0}점`;
+const categoryAchievementText = (item) => item?.hasBudget
+  ? percentageText(item.percentage)
+  : '달성률 계산 제외';
+
+function categoryProgressHtml(item) {
+  const progress = item?.progress || { mode: 'growth', fillPercentage: 0 };
+  const className = progress.mode === 'remaining'
+    ? 'restraint-progress restraint-remaining'
+    : progress.mode === 'overage'
+      ? 'restraint-progress restraint-overage'
+      : progress.mode === 'exact' || progress.mode === 'excluded'
+        ? 'restraint-progress restraint-exact'
+        : 'growth-progress';
+  return `<div class="progress ${className}"><span style="width:${progress.fillPercentage}%"></span></div>`;
+}
+
+function categoryGoalDetail(item) {
+  if (!item?.hasBudget) return '달성률 계산 제외';
+  if (item.goalType === 'restraint') {
+    if (item.status === 'overage') return `${formatMinutes(item.differenceMinutes)} 초과 사용`;
+    if (item.status === 'exact') return '예산 소진';
+    return `${formatMinutes(Math.abs(item.differenceMinutes))} 남음`;
+  }
+  if (item.differenceMinutes > 0) return `${formatMinutes(item.differenceMinutes)} 초과 달성`;
+  if (item.differenceMinutes < 0) return `${formatMinutes(Math.abs(item.differenceMinutes))} 남음`;
+  return '예산과 일치';
+}
 
 export function createTimeBudgetUiState(today) {
   return { mode: 'today', today };
@@ -75,7 +100,7 @@ function renderTodayBudget(model) {
     const direct = hasOwn(overrides, category.id);
     return `<label class="time-budget-category-row">
       <span class="time-budget-category-copy">
-        <strong>${escapeHtml(category.name)}</strong>
+        <strong>${escapeHtml(categoryDisplayName(category))}</strong>
         <small>${direct ? '직접 설정' : '요일 비율 적용'} · 자동 ${formatMinutes(automatic.minutes)}</small>
       </span>
       <span class="hours-input"><input type="number" name="${escapeHtml(category.id)}" min="0" step="0.5" inputmode="decimal" value="${direct ? hoursValue(overrides[category.id]) : ''}" placeholder="자동 ${hoursValue(automatic.minutes)}"><span>시간</span></span>
@@ -94,7 +119,7 @@ function renderWeekBudget(model) {
     const effective = resolveWeeklyBudgetMinutes(category, model.weekDocument);
     const explicit = explicitIds.has(category.id);
     return `<label class="time-budget-category-row">
-      <span class="time-budget-category-copy"><strong>${escapeHtml(category.name)}</strong><small>기본 ${formatMinutes(category.defaultBudgetMinutes ?? category.budgetMinutes ?? 0)} · 적용 ${formatMinutes(effective)}</small></span>
+      <span class="time-budget-category-copy"><strong>${escapeHtml(categoryDisplayName(category))}</strong><small>기본 ${formatMinutes(category.defaultBudgetMinutes ?? category.budgetMinutes ?? 0)} · 적용 ${formatMinutes(effective)}</small></span>
       <span class="hours-input"><input type="number" name="${escapeHtml(category.id)}" min="0" step="0.5" inputmode="decimal" value="${explicit ? hoursValue(model.weekDocument?.budgets?.[category.id]) : ''}" placeholder="기본 ${hoursValue(category.defaultBudgetMinutes ?? category.budgetMinutes ?? 0)}"><span>시간</span></span>
     </label>`;
   }).join('');
@@ -167,7 +192,7 @@ function updateWeightPreview(form) {
 
 function renderSummaryCards(summary, budgetLabel) {
   return `<div class="grid grid-3 dashboard-summary">
-    <article class="card"><p class="muted">전체 달성률</p><div class="metric">${achievementText(summary)}</div><div class="progress"><span style="width:${Math.min(Number(summary.percentage) || 0, 100)}%"></span></div></article>
+    <article class="card"><p class="muted">목표 준수</p><div class="metric">${goalScoreText(summary)}</div></article>
     <article class="card"><p class="muted">${budgetLabel}</p><div class="metric">${formatMinutes(summary.totalBudgetMinutes)}</div></article>
     <article class="card"><p class="muted">실제 기록</p><div class="metric">${formatMinutes(summary.totalActualMinutes)}</div></article>
   </div>`;
@@ -175,7 +200,7 @@ function renderSummaryCards(summary, budgetLabel) {
 
 function renderCategorySummary(summary) {
   const items = summary.categorySummaries || [];
-  return `<div class="card dashboard-category-card"><div class="section-title"><h2>대분류별 달성률</h2><span class="badge">${items.length}개 분야</span></div>${items.length ? items.map((item) => `<div class="dashboard-category-row"><div><strong>${escapeHtml(item.name)}</strong>${item.budgetSource ? `<small>${item.budgetSource === 'direct' ? '직접 설정' : '요일 비율 적용'}</small>` : ''}<div class="progress"><span style="width:${Math.min(Number(item.percentage) || 0, 100)}%"></span></div></div><span>${formatMinutes(item.actualMinutes)} / ${formatMinutes(item.budgetMinutes)}</span><strong class="dashboard-achievement-text">${categoryAchievementText(item)}</strong></div>`).join('') : '<div class="empty-state"><p>표시할 대분류가 없습니다.</p></div>'}</div>`;
+  return `<div class="card dashboard-category-card"><div class="section-title"><h2>대분류별 달성률</h2><span class="badge">${items.length}개 분야</span></div>${items.length ? items.map((item) => `<div class="dashboard-category-row"><div><strong>${escapeHtml(item.name)}</strong>${item.budgetSource ? `<small>${item.budgetSource === 'direct' ? '직접 설정' : '요일 비율 적용'}</small>` : ''}${categoryProgressHtml(item)}<small class="goal-detail">${categoryGoalDetail(item)}</small></div><span>${formatMinutes(item.actualMinutes)} / ${formatMinutes(item.budgetMinutes)}</span><strong class="dashboard-achievement-text">${categoryAchievementText(item)}</strong></div>`).join('') : '<div class="empty-state"><p>표시할 대분류가 없습니다.</p></div>'}</div>`;
 }
 
 function renderCalendar(model) {
