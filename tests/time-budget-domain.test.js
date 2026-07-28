@@ -8,6 +8,7 @@ import {
   parseOptionalHours,
   buildWeeklyBudgetSnapshot,
   resolveDailyBudget,
+  resolveCountdownBudgetBaseline,
   recordedDateKeys,
   previousRecordedDate,
   nextRecordedDateOrToday,
@@ -57,6 +58,52 @@ test('오늘 직접 예산은 자동 예산보다 우선하며 0도 유효하다
   const weekDocument = { budgets: { reading: 700 }, dayWeights: normalizeDayWeights({ mon: 2, tue: 2, wed: 1, thu: 1, fri: 1, sat: 2, sun: 1 }) };
   assert.deepEqual(resolveDailyBudget({ category, date: '2026-07-20', weekDocument, dailyDocument: null }), { minutes: 140, source: 'day-weight' });
   assert.deepEqual(resolveDailyBudget({ category, date: '2026-07-20', weekDocument, dailyDocument: { overrides: { reading: 0 } } }), { minutes: 0, source: 'direct' });
+});
+
+test('카운트다운 기준값은 직접 일간 예산과 오늘 기록만 사용한다', () => {
+  const result = resolveCountdownBudgetBaseline({
+    category: { id: 'reading', defaultBudgetMinutes: 300 },
+    date: '2026-07-28',
+    entries: [
+      { categoryId: 'reading', date: '2026-07-28', durationMinutes: 30 },
+      { categoryId: 'reading', date: '2026-07-28', durationMinutes: 15 },
+      { categoryId: 'reading', date: '2026-07-27', durationMinutes: 90 },
+      { categoryId: 'other', date: '2026-07-28', durationMinutes: 60 },
+    ],
+    weekDocument: { budgets: { reading: 210 } },
+    dailyDocument: { overrides: { reading: 120 } },
+  });
+  assert.equal(result.initialBudgetMinutes, 120);
+  assert.equal(result.priorRecordedMinutes, 45);
+  assert.equal(result.initialRemainingMs, 75 * 60_000);
+  assert.equal(result.budgetSource, 'direct');
+});
+
+test('카운트다운 기준값은 주간 배분과 동기화 대기 기록을 반영한다', () => {
+  const result = resolveCountdownBudgetBaseline({
+    category: { id: 'reading', defaultBudgetMinutes: 70 },
+    date: '2026-07-27',
+    entries: [{ categoryId: 'reading', date: '2026-07-27', durationMinutes: 25, syncStatus: 'pending' }],
+    weekDocument: { budgets: { reading: 140 }, dayWeights: { mon: 1, tue: 0, wed: 0, thu: 0, fri: 0, sat: 0, sun: 0 } },
+    dailyDocument: null,
+  });
+  assert.equal(result.initialBudgetMinutes, 140);
+  assert.equal(result.priorRecordedMinutes, 25);
+  assert.equal(result.initialRemainingMs, 115 * 60_000);
+  assert.equal(result.budgetSource, 'day-weight');
+});
+
+test('카운트다운 기준값은 예산 초과를 음수로 보존한다', () => {
+  const result = resolveCountdownBudgetBaseline({
+    category: { id: 'reading', defaultBudgetMinutes: 120 },
+    date: '2026-07-28',
+    entries: [{ categoryId: 'reading', date: '2026-07-28', durationMinutes: 145 }],
+    weekDocument: null,
+    dailyDocument: null,
+  });
+  assert.equal(result.initialBudgetMinutes, 120);
+  assert.equal(result.priorRecordedMinutes, 145);
+  assert.equal(result.initialRemainingMs, -25 * 60_000);
 });
 
 test('전날과 다음날은 양수 기록 날짜와 오늘 사이에서 이동한다', () => {
