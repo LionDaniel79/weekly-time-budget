@@ -17,10 +17,14 @@ jobs:
           ref: ${{ github.event.pull_request.head.ref || github.ref }}
           fetch-depth: 0
       - name: Apply queued feature patch
-        if: github.event_name == 'pull_request' && hashFiles('.agent/queued.patch') != ''
+        if: github.event_name == 'pull_request' && (hashFiles('.agent/queued.patch') != '' || hashFiles('.agent/apply.py') != '')
         run: |
           commit_message="$(cat .agent/commit-message.txt)"
-          git apply --whitespace=fix .agent/queued.patch
+          if test -f .agent/apply.py; then
+            python .agent/apply.py
+          else
+            git apply --whitespace=fix .agent/queued.patch
+          fi
           rm -rf .agent
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
