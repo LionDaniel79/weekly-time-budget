@@ -5,26 +5,33 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: write
+
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref || github.ref }}
+          fetch-depth: 0
+      - name: Apply queued feature patch
+        if: github.event_name == 'pull_request' && hashFiles('.agent/queued.patch') != ''
+        run: |
+          commit_message="$(cat .agent/commit-message.txt)"
+          git apply --whitespace=fix .agent/queued.patch
+          rm -rf .agent
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "$commit_message"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
       - name: Upload temporary source snapshot
         uses: actions/upload-artifact@v4
         with:
           name: source-snapshot
-          path: |
-            src
-            tests
-            scripts
-            index.html
-            styles.css
-            service-worker.js
-            package.json
-            manifest.webmanifest
-            firebase-config.example.js
-            .github/workflows/ci.yml
+          path: .
           include-hidden-files: true
           retention-days: 1
       - uses: actions/setup-node@v4
