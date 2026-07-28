@@ -17,10 +17,13 @@ export function timerDisplayMilliseconds(timer, elapsedMs = 0) {
     : elapsed;
 }
 
-export function formatSignedTimerMilliseconds(value) {
+export function formatSignedTimerMilliseconds(value, { countdown = false } = {}) {
   const number = Number(value) || 0;
   const sign = number < 0 ? '-' : '';
-  const totalSeconds = Math.floor(Math.abs(number) / 1000);
+  const absoluteSeconds = Math.abs(number) / 1000;
+  const totalSeconds = countdown
+    ? Math.ceil(absoluteSeconds)
+    : Math.floor(absoluteSeconds);
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
