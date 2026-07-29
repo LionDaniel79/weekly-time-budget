@@ -86,9 +86,10 @@ test('통합 모듈은 통계와 시간 예산 기능보다 먼저 로드되고 
   assert.ok(navigationIndex >= 0, 'recorded period navigation script is missing');
   assert.ok(navigationIndex < statisticsIndex, 'navigation must register before statistics handlers');
   assert.ok(navigationIndex < dashboardIndex, 'navigation must register before dashboard handlers');
+  assert.ok(serviceWorker.includes('./src/category-effective-date.js'));
   assert.ok(serviceWorker.includes('./src/recorded-period-domain.js'));
   assert.ok(serviceWorker.includes('./src/recorded-period-navigation.js'));
-  assert.ok(serviceWorker.includes('weekly-time-budget-shell-v9'));
+  assert.ok(serviceWorker.includes('weekly-time-budget-shell-v10'));
 });
 
 test('새 기록 기간 모듈은 올바른 자바스크립트 문법이다', () => {

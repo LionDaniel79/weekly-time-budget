@@ -48,6 +48,6 @@ test('화면이 다시 보일 때 활성 타이머 탭은 원격 상태를 다�
 
 test('수정된 카운트다운 화면을 강제 갱신하도록 서비스 워커 셸 캐시를 v9으로 올린다', async () => {
   const source = await read('service-worker.js');
-  assert.ok(source.includes('weekly-time-budget-shell-v9'));
+  assert.ok(source.includes('weekly-time-budget-shell-v10'));
   assert.ok(source.includes('./src/countdown-timer-domain.js'));
 });

@@ -1,5 +1,5 @@
 import { firebaseConfig } from '../firebase-config.js';
-import { getWeekRange, moveWeekStart, summarizeCategories, toDateKey } from './domain.js';
+import { getWeekRange, moveWeekStart, summarizeCategories, summarizeWeeklyBudgetPeriod, toDateKey } from './domain.js';
 import {
   EQUAL_DAY_WEIGHTS,
   buildWeeklyBudgetSnapshot,
@@ -21,6 +21,7 @@ import {
 } from './time-budget-ui.js';
 import { getOfflineRuntime } from './offline-runtime.js';
 import { showOfflineNotice, showToast } from './app-toast.js';
+import { filterCategoriesActiveOnDate, isCategoryActiveInRange } from './category-effective-date.js';
 
 const appModule = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js');
 const authModule = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js');
@@ -44,7 +45,7 @@ const state = {
 let patchQueued = false;
 let loadingPromise = null;
 
-const activeCategories = () => state.categories;
+const activeCategories = (date = today()) => filterCategoriesActiveOnDate(state.categories, date);
 const defaultBudget = (category) => Number(category.defaultBudgetMinutes ?? category.budgetMinutes ?? 0) || 0;
 
 function plainEntry(doc) {
@@ -126,6 +127,7 @@ function periodCategories({ start, end, weekDocument, dailyDocument = null }) {
     .filter((entry) => entry.date >= start && entry.date <= end && knownIds.has(entry.categoryId))
     .map((entry) => entry.categoryId));
   return allKnownCategories()
+    .filter((category) => isCategoryActiveInRange(category, start, end))
     .filter((category) => activeIds.has(category.id) || budgetIds.has(category.id) || overrideIds.has(category.id) || entryIds.has(category.id))
     .map((category) => activeIds.has(category.id) ? category : { ...category, defaultBudgetMinutes: 0, budgetMinutes: 0 });
 }
@@ -135,7 +137,7 @@ async function ensureCurrentWeekSnapshot() {
   const source = findWeekDocument(weekStart);
   const budgets = { ...(source?.budgets || {}) };
   let changed = !source;
-  for (const category of state.categories) {
+  for (const category of activeCategories(today())) {
     if (budgets[category.id] !== undefined) continue;
     budgets[category.id] = defaultBudget(category);
     changed = true;
@@ -231,18 +233,8 @@ async function loadData() {
 function weeklySummary(key) {
   const range = weekRange(key);
   const week = normalizeWeek(key);
-  const categories = periodCategories({ start: range.start, end: range.end, weekDocument: week })
-    .map((category) => ({ ...category, budgetMinutes: resolveWeeklyBudgetMinutes(category, week) }));
-  const rows = summarizeCategories(categories, state.entries, range.start, range.end)
-    .filter((item) => state.categories.some((category) => category.id === item.id) || item.budgetMinutes > 0 || item.actualMinutes > 0);
-  const totalBudgetMinutes = rows.reduce((sum, item) => sum + item.budgetMinutes, 0);
-  const totalActualMinutes = rows.reduce((sum, item) => sum + item.actualMinutes, 0);
-  return {
-    totalBudgetMinutes,
-    totalActualMinutes,
-    percentage: totalBudgetMinutes ? Math.round(totalActualMinutes / totalBudgetMinutes * 100) : null,
-    categorySummaries: rows,
-  };
+  const categories = periodCategories({ start: range.start, end: range.end, weekDocument: week });
+  return summarizeWeeklyBudgetPeriod(state.entries, categories, state.weekly, key);
 }
 
 function renderDashboard() {
@@ -330,7 +322,7 @@ function renderBudget() {
   root.innerHTML = `<div data-feature-ui="budget">${renderTimeBudgetHtml({
     mode: state.budget.mode,
     today: state.budget.today,
-    categories: activeCategories(),
+    categories: activeCategories(state.budget.today),
     weekDocument: normalizeWeek(currentWeekStart()),
     dailyDocument: dailyFor(state.budget.today),
     defaultDayWeights: state.defaultDayWeights,
@@ -350,12 +342,13 @@ function renderBudget() {
 
 async function saveDaily(inputs) {
   const date = today();
-  const activeIds = new Set(state.categories.map((category) => category.id));
+  const currentCategories = activeCategories(date);
+  const activeIds = new Set(currentCategories.map((category) => category.id));
   const preservedOverrides = Object.fromEntries(
     Object.entries(dailyFor(date)?.overrides || {}).filter(([categoryId]) => !activeIds.has(categoryId)),
   );
   const overrides = { ...preservedOverrides };
-  for (const category of state.categories) {
+  for (const category of currentCategories) {
     const parsed = parseOptionalHours(inputs[category.id]);
     if (parsed.explicit) overrides[category.id] = parsed.minutes;
   }
@@ -375,13 +368,14 @@ async function saveDaily(inputs) {
 async function saveWeekly({ budgetInputs, dayWeightInputs }) {
   const weekStart = currentWeekStart();
   const existing = normalizeWeek(weekStart);
-  const activeIds = new Set(state.categories.map((category) => category.id));
+  const currentCategories = activeCategories(today());
+  const activeIds = new Set(currentCategories.map((category) => category.id));
   const preservedBudgets = Object.fromEntries(
     Object.entries(existing.budgets || {}).filter(([categoryId]) => !activeIds.has(categoryId)),
   );
   const preservedExplicitBudgetIds = (existing.explicitBudgetIds || [])
     .filter((categoryId) => !activeIds.has(categoryId));
-  const snapshot = buildWeeklyBudgetSnapshot({ weekStart, categories: state.categories, budgetInputs, dayWeightInputs });
+  const snapshot = buildWeeklyBudgetSnapshot({ weekStart, categories: currentCategories, budgetInputs, dayWeightInputs });
   snapshot.budgets = { ...preservedBudgets, ...snapshot.budgets };
   snapshot.explicitBudgetIds = [...new Set([...preservedExplicitBudgetIds, ...snapshot.explicitBudgetIds])];
   const batch = store.writeBatch(db);

@@ -10,6 +10,7 @@ import { formatSignedTimerMilliseconds } from './countdown-timer-domain.js';
 import { getOfflineRuntime } from './offline-runtime.js';
 import { showEntrySaveResult, showToast } from './app-toast.js';
 import { categoryDisplayName, normalizeGoalType } from './goal-domain.js';
+import { filterCategoriesActiveOnDate, isCategoryActiveOnDate } from './category-effective-date.js';
 
 const appModule = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js');
 const authModule = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js');
@@ -236,9 +237,12 @@ function configureController() {
 
 function categoryOptions(selectedId) {
   const all = new Map([...state.archived, ...state.categories].map((item) => [item.id, item]));
-  const options = state.categories.map((category) => `<option value="${category.id}" ${category.id === selectedId ? 'selected' : ''}>${escapeHtml(categoryDisplayName(category))}</option>`);
-  if (selectedId && !state.categories.some((category) => category.id === selectedId)) {
-    options.unshift(`<option value="${selectedId}" selected>${escapeHtml(all.get(selectedId) ? categoryDisplayName(all.get(selectedId)) : '보관된 대분류')}</option>`);
+  const date = localDateKey(new Date());
+  const activeCategories = filterCategoriesActiveOnDate(state.categories, date);
+  const options = activeCategories.map((category) => `<option value="${category.id}" ${category.id === selectedId ? 'selected' : ''}>${escapeHtml(categoryDisplayName(category))}</option>`);
+  if (selectedId && !activeCategories.some((category) => category.id === selectedId)) {
+    const selected = all.get(selectedId);
+    options.unshift(`<option value="${selectedId}" selected>${escapeHtml(selected ? categoryDisplayName(selected) : '보관된 대분류')}</option>`);
   }
   return options.join('');
 }
@@ -404,6 +408,15 @@ async function handleAction(button) {
       const categoryId = document.querySelector('#timer-category')?.value;
       if (!categoryId) return alert('대분류를 선택하세요.');
       const startedDate = localDateKey(new Date());
+      const category = knownCategory(categoryId);
+      if (!category || !isCategoryActiveOnDate(category, startedDate)) {
+        showToast({
+          type: 'error',
+          title: '이 대분류는 아직 사용할 수 없습니다.',
+          message: '대분류 추가일부터 타이머를 시작할 수 있습니다.',
+        });
+        return;
+      }
       const baseline = state.selectedMode === 'countdown'
         ? countdownBaselineFor(categoryId, startedDate)
         : null;

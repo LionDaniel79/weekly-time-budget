@@ -376,8 +376,11 @@ function categoryBudgetMatrix(items, labelKey, labelFormatter, title) {
       <tbody>${items.map((item) => {
         const byId = new Map(item.categorySummaries.map((category) => [category.id, category]));
         return `<tr><td data-label="기간" class="statistics-card-title"><strong>${labelFormatter(item[labelKey])}</strong></td>${orderedIds.map((id) => {
-          const category = byId.get(id) || { budgetMinutes: 0, actualMinutes: 0, percentage: 0, hasBudget: false };
           const categoryName = escapeHtml(categoryById.get(id) ? categoryDisplayName(categoryById.get(id)) : '삭제된 대분류');
+          const category = byId.get(id);
+          if (!category) {
+            return `<td data-label="${categoryName}"><span class="muted">—</span></td>`;
+          }
           return `<td data-label="${categoryName}"><div class="matrix-cell"><strong>${formatMinutes(category.actualMinutes)} / ${formatMinutes(category.budgetMinutes)}</strong><small>${achievementText(category)}</small></div></td>`;
         }).join('')}<td data-label="전체" class="statistics-matrix-total"><div class="matrix-cell"><strong>${formatMinutes(item.totalActualMinutes)} / ${formatMinutes(item.totalBudgetMinutes)}</strong><small>${overallAchievementText(item)}</small></div></td></tr>`;
       }).join('')}</tbody>

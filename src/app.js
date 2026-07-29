@@ -4,6 +4,7 @@ import {
   getWeekRange,
   minutesBetween,
   summarizeCategories,
+  summarizeWeeklyBudgetPeriod,
   toDateKey,
 } from './domain.js';
 import {
@@ -29,6 +30,11 @@ import {
   categoryDisplayName,
   normalizeGoalType,
 } from './goal-domain.js';
+import {
+  filterCategoriesActiveOnDate,
+  isCategoryActiveOnDate,
+  isEntryWithinCategoryEffectiveDate,
+} from './category-effective-date.js';
 
 const configured = !Object.values(firebaseConfig).some((value) => String(value).includes('REPLACE_ME'));
 const views = ['dashboard', 'record', 'budget', 'history', 'statistics', 'categories'];
@@ -81,9 +87,10 @@ const categoriesForSummary = () => state.categories.map((category) => ({
   ...category,
   budgetMinutes: effectiveBudgetMinutes(category),
 }));
-const optionHtml = (selectedId = '') => state.categories
+const categoryOptionHtml = ({ date, selectedId = '' }) => filterCategoriesActiveOnDate(state.categories, date)
   .map((category) => `<option value="${category.id}" ${category.id === selectedId ? 'selected' : ''}>${escapeHtml(categoryDisplayName(category))}</option>`)
   .join('');
+const optionHtml = (selectedId = '') => categoryOptionHtml({ date: toDateKey(new Date()), selectedId });
 
 function plainEntry(doc) {
   const data = doc.data();
@@ -234,8 +241,15 @@ async function saveCategory({ id, name, defaultBudgetMinutes: budget, goalType }
     order: existing?.order || state.categories.length + 1,
   };
   const collectionRef = firebase.collection(db, 'users', state.user.uid, 'categories');
-  if (id) await firebase.setDoc(firebase.doc(collectionRef, id), basePayload, { merge: true });
-  else await firebase.addDoc(collectionRef, { ...basePayload, goalType: normalizeGoalType(goalType) });
+  if (id) {
+    await firebase.setDoc(firebase.doc(collectionRef, id), basePayload, { merge: true });
+  } else {
+    await firebase.addDoc(collectionRef, {
+      ...basePayload,
+      goalType: normalizeGoalType(goalType),
+      createdDate: toDateKey(new Date()),
+    });
+  }
   await loadData(); renderAll();
 }
 
@@ -349,17 +363,20 @@ function legacyGoalDetail(item) {
 
 function renderDashboard() {
   const range = getWeekRange();
-  const summary = summarizeCategories(categoriesForSummary(), state.entries, range.start, range.end);
-  const totalBudget = summary.reduce((sum, item) => sum + item.budgetMinutes, 0);
-  const totalActual = summary.reduce((sum, item) => sum + item.actualMinutes, 0);
-  const compliance = calculateGoalComplianceScore(summary);
-  const scoreText = compliance.status === 'excluded' ? '계산 제외' : `${compliance.score}점`;
+  const summary = summarizeWeeklyBudgetPeriod(
+    state.entries,
+    state.categories,
+    state.weeklyBudget ? [state.weeklyBudget] : [],
+    range.start,
+  );
+  const scoreText = summary.goalComplianceStatus === 'excluded' ? '계산 제외' : `${summary.goalComplianceScore}점`;
+  const rows = summary.categorySummaries;
   $('#dashboard-view').innerHTML = `<div class="grid grid-3">
     <article class="card"><p class="muted">목표 준수</p><div class="metric">${scoreText}</div></article>
-    <article class="card"><p class="muted">이번 주 예산</p><div class="metric">${formatMinutes(totalBudget)}</div><p class="muted">월요일부터 주일까지</p></article>
-    <article class="card"><p class="muted">실제 기록</p><div class="metric">${formatMinutes(totalActual)}</div><p class="muted">월요일부터 주일까지 모두 포함</p></article>
-  </div><div class="card" style="margin-top:18px"><div class="section-title"><h2>대분류별 달성률</h2><span class="badge">${summary.length}개 분야</span></div>
-  ${summary.length ? summary.map((item) => `<div class="budget-row"><div><strong>${escapeHtml(item.name)}</strong>${legacyGoalProgressHtml(item)}</div><div>${formatMinutes(item.actualMinutes)} / ${formatMinutes(item.budgetMinutes)}</div><strong>${item.hasBudget ? `${item.percentage}%` : '—'}</strong><span class="muted">${legacyGoalDetail(item)}</span></div>`).join('') : $('#empty-template').innerHTML}</div>`;
+    <article class="card"><p class="muted">이번 주 예산</p><div class="metric">${formatMinutes(summary.totalBudgetMinutes)}</div><p class="muted">월요일부터 주일까지</p></article>
+    <article class="card"><p class="muted">실제 기록</p><div class="metric">${formatMinutes(summary.totalActualMinutes)}</div><p class="muted">월요일부터 주일까지 모두 포함</p></article>
+  </div><div class="card" style="margin-top:18px"><div class="section-title"><h2>대분류별 달성률</h2><span class="badge">${rows.length}개 분야</span></div>
+  ${rows.length ? rows.map((item) => `<div class="budget-row"><div><strong>${escapeHtml(item.name)}</strong>${legacyGoalProgressHtml(item)}</div><div>${formatMinutes(item.actualMinutes)} / ${formatMinutes(item.budgetMinutes)}</div><strong>${item.hasBudget ? `${item.percentage}%` : '—'}</strong><span class="muted">${legacyGoalDetail(item)}</span></div>`).join('') : $('#empty-template').innerHTML}</div>`;
 }
 
 function renderRecord() {
@@ -385,6 +402,11 @@ function bindTimer() {
     if (!state.timer) {
       const categoryId = $('#timer-category').value;
       if (!categoryId) return alert('대분류를 선택하세요.');
+      const startedDate = toDateKey(new Date());
+      const category = state.categories.find((item) => item.id === categoryId);
+      if (!category || !isCategoryActiveOnDate(category, startedDate)) {
+        return alert('이 대분류는 추가일부터 타이머를 시작할 수 있습니다.');
+      }
       state.timer = { categoryId, note: $('#timer-note').value.trim(), startedAt: Date.now() };
       renderRecord();
       state.timerInterval = setInterval(() => {
@@ -406,10 +428,23 @@ function manualForm() {
   const end = now.toTimeString().slice(0, 5);
   const start = new Date(now.getTime() - 3600000).toTimeString().slice(0, 5);
   const durationMode = state.manualInputMode === MANUAL_INPUT_MODES.DURATION;
-  return `<form id="manual-form" class="form-grid" novalidate><div class="manual-mode-switch" role="group" aria-label="수동 입력 방식"><button type="button" class="tab-button ${durationMode ? '' : 'active'}" data-manual-mode="time-range" aria-pressed="${durationMode ? 'false' : 'true'}">시작·종료 시각</button><button type="button" class="tab-button ${durationMode ? 'active' : ''}" data-manual-mode="duration" aria-pressed="${durationMode ? 'true' : 'false'}">분 직접 입력</button></div><label>대분류<select id="manual-category" required><option value="">선택하세요</option>${optionHtml(state.manualCategoryId)}</select></label><label>날짜<input id="manual-date" type="date" value="${toDateKey(now)}" required></label>${durationMode ? `<label>직접 기록할 시간<div class="duration-input-row"><input id="manual-duration" type="number" min="1" max="1440" step="1" inputmode="numeric" autocomplete="off" required><span aria-hidden="true">분</span></div></label>` : `<div class="time-fields"><label>시작<input id="manual-start" type="time" value="${start}" required></label><label>종료<input id="manual-end" type="time" value="${end}" required></label></div>`}<label>메모(선택)<textarea id="manual-note" rows="2"></textarea></label><button class="primary-button" type="submit">기록 저장</button></form>`;
+  return `<form id="manual-form" class="form-grid" novalidate><div class="manual-mode-switch" role="group" aria-label="수동 입력 방식"><button type="button" class="tab-button ${durationMode ? '' : 'active'}" data-manual-mode="time-range" aria-pressed="${durationMode ? 'false' : 'true'}">시작·종료 시각</button><button type="button" class="tab-button ${durationMode ? 'active' : ''}" data-manual-mode="duration" aria-pressed="${durationMode ? 'true' : 'false'}">분 직접 입력</button></div><label>대분류<select id="manual-category" required><option value="">선택하세요</option>${categoryOptionHtml({ date: toDateKey(now), selectedId: state.manualCategoryId })}</select></label><label>날짜<input id="manual-date" type="date" value="${toDateKey(now)}" required></label>${durationMode ? `<label>직접 기록할 시간<div class="duration-input-row"><input id="manual-duration" type="number" min="1" max="1440" step="1" inputmode="numeric" autocomplete="off" required><span aria-hidden="true">분</span></div></label>` : `<div class="time-fields"><label>시작<input id="manual-start" type="time" value="${start}" required></label><label>종료<input id="manual-end" type="time" value="${end}" required></label></div>`}<label>메모(선택)<textarea id="manual-note" rows="2"></textarea></label><button class="primary-button" type="submit">기록 저장</button></form>`;
+}
+
+function refreshManualCategoryOptions() {
+  const select = $('#manual-category');
+  const date = $('#manual-date')?.value;
+  if (!select || !date) return;
+  const selectedId = select.value;
+  select.innerHTML = `<option value="">선택하세요</option>${categoryOptionHtml({ date, selectedId })}`;
+  if (![...select.options].some((option) => option.value === selectedId)) {
+    select.value = '';
+    state.manualCategoryId = '';
+  }
 }
 
 function bindManual() {
+  $('#manual-date')?.addEventListener('change', refreshManualCategoryOptions);
   document.querySelectorAll('[data-manual-mode]').forEach((button) => {
     button.onclick = () => {
       state.manualCategoryId = $('#manual-category')?.value || state.manualCategoryId;
@@ -426,6 +461,12 @@ function bindManual() {
     const date = $('#manual-date').value;
     if (!categoryId) return alert('대분류를 선택하세요.');
     if (!date) return alert('날짜를 선택하세요.');
+    const category = state.categories.find((item) => item.id === categoryId);
+    if (!category || !isCategoryActiveOnDate(category, date)) {
+      alert('이 대분류는 추가일 이전 날짜에 기록할 수 없습니다.');
+      refreshManualCategoryOptions();
+      return;
+    }
     state.manualCategoryId = categoryId;
     let entry;
     try {
@@ -450,12 +491,15 @@ function bindManual() {
 }
 
 function renderBudget() {
-  $('#budget-view').innerHTML = `<div class="card"><div class="section-title"><div><h2>이번 주 시간 예산</h2><p class="muted">이번 주에만 적용됩니다. 다음 주에는 대분류의 기본 예산이 다시 표시됩니다.</p></div></div>${state.categories.length ? `<form id="budget-bulk-form"><div class="category-list">${state.categories.map((category) => `<div class="category-item budget-edit-row" data-id="${category.id}"><div><strong>${escapeHtml(categoryDisplayName(category))}</strong><div class="muted">기본 ${formatMinutes(defaultBudgetMinutes(category))}</div></div><input type="number" name="hours" min="0" step="0.5" value="${effectiveBudgetMinutes(category) / 60}" aria-label="${escapeHtml(categoryDisplayName(category))} 이번 주 예산 시간"></div>`).join('')}</div><div class="bulk-save-actions"><button class="primary-button" type="submit">이번 주 예산 저장</button></div></form>` : $('#empty-template').innerHTML}</div>`;
+  const categories = filterCategoriesActiveOnDate(state.categories, toDateKey(new Date()));
+  $('#budget-view').innerHTML = `<div class="card"><div class="section-title"><div><h2>이번 주 시간 예산</h2><p class="muted">이번 주에만 적용됩니다. 다음 주에는 대분류의 기본 예산이 다시 표시됩니다.</p></div></div>${categories.length ? `<form id="budget-bulk-form"><div class="category-list">${categories.map((category) => `<div class="category-item budget-edit-row" data-id="${category.id}"><div><strong>${escapeHtml(categoryDisplayName(category))}</strong><div class="muted">기본 ${formatMinutes(defaultBudgetMinutes(category))}</div></div><input type="number" name="hours" min="0" step="0.5" value="${effectiveBudgetMinutes(category) / 60}" aria-label="${escapeHtml(categoryDisplayName(category))} 이번 주 예산 시간"></div>`).join('')}</div><div class="bulk-save-actions"><button class="primary-button" type="submit">이번 주 예산 저장</button></div></form>` : $('#empty-template').innerHTML}</div>`;
   if ($('#budget-bulk-form')) $('#budget-bulk-form').onsubmit = async (event) => { event.preventDefault(); const budgets = {}; document.querySelectorAll('.budget-edit-row').forEach((row) => { budgets[row.dataset.id] = Number(row.querySelector('[name="hours"]').value) * 60; }); await saveWeeklyBudget(budgets); alert('이번 주 예산을 저장했습니다.'); };
 }
 
 function renderHistory() {
-  $('#history-view').innerHTML = `<div class="card"><div class="section-title"><h2>최근 기록</h2><span class="badge">${state.entries.length}건</span></div>${state.entries.length ? state.entries.map((entry) => { const category = state.categories.find((item) => item.id === entry.categoryId); const timeDescription = manualEntryTimeLabel(entry, formatMinutes); const pending = entry.syncStatus === 'pending'; const failed = entry.syncStatus === 'failed'; return `<div class="entry"><strong>${entry.date}</strong><div><strong>${escapeHtml(category ? categoryDisplayName(category) : '삭제된 대분류')}</strong><div>${escapeHtml(timeDescription)}</div>${entry.note ? `<p class="muted">${escapeHtml(entry.note)}</p>` : ''}${pending ? '<span class="sync-status pending">동기화 대기</span>' : ''}${failed ? `<span class="sync-status failed">동기화 실패</span><button class="sync-retry" data-id="${entry.id}" type="button">다시 시도</button>` : ''}</div><div class="entry-actions"><button class="text-button delete-entry" data-id="${entry.id}">삭제</button></div></div>`; }).join('') : '<div class="empty-state"><h3>아직 기록이 없습니다.</h3><p>타이머 또는 수동 입력으로 첫 시간을 기록하세요.</p></div>'}</div>`;
+  const categoryById = new Map(state.categories.map((category) => [category.id, category]));
+  const entries = state.entries.filter((entry) => isEntryWithinCategoryEffectiveDate(entry, categoryById.get(entry.categoryId)));
+  $('#history-view').innerHTML = `<div class="card"><div class="section-title"><h2>최근 기록</h2><span class="badge">${entries.length}건</span></div>${entries.length ? entries.map((entry) => { const category = state.categories.find((item) => item.id === entry.categoryId); const timeDescription = manualEntryTimeLabel(entry, formatMinutes); const pending = entry.syncStatus === 'pending'; const failed = entry.syncStatus === 'failed'; return `<div class="entry"><strong>${entry.date}</strong><div><strong>${escapeHtml(category ? categoryDisplayName(category) : '삭제된 대분류')}</strong><div>${escapeHtml(timeDescription)}</div>${entry.note ? `<p class="muted">${escapeHtml(entry.note)}</p>` : ''}${pending ? '<span class="sync-status pending">동기화 대기</span>' : ''}${failed ? `<span class="sync-status failed">동기화 실패</span><button class="sync-retry" data-id="${entry.id}" type="button">다시 시도</button>` : ''}</div><div class="entry-actions"><button class="text-button delete-entry" data-id="${entry.id}">삭제</button></div></div>`; }).join('') : '<div class="empty-state"><h3>아직 기록이 없습니다.</h3><p>타이머 또는 수동 입력으로 첫 시간을 기록하세요.</p></div>'}</div>`;
   document.querySelectorAll('.delete-entry').forEach((button) => { button.onclick = () => deleteEntry(button.dataset.id); });
   document.querySelectorAll('.sync-retry').forEach((button) => { button.onclick = () => retryEntry(button.dataset.id).catch((error) => showToast({ type: 'error', title: '동기화하지 못했습니다.', message: error.message })); });
 }
