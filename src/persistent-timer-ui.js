@@ -239,8 +239,9 @@ function categoryOptions(selectedId) {
   const all = new Map([...state.archived, ...state.categories].map((item) => [item.id, item]));
   const date = localDateKey(new Date());
   const activeCategories = filterCategoriesActiveOnDate(state.categories, date);
+  const activeTimer = state.controller?.active;
   const options = activeCategories.map((category) => `<option value="${category.id}" ${category.id === selectedId ? 'selected' : ''}>${escapeHtml(categoryDisplayName(category))}</option>`);
-  if (selectedId && !activeCategories.some((category) => category.id === selectedId)) {
+  if (selectedId && activeTimer?.categoryId === selectedId && !activeCategories.some((category) => category.id === selectedId)) {
     const selected = all.get(selectedId);
     options.unshift(`<option value="${selectedId}" selected>${escapeHtml(selected ? categoryDisplayName(selected) : '보관된 대분류')}</option>`);
   }
@@ -408,7 +409,7 @@ async function handleAction(button) {
       const categoryId = document.querySelector('#timer-category')?.value;
       if (!categoryId) return alert('대분류를 선택하세요.');
       const startedDate = localDateKey(new Date());
-      const category = knownCategory(categoryId);
+      const category = state.categories.find((item) => item.id === categoryId);
       if (!category || !isCategoryActiveOnDate(category, startedDate)) {
         showToast({
           type: 'error',
