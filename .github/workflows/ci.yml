@@ -67,78 +67,15 @@ jobs:
           test -f _site/src/service-worker-cache.js
           test -f _site/src/service-worker-registration.js
           test -f _site/src/statistics-session-state.js
-      - name: Restore standard CI and commit implementation
+      - name: Commit verified implementation sources
         if: steps.agent_patch.outputs.applied == 'true'
         run: |
+          rm -f test-output.txt
           rm -f scripts/agent-apply-category-effective-date.mjs
-          rm -f .github/workflows/agent-apply-category-effective-date.yml
-          cat > .github/workflows/ci.yml <<'YAML'
-          name: CI
-
-          on:
-            pull_request:
-            push:
-              branches: [main]
-
-          permissions:
-            contents: read
-
-          jobs:
-            test:
-              runs-on: ubuntu-latest
-              steps:
-                - uses: actions/checkout@v4
-                - uses: actions/setup-node@v4
-                  with:
-                    node-version: 22
-                - name: Run tests
-                  run: npm test > test-output.txt 2>&1
-                - name: Prepare Pages artifact
-                  env:
-                    FIREBASE_API_KEY: test-api-key
-                    FIREBASE_AUTH_DOMAIN: test.firebaseapp.com
-                    FIREBASE_PROJECT_ID: test-project
-                    FIREBASE_STORAGE_BUCKET: test.firebasestorage.app
-                    FIREBASE_MESSAGING_SENDER_ID: "123456789"
-                    FIREBASE_APP_ID: "1:123456789:web:test"
-                  run: npm run prepare:pages
-                - name: Verify Pages feature files
-                  run: |
-                    test -f _site/index.html
-                    test -f _site/styles.css
-                    test -f _site/service-worker.js
-                    test -f _site/src/category-effective-date.js
-                    test -f _site/src/goal-domain.js
-                    test -f _site/src/recorded-period-domain.js
-                    test -f _site/src/recorded-period-navigation.js
-                    test -f _site/src/time-budget-domain.js
-                    test -f _site/src/time-budget-ui.js
-                    test -f _site/src/time-budget-feature.js
-                    test -f _site/src/persistent-timer.js
-                    test -f _site/src/persistent-timer-ui.js
-                    test -f _site/src/orphan-local-timer-cleanup.js
-                    test -f _site/src/local-timer-removal-reload.js
-                    test -f _site/src/offline-entry-domain.js
-                    test -f _site/src/offline-store.js
-                    test -f _site/src/offline-entry-repository.js
-                    test -f _site/src/offline-sync.js
-                    test -f _site/src/offline-runtime.js
-                    test -f _site/src/app-toast.js
-                    test -f _site/src/ui-session-state.js
-                    test -f _site/src/service-worker-cache.js
-                    test -f _site/src/service-worker-registration.js
-                    test -f _site/src/statistics-session-state.js
-                - name: Upload failed test output
-                  if: failure()
-                  uses: actions/upload-artifact@v4
-                  with:
-                    name: failed-test-output
-                    path: test-output.txt
-                    retention-days: 7
-          YAML
           git config user.name "OpenAI Agent"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
+          git add src tests service-worker.js
+          git add -u scripts
           git diff --cached --check
           git commit -m "feat: apply category effective dates"
           git push origin HEAD:feat/category-effective-date
