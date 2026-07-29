@@ -301,10 +301,18 @@ function renderTimer() {
   const card = view.querySelector('.card');
   if (!card) return;
   const timer = state.controller.active;
-  const selectedId = timer?.categoryId
+  let selectedId = timer?.categoryId
     || state.selectedCategoryId
     || localStorage.getItem(LAST_CATEGORY_KEY)
     || '';
+  const currentDate = localDateKey(new Date());
+  const selectedCategory = state.categories.find((item) => item.id === selectedId);
+  if (!timer && selectedId && (!selectedCategory || !isCategoryActiveOnDate(selectedCategory, currentDate))) {
+    selectedId = '';
+    state.selectedCategoryId = '';
+    state.previewBaseline = null;
+    localStorage.removeItem(LAST_CATEGORY_KEY);
+  }
   if (!timer && selectedId !== state.selectedCategoryId) {
     state.selectedCategoryId = selectedId;
     updatePreviewBaseline();
