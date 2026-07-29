@@ -12,6 +12,7 @@ import {
   categoryDisplayName,
   normalizeGoalType,
 } from './goal-domain.js';
+import { isCategoryActiveOnDate } from './category-effective-date.js';
 
 export const DAY_KEYS = Object.freeze(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']);
 
@@ -121,6 +122,7 @@ export function resolveDailyBudget({
   dailyDocument,
   defaultDayWeights = EQUAL_DAY_WEIGHTS,
 }) {
+  if (!isCategoryActiveOnDate(category, date)) return { minutes: 0, source: 'inactive' };
   const overrides = dailyDocument?.overrides || {};
   if (hasOwn(overrides, category.id)) {
     return {
@@ -144,6 +146,7 @@ export function resolveCountdownBudgetBaseline({
   dailyDocument,
   defaultDayWeights = EQUAL_DAY_WEIGHTS,
 }) {
+  if (!isCategoryActiveOnDate(category, date)) return null;
   const budget = resolveDailyBudget({
     category,
     date,
@@ -194,8 +197,14 @@ export function summarizeDailyCategories({
   dailyDocument,
   defaultDayWeights = EQUAL_DAY_WEIGHTS,
 }) {
-  const relevant = entries.filter((entry) => entry.date === date);
-  const categorySummaries = categories.map((category) => {
+  const activeCategories = categories.filter((category) => isCategoryActiveOnDate(category, date));
+  const categoryById = new Map(activeCategories.map((category) => [category.id, category]));
+  const relevant = entries.filter((entry) => (
+    entry.date === date
+    && categoryById.has(entry.categoryId)
+    && isCategoryActiveOnDate(categoryById.get(entry.categoryId), entry.date)
+  ));
+  const categorySummaries = activeCategories.map((category) => {
     const budget = resolveDailyBudget({
       category,
       date,

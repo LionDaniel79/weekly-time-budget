@@ -6,6 +6,11 @@ import {
   categoryDisplayName,
   normalizeGoalType,
 } from './goal-domain.js';
+import {
+  isCategoryActiveInRange,
+  isCategoryActiveOnDate,
+  isEntryWithinCategoryEffectiveDate,
+} from './category-effective-date.js';
 
 const pad = (value) => String(value).padStart(2, '0');
 
@@ -219,11 +224,41 @@ function weeklyBudgetMap(weeklyBudgets) {
   return new Map((weeklyBudgets || []).map((week) => [week.weekStart || week.id, week]));
 }
 
-function effectiveWeeklyBudget(category, week, dateKey) {
+const PERIOD_DAY_KEYS = Object.freeze(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']);
+
+function periodDayKey(dateKey) {
+  const index = (fromDateKey(dateKey).getDay() + 6) % 7;
+  return PERIOD_DAY_KEYS[index];
+}
+
+function distributedWeeklyMinutes(totalMinutes, rawWeights = {}) {
+  const total = Math.max(0, Math.round(Number(totalMinutes) || 0));
+  const values = Object.fromEntries(PERIOD_DAY_KEYS.map((key) => {
+    const value = Number(rawWeights?.[key]);
+    return [key, Number.isFinite(value) && value > 0 ? value : 0];
+  }));
+  const weightTotal = Object.values(values).reduce((sum, value) => sum + value, 0);
+  const weights = weightTotal
+    ? Object.fromEntries(PERIOD_DAY_KEYS.map((key) => [key, values[key] / weightTotal]))
+    : Object.fromEntries(PERIOD_DAY_KEYS.map((key) => [key, 1 / PERIOD_DAY_KEYS.length]));
+  let assigned = 0;
+  return Object.fromEntries(PERIOD_DAY_KEYS.map((key, index) => {
+    const remaining = Math.max(0, total - assigned);
+    const minutes = index === PERIOD_DAY_KEYS.length - 1
+      ? remaining
+      : Math.min(remaining, Math.max(0, Math.round(total * weights[key])));
+    assigned += minutes;
+    return [key, minutes];
+  }));
+}
+
+function effectiveDailyBudget(category, week, dateKey) {
+  if (!isCategoryActiveOnDate(category, dateKey)) return 0;
   const archivedDate = normalizedTimestampDate(category.archivedAt);
   if (archivedDate && dateKey > archivedDate) return 0;
   const override = week?.budgets?.[category.id];
-  return override === undefined ? defaultBudgetMinutes(category) : Number(override) || 0;
+  const weeklyMinutes = override === undefined ? defaultBudgetMinutes(category) : Number(override) || 0;
+  return distributedWeeklyMinutes(weeklyMinutes, week?.dayWeights)[periodDayKey(dateKey)] || 0;
 }
 
 function sortedCategories(categories) {
@@ -232,10 +267,16 @@ function sortedCategories(categories) {
       || String(a.name).localeCompare(String(b.name), 'ko'));
 }
 
+function effectiveEntries(entries, categories) {
+  const categoryById = new Map(sortedCategories(categories).map((category) => [category.id, category]));
+  return (entries || []).filter((entry) => isEntryWithinCategoryEffectiveDate(entry, categoryById.get(entry.categoryId)));
+}
+
 function finalizeBudgetSummary(entries, categoryList, categoryById, budgetById, start, end) {
-  const filteredEntries = (entries || []).filter((entry) => (
-    isDateKey(entry.date) && entry.date >= start && entry.date <= end
-  ));
+  const filteredEntries = (entries || []).filter((entry) => {
+    if (!isDateKey(entry.date) || entry.date < start || entry.date > end) return false;
+    return isEntryWithinCategoryEffectiveDate(entry, categoryById.get(entry.categoryId));
+  });
   const actualById = new Map();
   const entryGoalTypeById = new Map();
   const days = new Set();
@@ -294,8 +335,10 @@ function finalizeBudgetSummary(entries, categoryList, categoryById, budgetById, 
 }
 
 function summarizeBudgetRange(entries, categories, weeklyBudgets, start, end, includedWeekKeys = null) {
-  const categoryList = sortedCategories(categories);
-  const categoryById = new Map(categoryList.map((category) => [category.id, category]));
+  const allCategoryList = sortedCategories(categories);
+  const categoryById = new Map(allCategoryList.map((category) => [category.id, category]));
+  const categoryList = allCategoryList
+    .filter((category) => isCategoryActiveInRange(category, start, end));
   const weeks = weeklyBudgetMap(weeklyBudgets);
   const budgetById = new Map(categoryList.map((category) => [category.id, 0]));
 
@@ -304,8 +347,8 @@ function summarizeBudgetRange(entries, categories, weeklyBudgets, start, end, in
     if (includedWeekKeys && !includedWeekKeys.has(weekKey)) return;
     const week = weeks.get(weekKey);
     categoryList.forEach((category) => {
-      const weeklyMinutes = effectiveWeeklyBudget(category, week, dateKey);
-      budgetById.set(category.id, (budgetById.get(category.id) || 0) + weeklyMinutes / 7);
+      const dailyMinutes = effectiveDailyBudget(category, week, dateKey);
+      budgetById.set(category.id, (budgetById.get(category.id) || 0) + dailyMinutes);
     });
   });
 
@@ -326,9 +369,10 @@ export function summarizeWeeklyBudgetPeriod(entries, categories, weeklyBudgets, 
 
 export function summarizeRecordedMonthlyBudgetPeriod(entries, categories, weeklyBudgets, year, month) {
   const range = getMonthRange(year, month);
-  const weekKeys = recordedWeekKeysForMonth(entries, year, month);
+  const validEntries = effectiveEntries(entries, categories);
+  const weekKeys = recordedWeekKeysForMonth(validEntries, year, month);
   const summary = summarizeBudgetRange(
-    entries,
+    validEntries,
     categories,
     weeklyBudgets,
     range.start,
@@ -339,21 +383,15 @@ export function summarizeRecordedMonthlyBudgetPeriod(entries, categories, weekly
 }
 
 function combineBudgetSummaries(summaries, categories, recordDates) {
-  const categoryList = sortedCategories(categories);
-  const totals = new Map(categoryList.map((category) => [category.id, {
-    id: category.id,
-    name: category.name,
-    goalType: normalizeGoalType(category.goalType),
-    budgetMinutes: 0,
-    actualMinutes: 0,
-  }]));
-
+  const categoryById = new Map(sortedCategories(categories).map((category) => [category.id, category]));
+  const totals = new Map();
   summaries.forEach((summary) => {
     summary.categorySummaries.forEach((item) => {
+      const source = categoryById.get(item.id) || item;
       const current = totals.get(item.id) || {
         id: item.id,
-        name: item.name,
-        goalType: normalizeGoalType(item.goalType),
+        name: source.name || item.name,
+        goalType: normalizeGoalType(source.goalType ?? item.goalType),
         budgetMinutes: 0,
         actualMinutes: 0,
       };
@@ -389,16 +427,17 @@ function combineBudgetSummaries(summaries, categories, recordDates) {
 }
 
 export function summarizeRecordedYearlyBudgetPeriod(entries, categories, weeklyBudgets, year) {
-  const months = recordedMonthsForYear(entries, year);
+  const validEntries = effectiveEntries(entries, categories);
+  const months = recordedMonthsForYear(validEntries, year);
   const summaries = months.map((month) => summarizeRecordedMonthlyBudgetPeriod(
-    entries,
+    validEntries,
     categories,
     weeklyBudgets,
     year,
     month,
   ));
   const prefix = `${Number(year)}-`;
-  const recordDates = new Set((entries || [])
+  const recordDates = new Set(validEntries
     .filter((entry) => isDateKey(entry.date) && entry.date.startsWith(prefix))
     .map((entry) => entry.date));
   return {
@@ -437,9 +476,10 @@ export function detailedMonthlyBudgetComparison(entries, categories, weeklyBudge
 }
 
 export function detailedRecordedMonthlyBudgetComparison(entries, categories, weeklyBudgets, year) {
-  const rows = recordedMonthsForYear(entries, year).map((month) => ({
+  const validEntries = effectiveEntries(entries, categories);
+  const rows = recordedMonthsForYear(validEntries, year).map((month) => ({
     month,
-    ...summarizeRecordedMonthlyBudgetPeriod(entries, categories, weeklyBudgets, year, month),
+    ...summarizeRecordedMonthlyBudgetPeriod(validEntries, categories, weeklyBudgets, year, month),
   }));
   return rows.map((row, index) => {
     const change = index
@@ -487,9 +527,10 @@ export function detailedYearlyBudgetComparison(entries, categories, weeklyBudget
 }
 
 export function detailedRecordedYearlyBudgetComparison(entries, categories, weeklyBudgets) {
-  const rows = recordedYears(entries).map((year) => ({
+  const validEntries = effectiveEntries(entries, categories);
+  const rows = recordedYears(validEntries).map((year) => ({
     year,
-    ...summarizeRecordedYearlyBudgetPeriod(entries, categories, weeklyBudgets, year),
+    ...summarizeRecordedYearlyBudgetPeriod(validEntries, categories, weeklyBudgets, year),
   }));
   return rows.map((row, index) => {
     const change = index

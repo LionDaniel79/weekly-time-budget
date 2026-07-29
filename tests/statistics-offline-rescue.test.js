@@ -48,5 +48,5 @@ test('오프라인 통계 구조와 기록 기간 탐색이 앱 셸에 포함된
   assert.ok(serviceWorker.includes('./src/statistics-offline-rescue.js'));
   assert.ok(serviceWorker.includes('./src/recorded-period-domain.js'));
   assert.ok(serviceWorker.includes('./src/recorded-period-navigation.js'));
-  assert.ok(serviceWorker.includes('weekly-time-budget-shell-v9'));
+  assert.ok(serviceWorker.includes('weekly-time-budget-shell-v10'));
 });

@@ -1,5 +1,6 @@
 import { firebaseConfig } from '../firebase-config.js';
 import { categoryDisplayName, normalizeGoalType } from './goal-domain.js';
+import { isEntryWithinCategoryEffectiveDate } from './category-effective-date.js';
 
 const appModule = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js');
 const authModule = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js');
@@ -209,6 +210,7 @@ async function restoreCategory(categoryId) {
       defaultBudgetMinutes: Number(data.defaultBudgetMinutes ?? data.budgetMinutes ?? 0),
       order: data.order || 999,
       goalType: normalizeGoalType(data.goalType),
+      ...(data.createdDate !== undefined ? { createdDate: data.createdDate } : {}),
     });
     batch.delete(archivedRef);
     await batch.commit();
@@ -262,7 +264,10 @@ async function patchHistoryView() {
     ]);
     const activeCategories = new Map(activeSnapshot.docs.map((docSnapshot) => [docSnapshot.id, { id: docSnapshot.id, ...docSnapshot.data() }]));
     const archivedCategories = new Map(archivedSnapshot.docs.map((docSnapshot) => [docSnapshot.id, { id: docSnapshot.id, ...docSnapshot.data() }]));
-    const entries = entriesSnapshot.docs.map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }));
+    const categoryById = new Map([...archivedCategories, ...activeCategories]);
+    const entries = entriesSnapshot.docs
+      .map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }))
+      .filter((entry) => isEntryWithinCategoryEffectiveDate(entry, categoryById.get(entry.categoryId)));
 
     view.dataset.archiveAware = 'true';
     view.innerHTML = `<div class="card"><div class="section-title"><h2>최근 기록</h2><span class="badge">${entries.length}건</span></div><div class="history-tools"><input id="history-category-search" type="search" placeholder="대분류 이름 또는 메모 검색" aria-label="기록 검색"></div><div id="archive-aware-entry-list">${entries.length ? entries.map((entry) => {

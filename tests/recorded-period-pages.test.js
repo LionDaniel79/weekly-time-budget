@@ -25,7 +25,7 @@ test('Pages 산출물에 기록 기간과 카운트다운 모듈이 포함된다
   await access(path.join(outputDir, 'src', 'goal-domain.js'));
   await access(path.join(outputDir, 'src', 'mobile-compact.css'));
   const serviceWorker = await readFile(path.join(outputDir, 'service-worker.js'), 'utf8');
-  assert.ok(serviceWorker.includes('weekly-time-budget-shell-v9'));
+  assert.ok(serviceWorker.includes('weekly-time-budget-shell-v10'));
   assert.ok(serviceWorker.includes('./src/recorded-period-domain.js'));
   assert.ok(serviceWorker.includes('./src/recorded-period-navigation.js'));
   assert.ok(serviceWorker.includes('./src/countdown-timer-domain.js'));
