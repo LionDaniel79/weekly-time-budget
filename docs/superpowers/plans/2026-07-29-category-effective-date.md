@@ -345,7 +345,7 @@ At the start of `resolveCountdownBudgetBaseline()`:
 if (!isCategoryActiveOnDate(category, date)) return null;
 ```
 
-In `summarizeDailyCategories()`:
+Replace the first half of `summarizeDailyCategories()` with this complete category and record preparation:
 
 ```js
 const activeCategories = categories.filter((category) => isCategoryActiveOnDate(category, date));
@@ -356,7 +356,37 @@ const relevant = entries.filter((entry) => (
   && isCategoryActiveOnDate(categoryById.get(entry.categoryId), entry.date)
 ));
 const categorySummaries = activeCategories.map((category) => {
-  // retain the existing budget, achievement, contribution and progress body
+  const budget = resolveDailyBudget({
+    category,
+    date,
+    weekDocument,
+    dailyDocument,
+    defaultDayWeights,
+  });
+  const actualMinutes = relevant
+    .filter((entry) => entry.categoryId === category.id)
+    .reduce((sum, entry) => sum + Math.max(0, Number(entry.durationMinutes) || 0), 0);
+  const goalType = normalizeGoalType(category.goalType);
+  const achievement = calculateGoalAchievement({
+    goalType,
+    budgetMinutes: budget.minutes,
+    actualMinutes,
+  });
+  return {
+    id: category.id,
+    name: categoryDisplayName(category),
+    goalType,
+    budgetMinutes: budget.minutes,
+    actualMinutes,
+    budgetSource: budget.source,
+    ...achievement,
+    contributionScore: calculateGoalContribution(achievement),
+    progress: calculateGoalProgress({
+      goalType,
+      budgetMinutes: budget.minutes,
+      actualMinutes,
+    }),
+  };
 });
 ```
 
@@ -425,7 +455,7 @@ Run: `node --test tests/domain.test.js`
 
 Expected: FAIL because dates before creation receive budget and pre-creation records are counted.
 
-- [ ] **Step 3: 날짜별 예산과 기간 목록 구현**
+- [ ] **Step 3: 날짜별 예산과 전체 대분류 맵 구현**
 
 ```js
 import {
@@ -441,17 +471,18 @@ At the beginning of `effectiveWeeklyBudget()`:
 if (!isCategoryActiveOnDate(category, dateKey)) return 0;
 ```
 
-At the beginning of `summarizeBudgetRange()` keep both the full map and the visible list:
+At the beginning of `summarizeBudgetRange()`:
 
 ```js
 const allCategoryList = sortedCategories(categories);
 const categoryById = new Map(allCategoryList.map((category) => [category.id, category]));
 const categoryList = allCategoryList
   .filter((category) => isCategoryActiveInRange(category, start, end));
+const weeks = weeklyBudgetMap(weeklyBudgets);
 const budgetById = new Map(categoryList.map((category) => [category.id, 0]));
 ```
 
-Pass the full `categoryById` to `finalizeBudgetSummary()`. This is required so a known category created after the selected period is not mistaken for a permanently deleted category.
+Pass the full `categoryById` to `finalizeBudgetSummary()`. A known category created after the selected period must not be treated as a permanently deleted category.
 
 - [ ] **Step 4: 기록 방어 필터 구현**
 
@@ -462,11 +493,9 @@ const filteredEntries = (entries || []).filter((entry) => {
 });
 ```
 
-Unknown permanently deleted categories have no metadata and remain visible.
+Unknown permanently deleted categories have no creation metadata and remain visible.
 
 - [ ] **Step 5: 연간 결합의 선행 0행 제거**
-
-Start `combineBudgetSummaries()` with an empty map and add only rows returned by represented monthly summaries:
 
 ```js
 const categoryById = new Map(sortedCategories(categories).map((category) => [category.id, category]));
@@ -565,8 +594,6 @@ import {
 } from './category-effective-date.js';
 ```
 
-Replace the helper:
-
 ```js
 const activeCategories = (date = today()) => filterCategoriesActiveOnDate(state.categories, date);
 ```
@@ -592,7 +619,7 @@ Pass `categories: activeCategories(state.budget.today)` to the budget UI model.
 
 - [ ] **Step 4: 기본 대시보드도 공통 주간 요약 사용**
 
-Import `summarizeWeeklyBudgetPeriod` in `src/app.js` and replace the manual `summarizeCategories()` weekly calculation:
+Import `summarizeWeeklyBudgetPeriod` in `src/app.js` and replace the manual weekly calculation:
 
 ```js
 const range = getWeekRange();
@@ -607,8 +634,6 @@ const summary = summarizeWeeklyBudgetPeriod(
 Render `summary.categorySummaries`, `summary.totalBudgetMinutes`, `summary.totalActualMinutes`, and `summary.goalComplianceScore` directly.
 
 - [ ] **Step 5: UI 렌더링 테스트**
-
-Append to `tests/time-budget-ui.test.js`:
 
 ```js
 test('시간 예산 UI는 모델에 전달된 대분류만 렌더링한다', () => {
@@ -703,7 +728,11 @@ function refreshManualCategoryOptions() {
 }
 ```
 
-Bind `$('#manual-date')?.addEventListener('change', refreshManualCategoryOptions);`.
+Bind:
+
+```js
+$('#manual-date')?.addEventListener('change', refreshManualCategoryOptions);
+```
 
 Before manual save:
 
@@ -716,7 +745,7 @@ if (!category || !isCategoryActiveOnDate(category, date)) {
 }
 ```
 
-Use today's date in the fallback timer list and repeat the same validation before starting it.
+Use `categoryOptionHtml({ date: toDateKey(new Date()), selectedId })` in the fallback timer form and repeat the same validation before starting it.
 
 - [ ] **Step 4: 영구 타이머 목록과 시작 가드**
 
@@ -727,18 +756,21 @@ import {
 } from './category-effective-date.js';
 ```
 
-In `categoryOptions()`:
+Replace `categoryOptions()` with:
 
 ```js
-const date = localDateKey(new Date());
-const activeCategories = filterCategoriesActiveOnDate(state.categories, date);
-const options = activeCategories.map((category) => /* existing option HTML */);
-if (selectedId && !activeCategories.some((category) => category.id === selectedId)) {
-  options.unshift(/* existing recovered or archived selected option HTML */);
+function categoryOptions(selectedId) {
+  const all = new Map([...state.archived, ...state.categories].map((item) => [item.id, item]));
+  const date = localDateKey(new Date());
+  const activeCategories = filterCategoriesActiveOnDate(state.categories, date);
+  const options = activeCategories.map((category) => `<option value="${category.id}" ${category.id === selectedId ? 'selected' : ''}>${escapeHtml(categoryDisplayName(category))}</option>`);
+  if (selectedId && !activeCategories.some((category) => category.id === selectedId)) {
+    const selected = all.get(selectedId);
+    options.unshift(`<option value="${selectedId}" selected>${escapeHtml(selected ? categoryDisplayName(selected) : '보관된 대분류')}</option>`);
+  }
+  return options.join('');
 }
 ```
-
-The condition must use `activeCategories`, not `state.categories`, so a legitimate recovered timer remains visible even when it is outside the ordinary new-start list.
 
 Immediately after `const startedDate = localDateKey(new Date());`:
 
@@ -828,9 +860,7 @@ const entries = entriesSnapshot.docs
 
 Active categories override archived duplicates because they are spread last. Permanently deleted categories remain visible.
 
-- [ ] **Step 4: 통계 계약과 비교 표 수정**
-
-Append to `tests/statistics-offline-rescue.test.js`:
+- [ ] **Step 4: 통계 계약 테스트**
 
 ```js
 test('오프라인 통계는 공통 기간 요약만 사용한다', async () => {
@@ -840,28 +870,30 @@ test('오프라인 통계는 공통 기간 요약만 사용한다', async () => 
   assert.match(source, /summarizeRecordedYearlyBudgetPeriod/);
   assert.doesNotMatch(source, /createdDate\s*[<>]=?/);
 });
-```
 
-Append to `tests/restraint-ui-integration.test.js`:
-
-```js
-test('통계 비교 표는 해당 기간 요약에 없는 대분류를 0시간으로 만들지 않는다', async () => {
+test('통계 비교 표는 생성 전 칸을 0시간으로 만들지 않는다', async () => {
   const source = await readFile(new URL('../src/statistics-ui.js', import.meta.url), 'utf8');
-  assert.match(source, /if \(!category\) return `?<td[^`]*—/);
+  assert.match(source, /if \(!category\)/);
+  assert.match(source, /<span class="muted">—<\/span>/);
 });
 ```
 
-In `categoryBudgetMatrix()` replace the fabricated zero category with a blank cell:
+- [ ] **Step 5: 비교 표 구현**
+
+Inside the `orderedIds.map()` callback in `categoryBudgetMatrix()` use:
 
 ```js
+const categoryName = escapeHtml(categoryById.get(id) ? categoryDisplayName(categoryById.get(id)) : '삭제된 대분류');
 const category = byId.get(id);
-if (!category) return `<td data-label="${categoryName}"><span class="muted">—</span></td>`;
+if (!category) {
+  return `<td data-label="${categoryName}"><span class="muted">—</span></td>`;
+}
 return `<td data-label="${categoryName}"><div class="matrix-cell"><strong>${formatMinutes(category.actualMinutes)} / ${formatMinutes(category.budgetMinutes)}</strong><small>${achievementText(category)}</small></div></td>`;
 ```
 
-Keep `visibleCategorySummaries()` and the offline `categoryTable()` based only on `summary.categorySummaries`; do not map every current category into new zero rows.
+Keep `visibleCategorySummaries()` and the offline `categoryTable()` based only on `summary.categorySummaries`; do not map every current category into zero rows.
 
-- [ ] **Step 5: 테스트와 커밋**
+- [ ] **Step 6: 테스트와 커밋**
 
 Run: `node --test tests/category-effective-date-history.test.js tests/statistics-offline-rescue.test.js tests/restraint-ui-integration.test.js && npm test`
 
@@ -885,8 +917,6 @@ git commit -m "feat: hide records before category date"
 - Produces: offline-capable app shell v10
 
 - [ ] **Step 1: 실패 PWA 테스트 작성**
-
-Append to `tests/offline-app-integration.test.js`:
 
 ```js
 test('서비스 워커는 생성일 도메인과 v10 셸을 캐시한다', async () => {
