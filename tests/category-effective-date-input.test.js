@@ -26,7 +26,7 @@ test('보관 대분류 선택지는 진행 중 타이머 복구 때만 유지한
 });
 
 test('진행 중 타이머가 없으면 비활성 마지막 선택과 미리보기를 지운다', () => {
-  assert.match(timer, /if \(!timer && selectedId && !isCategoryActiveOnDate\(selectedCategory, currentDate\)\)/);
+  assert.match(timer, /if \(!timer && selectedId && \(!selectedCategory \|\| !isCategoryActiveOnDate\(selectedCategory, currentDate\)\)\)/);
   assert.match(timer, /localStorage\.removeItem\(LAST_CATEGORY_KEY\)/);
   assert.match(timer, /state\.previewBaseline = null/);
 });
