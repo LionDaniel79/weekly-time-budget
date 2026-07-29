@@ -14,12 +14,13 @@ test('수동 입력은 날짜 변경 때 목록을 갱신하고 저장 직전 �
 
 test('영구 타이머는 현재 활성 목록과 시작일 검증을 사용한다', () => {
   assert.match(timer, /filterCategoriesActiveOnDate/);
+  assert.match(timer, /const category = state\.categories\.find\(/);
   assert.match(timer, /isCategoryActiveOnDate\(category, startedDate\)/);
   assert.match(timer, /!activeCategories\.some/);
 });
 
-test('생성일 검증은 기존 타이머 복구 경로를 유지한다', () => {
+test('보관 대분류 선택지는 진행 중 타이머 복구 때만 유지한다', () => {
+  assert.match(timer, /activeTimer\?\.categoryId === selectedId/);
   assert.match(timer, /controller\.recover\(\)/);
-  assert.match(timer, /selectedId && !activeCategories\.some/);
   assert.match(timer, /isCategoryActiveOnDate\(category, startedDate\)/);
 });
