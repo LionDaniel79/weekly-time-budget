@@ -6,28 +6,16 @@ on:
     branches: [main]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref || github.ref_name }}
-          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Clear inactive timer selection
-        id: agent_patch
-        run: |
-          if test -f scripts/agent-clear-inactive-timer-selection.mjs; then
-            node scripts/agent-clear-inactive-timer-selection.mjs
-            echo "applied=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "applied=false" >> "$GITHUB_OUTPUT"
-          fi
       - name: Run tests
         run: npm test > test-output.txt 2>&1
       - name: Prepare Pages artifact
@@ -65,18 +53,6 @@ jobs:
           test -f _site/src/service-worker-cache.js
           test -f _site/src/service-worker-registration.js
           test -f _site/src/statistics-session-state.js
-      - name: Commit verified timer selection fix
-        if: steps.agent_patch.outputs.applied == 'true'
-        run: |
-          rm -f test-output.txt
-          rm -f scripts/agent-clear-inactive-timer-selection.mjs
-          git config user.name "OpenAI Agent"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/persistent-timer-ui.js
-          git add -u scripts
-          git diff --cached --check
-          git commit -m "fix: clear inactive restored timer selection"
-          git push origin HEAD:feat/category-effective-date
       - name: Upload failed test output
         if: failure()
         uses: actions/upload-artifact@v4
