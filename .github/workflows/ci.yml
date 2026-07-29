@@ -25,6 +25,7 @@ jobs:
           if test -f scripts/agent-apply-category-effective-date.mjs; then
             sed -i '/source.indexOf(search, index + search.length).*duplicate ${label}/d' scripts/agent-apply-category-effective-date.mjs
             node scripts/agent-apply-category-effective-date.mjs
+            grep -rl 'weekly-time-budget-shell-v9' tests --include='*.test.js' | xargs -r sed -i 's/weekly-time-budget-shell-v9/weekly-time-budget-shell-v10/g'
             echo "applied=true" >> "$GITHUB_OUTPUT"
           else
             echo "applied=false" >> "$GITHUB_OUTPUT"
