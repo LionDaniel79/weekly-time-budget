@@ -10,8 +10,8 @@ test('대분류 일괄 적용 버튼은 저장으로 표시한다', async () => 
   assert.ok(!source.includes('>대분류 변경사항 적용</button>'));
 });
 
-test('PWA 셸 캐시는 카운트다운 화면을 위해 v9을 사용한다', async () => {
+test('PWA 셸 캐시는 최신 화면을 위해 v11을 사용한다', async () => {
   const source = await read('service-worker.js');
-  assert.ok(source.includes("const SHELL_CACHE = 'weekly-time-budget-shell-v10';"));
+  assert.ok(source.includes("const SHELL_CACHE = 'weekly-time-budget-shell-v11';"));
   assert.ok(source.includes('./src/countdown-timer-domain.js'));
 });

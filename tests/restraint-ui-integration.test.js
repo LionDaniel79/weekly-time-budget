@@ -31,6 +31,19 @@ test('대시보드는 목표 준수 점수와 절제 진행 막대를 표시한�
   assert.ok(css.includes('.restraint-overage'));
 });
 
+test('절제 목표 선택 제목은 체크박스 옆 한 줄에 배치한다', async () => {
+  const css = await read('styles.css');
+  assert.match(css, /\.form-grid label\.restraint-goal-option\s*\{[^}]*display:\s*flex/);
+  assert.match(css, /\.restraint-goal-option\s+input\s*\{[^}]*flex:\s*0\s+0\s+auto/);
+  assert.match(css, /\.restraint-goal-option\s+strong\s*\{[^}]*white-space:\s*nowrap/);
+});
+
+test('절제 정상 막대는 공통 녹색이고 초과 막대는 빨간색을 유지한다', async () => {
+  const css = await read('styles.css');
+  assert.match(css, /restraint-remaining[^}]*background:\s*#2b7665/);
+  assert.match(css, /restraint-overage[^}]*background:\s*#c23b36/);
+});
+
 test('온라인과 오프라인 통계는 목표 준수와 절제 상태를 지원한다', async () => {
   const [online, offline] = await Promise.all([read('src/statistics-ui.js'), read('src/statistics-offline-rescue.js')]);
   for (const source of [online, offline]) {
@@ -49,8 +62,8 @@ test('절제 카운트다운 음수는 경고색과 초과 사용 문구를 사�
   assert.doesNotMatch(source, /AudioContext|new Audio|\.vibrate\(|Notification\(/);
 });
 
-test('PWA 앱 셸 v9에 목표 계산 모듈을 포함한다', async () => {
+test('PWA 앱 셸 v11에 목표 계산 모듈을 포함한다', async () => {
   const worker = await read('service-worker.js');
-  assert.ok(worker.includes('weekly-time-budget-shell-v10'));
+  assert.ok(worker.includes('weekly-time-budget-shell-v11'));
   assert.ok(worker.includes('./src/goal-domain.js'));
 });
