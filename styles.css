@@ -153,7 +153,7 @@ h1,h2,h3,p { margin-top: 0; }
 /* Growth and restraint goal presentation */
 .progress.restraint-progress > span { transition: width .2s ease; }
 .progress.restraint-remaining > span,
-.stat-bar-fill.restraint-remaining { background: #2f6fb2; }
+.stat-bar-fill.restraint-remaining { background: #2b7665; }
 .progress.restraint-overage > span,
 .stat-bar-fill.restraint-overage { background: #c23b36; }
 .progress.restraint-exact > span,
@@ -161,9 +161,10 @@ h1,h2,h3,p { margin-top: 0; }
 .goal-type-label { color: #8d3d35; font-weight: 800; white-space: nowrap; }
 .category-name-edit { display: flex; align-items: center; gap: 7px; min-width: 0; }
 .category-name-edit input { min-width: 0; flex: 1; }
-.restraint-goal-option { display: flex; gap: 10px; align-items: flex-start; }
-.restraint-goal-option input { width: auto; margin-top: 3px; }
+.form-grid label.restraint-goal-option { display: flex; gap: 10px; align-items: flex-start; }
+.restraint-goal-option input { width: auto; margin-top: 3px; flex: 0 0 auto; }
 .restraint-goal-option span { display: grid; gap: 3px; }
+.restraint-goal-option strong { white-space: nowrap; }
 .restraint-goal-option small, .goal-detail { color: #68736e; font-weight: 400; }
 .timer.is-restraint-overage, .restraint-overage-copy { color: #b3261e; }
 .timer-goal-note { margin: 4px 0 0; text-align: center; font-weight: 800; }
