@@ -128,7 +128,7 @@ test('서비스 워커는 앱 셸을 캐시하고 인증·Firestore API 응답�
   assert.ok(html.includes('./src/mobile-compact.css'));
   assert.ok(html.includes('./src/category-bulk-editor.js'));
   for (const token of [
-    'weekly-time-budget-shell-v11',
+    'weekly-time-budget-shell-v12',
     'firebase-firestore.js',
     'firestore.googleapis.com',
     'identitytoolkit.googleapis.com',
