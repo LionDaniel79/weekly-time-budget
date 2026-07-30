@@ -89,7 +89,7 @@ test('통합 모듈은 통계와 시간 예산 기능보다 먼저 로드되고 
   assert.ok(serviceWorker.includes('./src/category-effective-date.js'));
   assert.ok(serviceWorker.includes('./src/recorded-period-domain.js'));
   assert.ok(serviceWorker.includes('./src/recorded-period-navigation.js'));
-  assert.ok(serviceWorker.includes('weekly-time-budget-shell-v11'));
+  assert.ok(serviceWorker.includes('weekly-time-budget-shell-v12'));
 });
 
 test('새 기록 기간 모듈은 올바른 자바스크립트 문법이다', () => {
