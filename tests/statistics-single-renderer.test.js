@@ -17,7 +17,7 @@ test('통계 화면은 캐시 우선 렌더러 하나만 실행한다', async ()
 test('단일 통계 렌더러 수정본은 PWA 셸 v14로 배포한다', async () => {
   const worker = await read('service-worker.js');
 
-  assert.ok(worker.includes("weekly-time-budget-shell-v14"));
+  assert.ok(worker.includes("weekly-time-budget-shell-v15"));
   assert.ok(worker.includes('./src/statistics-primary.css'));
   assert.ok(worker.includes('./src/category-selection-memory.js'));
 });

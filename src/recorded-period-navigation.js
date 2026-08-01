@@ -189,6 +189,7 @@ function replaceSelectOptions(select, html, selectedValue, signature) {
 }
 
 function patchMonthlyStatistics(view) {
+  if (view.dataset.statisticsRescue !== undefined) return;
   if (!view.querySelector('[data-rescue-stat-mode="monthly"].active')) return;
   const yearSelect = view.querySelector('#statistics-rescue-year');
   const monthSelect = view.querySelector('#statistics-rescue-month');
@@ -368,8 +369,10 @@ document.addEventListener('click', (event) => {
 
 document.addEventListener('change', (event) => {
   if (!event.target.matches('#statistics-rescue-year, #statistics-rescue-month')) return;
+  const ownedView = document.querySelector('#statistics-view');
+  if (ownedView?.dataset.statisticsRescue !== undefined) return;
   if (blockUntilPeriodsReady(event)) return;
-  const view = document.querySelector('#statistics-view');
+  const view = ownedView;
   if (!view || view.classList.contains('hidden')) return;
   const monthSelect = view.querySelector('#statistics-rescue-month');
   if (!monthSelect) return;

@@ -1,6 +1,6 @@
 import { cacheModuleGraph } from './src/service-worker-cache.js';
 
-const SHELL_CACHE = 'weekly-time-budget-shell-v14';
+const SHELL_CACHE = 'weekly-time-budget-shell-v15';
 const RUNTIME_CACHE = 'weekly-time-budget-runtime-v1';
 const APP_CACHE_PREFIX = 'weekly-time-budget-';
 const FIREBASE_VERSION_ROOT = 'https://www.gstatic.com/firebasejs/11.10.0/';
