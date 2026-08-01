@@ -15,8 +15,9 @@ test('0분 월간 통계의 목표 준수 보정은 DOM을 한 번만 변경한�
   assert.match(patch, /achievement\.textContent\s*=\s*['"]—['"]/);
 });
 
-test('월간 통계 무한 반복 수정본을 배포하도록 앱 셸 캐시를 v13으로 올린다', async () => {
+test('월간 통계 수정본을 최신 앱 셸로 배포한다', async () => {
   const worker = await read('service-worker.js');
-  assert.ok(worker.includes("weekly-time-budget-shell-v13"));
+  assert.ok(worker.includes("weekly-time-budget-shell-v14"));
   assert.ok(worker.includes('./src/recorded-period-navigation.js'));
+  assert.ok(worker.includes('./src/statistics-offline-rescue.js'));
 });
