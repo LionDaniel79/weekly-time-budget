@@ -21,10 +21,13 @@ test('모든 통계 표 셀은 모바일 항목명을 위한 data-label을 가�
   const code = await source();
   for (const label of [
     '대분류', '기간', '기간 예산', '실제 기록', '달성률', '차이',
-    '목표 준수', '기록 일수', '전월 대비', '전년 대비',
+    '목표 준수', '기록 일수',
   ]) {
     assert.match(code, new RegExp(`data-label=["']${label}["']`));
   }
+  assert.ok(code.includes('data-label="${changeLabel}"'));
+  assert.ok(code.includes("'전월 대비'"));
+  assert.ok(code.includes("'전년 대비'"));
 });
 
 test('800px 이하에서는 통계 표가 가로 스크롤 없는 카드형으로 전환된다', async () => {
