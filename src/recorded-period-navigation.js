@@ -10,6 +10,7 @@ import {
   recordedYearOptions,
   defaultMonthForYear,
   coerceMonthlySelection,
+  setTextContentIfChanged,
 } from './recorded-period-domain.js';
 
 const appModule = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js');
@@ -164,7 +165,7 @@ function patchZeroAchievement(view) {
   const budget = cards[0].querySelector('.metric')?.textContent?.trim();
   const actual = cards[1].querySelector('.metric')?.textContent?.trim();
   const achievement = cards[2].querySelector('.metric');
-  if (achievement && budget === '0분' && actual === '0분') achievement.textContent = '—';
+  if (budget === '0분' && actual === '0분') setTextContentIfChanged(achievement, '—');
 }
 
 function optionMarkup(option, selectedMonth) {
