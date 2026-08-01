@@ -12,8 +12,8 @@ test('서비스 워커가 교체되면 한 번만 새 화면으로 다시 시작
   assert.match(source, /refreshing/);
 });
 
-test('업데이트 복구 코드를 배포하도록 앱 셸 캐시를 v12로 올린다', async () => {
+test('업데이트 복구 코드를 배포하도록 앱 셸 캐시를 v13으로 올린다', async () => {
   const worker = await read('service-worker.js');
-  assert.ok(worker.includes("weekly-time-budget-shell-v12"));
+  assert.ok(worker.includes("weekly-time-budget-shell-v13"));
   assert.ok(worker.includes('./src/service-worker-registration.js'));
 });
