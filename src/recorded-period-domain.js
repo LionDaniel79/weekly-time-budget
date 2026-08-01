@@ -16,6 +16,12 @@ function isValidDateKey(value) {
 
 const uniqueSorted = (values) => [...new Set(values)].sort();
 
+export function setTextContentIfChanged(target, value) {
+  if (!target || target.textContent === value) return false;
+  target.textContent = value;
+  return true;
+}
+
 function isRecordedEntry(entry, currentDateKey) {
   const date = String(entry?.date || '');
   return isValidDateKey(date)
