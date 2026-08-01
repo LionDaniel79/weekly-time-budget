@@ -64,6 +64,6 @@ test('절제 카운트다운 음수는 경고색과 초과 사용 문구를 사�
 
 test('PWA 앱 셸 v12에 목표 계산 모듈을 포함한다', async () => {
   const worker = await read('service-worker.js');
-  assert.ok(worker.includes('weekly-time-budget-shell-v12'));
+  assert.ok(worker.includes('weekly-time-budget-shell-v13'));
   assert.ok(worker.includes('./src/goal-domain.js'));
 });
