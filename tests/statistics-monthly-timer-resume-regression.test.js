@@ -46,8 +46,9 @@ test('화면이 다시 보일 때 활성 타이머 탭은 원격 상태를 다�
   assert.match(source, /visibilitychange[\s\S]*timerTabIsActive\(\)[\s\S]*refreshTimerFromRemote/);
 });
 
-test('수정된 화면을 강제 갱신하도록 서비스 워커 셸 캐시를 v12로 올린다', async () => {
+test('수정된 화면을 최신 서비스 워커 셸로 배포한다', async () => {
   const source = await read('service-worker.js');
-  assert.ok(source.includes('weekly-time-budget-shell-v13'));
+  assert.ok(source.includes('weekly-time-budget-shell-v14'));
   assert.ok(source.includes('./src/countdown-timer-domain.js'));
+  assert.ok(source.includes('./src/statistics-offline-rescue.js'));
 });
