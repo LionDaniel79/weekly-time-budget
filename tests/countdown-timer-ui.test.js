@@ -84,6 +84,6 @@ test('분할 탭 스타일과 최신 앱 셸을 제공한다', async () => {
   ]);
   assert.ok(css.includes('.timer-mode-tabs'));
   assert.ok(css.includes('grid-template-columns: repeat(2, minmax(0, 1fr))'));
-  assert.ok(worker.includes('weekly-time-budget-shell-v14'));
+  assert.ok(worker.includes('weekly-time-budget-shell-v15'));
   assert.ok(worker.includes('./src/countdown-timer-domain.js'));
 });

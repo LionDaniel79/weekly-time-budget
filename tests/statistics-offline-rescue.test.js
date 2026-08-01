@@ -51,7 +51,7 @@ test('캐시 우선 통계 구조와 기록 기간 탐색만 앱 셸에 포함�
   assert.ok(serviceWorker.includes('./src/category-selection-memory.js'));
   assert.ok(serviceWorker.includes('./src/recorded-period-domain.js'));
   assert.ok(serviceWorker.includes('./src/recorded-period-navigation.js'));
-  assert.ok(serviceWorker.includes('weekly-time-budget-shell-v14'));
+  assert.ok(serviceWorker.includes('weekly-time-budget-shell-v15'));
   assert.ok(!serviceWorker.includes("'./src/statistics-ui.js'"));
   assert.ok(!serviceWorker.includes("'./src/statistics-session-state.js'"));
 });
