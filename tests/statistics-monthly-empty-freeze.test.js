@@ -27,3 +27,9 @@ test('빈 월간 통계 보정은 변경이 있을 때만 목표 준수 문구�
   assert.ok(source.includes('setTextContentIfChanged'));
   assert.doesNotMatch(source, /achievement\.textContent\s*=\s*['"]—['"]/);
 });
+
+test('월간 통계 멈춤 수정 코드를 배포하도록 앱 셸 캐시를 v13으로 올린다', async () => {
+  const worker = await read('service-worker.js');
+  assert.ok(worker.includes("weekly-time-budget-shell-v13"));
+  assert.ok(worker.includes('./src/recorded-period-navigation.js'));
+});
