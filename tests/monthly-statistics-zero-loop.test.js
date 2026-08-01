@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
+// textContent를 같은 값으로 다시 써도 childList mutation이 발생하므로 멱등성 검사가 필요하다.
 test('0분 월간 통계의 목표 준수 보정은 DOM을 한 번만 변경한다', async () => {
   const source = await read('src/recorded-period-navigation.js');
   const start = source.indexOf('function patchZeroAchievement');
