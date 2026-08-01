@@ -1,0 +1,54 @@
+name: Apply monthly statistics fix
+
+on:
+  push:
+    branches:
+      - fix/monthly-statistics-zero-loop
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/monthly-statistics-zero-loop
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply idempotent DOM patch and cache bump
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          navigation = Path('src/recorded-period-navigation.js')
+          source = navigation.read_text()
+          old = "  if (achievement && budget === '0분' && actual === '0분') achievement.textContent = '—';"
+          new = "  if (achievement && budget === '0분' && actual === '0분'\n      && achievement.textContent?.trim() !== '—') {\n    achievement.textContent = '—';\n  }"
+          if old not in source:
+              raise SystemExit('expected patchZeroAchievement line not found')
+          navigation.write_text(source.replace(old, new, 1))
+
+          worker = Path('service-worker.js')
+          worker_source = worker.read_text()
+          if 'weekly-time-budget-shell-v12' not in worker_source:
+              raise SystemExit('expected v12 service worker cache not found')
+          worker.write_text(worker_source.replace('weekly-time-budget-shell-v12', 'weekly-time-budget-shell-v13'))
+
+          for test_file in Path('tests').glob('*.test.js'):
+              test_source = test_file.read_text()
+              if 'weekly-time-budget-shell-v12' in test_source:
+                  test_file.write_text(test_source.replace('weekly-time-budget-shell-v12', 'weekly-time-budget-shell-v13'))
+          PY
+      - name: Verify
+        run: npm test
+      - name: Commit verified fix
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/recorded-period-navigation.js service-worker.js tests
+          git commit -m "fix: stop zero-data monthly statistics render loop"
+          git push origin HEAD:fix/monthly-statistics-zero-loop
