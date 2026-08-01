@@ -77,13 +77,13 @@ test('0 도달 알람과 선택창을 만들지 않는다', async () => {
   assert.doesNotMatch(source, /AudioContext|new Audio|\.vibrate\(|Notification\(|중단하고 저장|계속할지/);
 });
 
-test('분할 탭 스타일과 v12 앱 셸을 제공한다', async () => {
+test('분할 탭 스타일과 최신 앱 셸을 제공한다', async () => {
   const [css, worker] = await Promise.all([
     read('src/mobile-compact.css'),
     read('service-worker.js'),
   ]);
   assert.ok(css.includes('.timer-mode-tabs'));
   assert.ok(css.includes('grid-template-columns: repeat(2, minmax(0, 1fr))'));
-  assert.ok(worker.includes('weekly-time-budget-shell-v13'));
+  assert.ok(worker.includes('weekly-time-budget-shell-v14'));
   assert.ok(worker.includes('./src/countdown-timer-domain.js'));
 });
