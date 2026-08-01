@@ -44,15 +44,13 @@ test('절제 정상 막대는 공통 녹색이고 초과 막대는 빨간색을 
   assert.match(css, /restraint-overage[^}]*background:\s*#c23b36/);
 });
 
-test('온라인과 오프라인 통계는 목표 준수와 절제 상태를 지원한다', async () => {
-  const [online, offline] = await Promise.all([read('src/statistics-ui.js'), read('src/statistics-offline-rescue.js')]);
-  for (const source of [online, offline]) {
-    assert.ok(source.includes('목표 준수'));
-    assert.ok(source.includes('goalComplianceScore'));
-    assert.ok(source.includes('달성률 계산 제외'));
-  }
-  assert.ok(online.includes('restraint-remaining'));
-  assert.ok(online.includes('restraint-overage'));
+test('주 통계 렌더러는 목표 준수와 절제 상태를 지원한다', async () => {
+  const statistics = await read('src/statistics-offline-rescue.js');
+  assert.ok(statistics.includes('목표 준수'));
+  assert.ok(statistics.includes('goalComplianceScore'));
+  assert.ok(statistics.includes('달성률 계산 제외'));
+  assert.ok(statistics.includes("item.goalType === 'restraint'"));
+  assert.ok(statistics.includes("item.status === 'overage'"));
 });
 
 test('절제 카운트다운 음수는 경고색과 초과 사용 문구를 사용한다', async () => {
@@ -62,8 +60,8 @@ test('절제 카운트다운 음수는 경고색과 초과 사용 문구를 사�
   assert.doesNotMatch(source, /AudioContext|new Audio|\.vibrate\(|Notification\(/);
 });
 
-test('PWA 앱 셸 v12에 목표 계산 모듈을 포함한다', async () => {
+test('PWA 앱 셸에 목표 계산 모듈을 포함한다', async () => {
   const worker = await read('service-worker.js');
-  assert.ok(worker.includes('weekly-time-budget-shell-v13'));
+  assert.ok(worker.includes('weekly-time-budget-shell-v14'));
   assert.ok(worker.includes('./src/goal-domain.js'));
 });
