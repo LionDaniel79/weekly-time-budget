@@ -17,8 +17,8 @@ test('오프라인 모듈은 올바른 자바스크립트 문법이다', async (
     '../src/ui-session-state.js',
     '../src/service-worker-cache.js',
     '../src/service-worker-registration.js',
-    '../src/statistics-session-state.js',
     '../src/statistics-offline-rescue.js',
+    '../src/category-selection-memory.js',
     '../src/recorded-period-domain.js',
     '../src/recorded-period-navigation.js',
     '../src/orphan-local-timer-cleanup.js',
@@ -83,7 +83,7 @@ test('앱은 마지막 메뉴와 모든 내부 상태를 사용자별로 저장�
   const [appSource, budgetSource, statisticsSource] = await Promise.all([
     read('src/app.js'),
     read('src/time-budget-feature.js'),
-    read('src/statistics-session-state.js'),
+    read('src/statistics-offline-rescue.js'),
   ]);
   for (const token of [
     'getUiState',
@@ -96,7 +96,7 @@ test('앱은 마지막 메뉴와 모든 내부 상태를 사용자별로 저장�
   for (const token of ['dashboard', 'budget', 'selectedDate', 'selectedWeekStart']) {
     assert.ok(budgetSource.includes(token), token);
   }
-  for (const token of ['statistics', 'weekStart', 'year', 'month', 'activeView']) {
+  for (const token of ['statistics', 'weekStart', 'year', 'month', 'activeView', 'persistState']) {
     assert.ok(statisticsSource.includes(token), token);
   }
 });
@@ -126,15 +126,21 @@ test('서비스 워커는 앱 셸을 캐시하고 인증·Firestore API 응답�
   assert.ok(html.includes('./src/service-worker-registration.js'));
   assert.ok(html.includes('./src/local-timer-removal-reload.js'));
   assert.ok(html.includes('./src/mobile-compact.css'));
+  assert.ok(html.includes('./src/statistics-primary.css'));
+  assert.ok(html.includes('./src/category-selection-memory.js'));
   assert.ok(html.includes('./src/category-bulk-editor.js'));
+  assert.doesNotMatch(html, /<script[^>]+statistics-ui\.js/);
+  assert.doesNotMatch(html, /<script[^>]+statistics-session-state\.js/);
   for (const token of [
-    'weekly-time-budget-shell-v13',
+    'weekly-time-budget-shell-v14',
     'firebase-firestore.js',
     'firestore.googleapis.com',
     'identitytoolkit.googleapis.com',
     "request.mode === 'navigate'",
     'local-timer-removal-reload.js',
     'statistics-offline-rescue.js',
+    'statistics-primary.css',
+    'category-selection-memory.js',
     'recorded-period-domain.js',
     'recorded-period-navigation.js',
     'mobile-compact.css',
@@ -142,6 +148,8 @@ test('서비스 워커는 앱 셸을 캐시하고 인증·Firestore API 응답�
     'goal-domain.js',
     'countdown-timer-domain.js',
   ]) assert.ok(serviceWorker.includes(token), token);
+  assert.ok(!serviceWorker.includes("'./src/statistics-ui.js'"));
+  assert.ok(!serviceWorker.includes("'./src/statistics-session-state.js'"));
 });
 
 test('완전 삭제는 서버 기록과 동기화 대기 기록을 함께 경고하고 제거한다', async () => {
