@@ -33,12 +33,18 @@ test('Pages 산출물에 오프라인 실행 파일이 모두 포함된다', asy
       'src/ui-session-state.js',
       'src/service-worker-cache.js',
       'src/service-worker-registration.js',
-      'src/statistics-session-state.js',
+      'src/statistics-offline-rescue.js',
+      'src/statistics-primary.css',
+      'src/category-selection-memory.js',
     ]) await access(path.join(outputDir, file));
 
     const html = await readFile(path.join(outputDir, 'index.html'), 'utf8');
     assert.ok(html.includes('./src/service-worker-registration.js'));
-    assert.ok(html.includes('./src/statistics-session-state.js'));
+    assert.ok(html.includes('./src/statistics-offline-rescue.js'));
+    assert.ok(html.includes('./src/statistics-primary.css'));
+    assert.ok(html.includes('./src/category-selection-memory.js'));
+    assert.doesNotMatch(html, /<script[^>]+statistics-ui\.js/);
+    assert.doesNotMatch(html, /<script[^>]+statistics-session-state\.js/);
   } finally {
     await rm(tempRoot, { recursive: true, force: true });
   }
