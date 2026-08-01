@@ -164,7 +164,10 @@ function patchZeroAchievement(view) {
   const budget = cards[0].querySelector('.metric')?.textContent?.trim();
   const actual = cards[1].querySelector('.metric')?.textContent?.trim();
   const achievement = cards[2].querySelector('.metric');
-  if (achievement && budget === '0분' && actual === '0분') achievement.textContent = '—';
+  if (achievement && budget === '0분' && actual === '0분'
+      && achievement.textContent?.trim() !== '—') {
+    achievement.textContent = '—';
+  }
 }
 
 function optionMarkup(option, selectedMonth) {
