@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ko">
+<head><meta charset="utf-8"><title>Statistics feature</title></head>
+<body>
+  <section id="statistics-view"></section>
+  <script type="module">
+    import { createStatisticsFeature } from '/src/statistics-feature.js';
+
+    const data = {
+      entries: [
+        { id: 'e1', date: '2026-06-10', categoryId: 'reading', durationMinutes: 30 },
+        { id: 'e2', date: '2026-08-01', categoryId: 'reading', durationMinutes: 30 },
+      ],
+      activeCategories: [{ id: 'reading', name: '독서', defaultBudgetMinutes: 420 }],
+      archivedCategories: [], weeklyBudgets: [],
+    };
+    const counts = { cacheReads: 0, serverReads: 0, saves: 0 };
+    const diagnostics = { modeChanges: 0, aggregateRuns: 0, renderRuns: 0, stateSaves: 0 };
+    const dataSource = {
+      async load(_userId, { onCache, onServer }) {
+        counts.cacheReads += 1;
+        await onCache({ data, dataVersion: 'cache:1', source: 'cache', warning: '' });
+        counts.serverReads += 1;
+        await onServer({ data, dataVersion: 'server:2', source: 'server', warning: '' });
+        return { data, dataVersion: 'server:2', source: 'server', warning: '' };
+      },
+    };
+    const feature = createStatisticsFeature({
+      root: document.querySelector('#statistics-view'),
+      dataSource,
+      getCurrentUser: () => ({ uid: 'browser-user' }),
+      saveUiState: async () => { counts.saves += 1; },
+      setHeader: () => {},
+      now: () => new Date('2026-08-01T12:00:00'),
+      diagnostics,
+    });
+    globalThis.__statisticsHarness = { feature, counts, diagnostics, ready: feature.enter() };
+  </script>
+</body>
+</html>
