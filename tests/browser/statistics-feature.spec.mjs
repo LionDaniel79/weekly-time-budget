@@ -18,9 +18,9 @@ async function snapshot(page) {
 
 test('월간 탭은 네트워크 재조회 없이 한 번 렌더한다', async ({ page }) => {
   await harness(page);
-  await page.locator('[data-statistics-mode="weekly"]').click();
+  await page.locator('button[data-statistics-mode="weekly"]').click();
   const before = await snapshot(page);
-  await page.locator('[data-statistics-mode="monthly"]').click();
+  await page.locator('button[data-statistics-mode="monthly"]').click();
   await expect(page.locator('#statistics-month')).toBeVisible();
   const after = await snapshot(page);
   expect(after.counts.cacheReads).toBe(before.counts.cacheReads);
@@ -31,7 +31,7 @@ test('월간 탭은 네트워크 재조회 없이 한 번 렌더한다', async (
 test('같은 월간 탭을 다시 클릭하면 렌더와 저장을 생략한다', async ({ page }) => {
   await harness(page);
   const before = await snapshot(page);
-  await page.locator('[data-statistics-mode="monthly"]').click();
+  await page.locator('button[data-statistics-mode="monthly"]').click();
   const after = await snapshot(page);
   expect(after.diagnostics.renderRuns).toBe(before.diagnostics.renderRuns);
   expect(after.counts.saves).toBe(before.counts.saves);
@@ -76,15 +76,15 @@ test('절제 음수 달성률과 보관 대분류를 함께 표시한다', async
 test('유효하지 않은 저장 월은 이전 기록 월로 보정하고 미래·무기록 월을 비활성화한다', async ({ page }) => {
   await harness(page, 'invalid');
   await expect(page.locator('#statistics-month')).toHaveValue('6');
-  await expect(page.locator('#statistics-month option[value="7"]')).toBeDisabled();
-  await expect(page.locator('#statistics-month option[value="9"]')).toBeDisabled();
+  await expect(page.locator('#statistics-month option[value="7"]')).toHaveAttribute('disabled', '');
+  await expect(page.locator('#statistics-month option[value="9"]')).toHaveAttribute('disabled', '');
 });
 
 test('주간과 월간을 20회 전환해도 모든 통계 모드와 화면이 응답한다', async ({ page }) => {
   const errors = await harness(page, 'restraint');
   for (let index = 0; index < 20; index += 1) {
-    await page.locator('[data-statistics-mode="weekly"]').click();
-    await page.locator('[data-statistics-mode="monthly"]').click();
+    await page.locator('button[data-statistics-mode="weekly"]').click();
+    await page.locator('button[data-statistics-mode="monthly"]').click();
   }
   for (const label of ['주별 통계', '월간 통계', '연간 통계', '월간 비교', '연도별 비교']) {
     await expect(page.getByRole('button', { name: label })).toBeVisible();
