@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 
 test('서비스 워커는 생성일 도메인과 최신 셸을 캐시한다', async () => {
   const source = await readFile(new URL('../service-worker.js', import.meta.url), 'utf8');
-  assert.match(source, /weekly-time-budget-shell-v15/);
+  assert.match(source, /weekly-time-budget-shell-v16/);
   assert.match(source, /\.\/src\/category-effective-date\.js/);
 });
 
