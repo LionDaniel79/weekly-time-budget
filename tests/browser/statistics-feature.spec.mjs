@@ -52,7 +52,7 @@ test('사용자 전환 시 이전 사용자의 통계를 즉시 숨긴다', asyn
     globalThis.__statisticsHarness.switchUser('second-user');
     return document.querySelector('#statistics-view')?.textContent || '';
   });
-  expect(immediateText).toContain('새 사용자의 자료를 확인하고 있습니다.');
+  expect(immediateText).toContain('통계를 불러오는 중');
   expect(immediateText).not.toContain('스마트폰 (절제)');
   await page.evaluate(() => globalThis.__statisticsHarness.waitForUserSwitch());
   await expect(page.locator('.statistics-summary .metric').nth(2)).toHaveText('—');
