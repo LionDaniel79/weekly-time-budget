@@ -5,12 +5,7 @@ import { readFile } from 'node:fs/promises';
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
 test('공통 절제 이름을 기록·예산·타이머·보관 화면에서 사용한다', async () => {
-  const files = await Promise.all([
-    read('src/app.js'),
-    read('src/time-budget-ui.js'),
-    read('src/persistent-timer-ui.js'),
-    read('src/category-ui-patch.js'),
-  ]);
+  const files = await Promise.all([read('src/app.js'), read('src/time-budget-ui.js'), read('src/persistent-timer-ui.js'), read('src/category-ui-patch.js')]);
   files.forEach((source) => assert.ok(source.includes('categoryDisplayName')));
 });
 
@@ -44,8 +39,8 @@ test('절제 정상 막대는 공통 녹색이고 초과 막대는 빨간색을 
   assert.match(css, /restraint-overage[^}]*background:\s*#c23b36/);
 });
 
-test('주 통계 렌더러는 목표 준수와 절제 상태를 지원한다', async () => {
-  const statistics = await read('src/statistics-offline-rescue.js');
+test('새 통계 뷰는 목표 준수와 절제 상태를 지원한다', async () => {
+  const statistics = await read('src/statistics-view.js');
   assert.ok(statistics.includes('목표 준수'));
   assert.ok(statistics.includes('goalComplianceScore'));
   assert.ok(statistics.includes('달성률 계산 제외'));
@@ -60,8 +55,9 @@ test('절제 카운트다운 음수는 경고색과 초과 사용 문구를 사�
   assert.doesNotMatch(source, /AudioContext|new Audio|\.vibrate\(|Notification\(/);
 });
 
-test('PWA 앱 셸에 목표 계산 모듈을 포함한다', async () => {
+test('PWA 앱 셸에 목표 계산과 새 통계 모듈을 포함한다', async () => {
   const worker = await read('service-worker.js');
-  assert.ok(worker.includes('weekly-time-budget-shell-v15'));
+  assert.ok(worker.includes('weekly-time-budget-shell-v16'));
   assert.ok(worker.includes('./src/goal-domain.js'));
+  assert.ok(worker.includes('./src/statistics-view.js'));
 });
