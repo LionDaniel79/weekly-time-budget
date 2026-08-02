@@ -149,6 +149,11 @@ export function createStatisticsFeature({
         type: 'select-month', year: normalized.year, month: normalized.month,
       }, context).state;
     }
+    if (normalized.mode === 'yearly' || normalized.mode === 'monthly-comparison') {
+      normalized = applyStatisticsAction(normalized, {
+        type: 'select-year', year: normalized.year,
+      }, context).state;
+    }
     return normalized;
   }
 
@@ -197,6 +202,18 @@ export function createStatisticsFeature({
     }
     if (loadingPromise && loadedUserId === user.uid) return loadingPromise;
 
+    if (loadedUserId && loadedUserId !== user.uid) {
+      const restored = {
+        mode: state.mode,
+        weekStart: state.weekStart,
+        year: state.year,
+        month: state.month,
+      };
+      state = createStatisticsState({ now: now(), restored });
+      lastRenderedSignature = '';
+      lastModel = null;
+      root.innerHTML = '<div class="card"><h2>통계를 불러오는 중…</h2><p class="muted">새 사용자의 자료를 확인하고 있습니다.</p></div>';
+    }
     loadedUserId = user.uid;
     const sequence = ++requestSequence;
     if (!state.data) {
