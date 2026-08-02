@@ -50,7 +50,11 @@ export function restraintFixture() {
         category('phone', '스마트폰', { defaultBudgetMinutes: 180, goalType: 'restraint' }),
       ],
       archivedCategories: [category('archived', '보관 운동', { archivedAt: '2026-08-01' })],
-      weeklyBudgets: [{ id: '2026-07-27', weekStart: '2026-07-27', budgets: { reading: 60, phone: 180, archived: 0 } }],
+      weeklyBudgets: [{
+        id: '2026-07-27', weekStart: '2026-07-27',
+        budgets: { reading: 60, phone: 180, archived: 0 },
+        dayWeights: { mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, sat: 1, sun: 0 },
+      }],
     },
     restored: { mode: 'monthly', year: 2026, month: 8 },
   };
