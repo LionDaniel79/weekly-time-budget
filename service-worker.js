@@ -1,7 +1,7 @@
 import { cacheModuleGraph } from './src/service-worker-cache.js';
 
-const SHELL_CACHE = 'weekly-time-budget-shell-v15';
-const RUNTIME_CACHE = 'weekly-time-budget-runtime-v1';
+const SHELL_CACHE = 'weekly-time-budget-shell-v16';
+const RUNTIME_CACHE = 'weekly-time-budget-firebase-v2';
 const APP_CACHE_PREFIX = 'weekly-time-budget-';
 const FIREBASE_VERSION_ROOT = 'https://www.gstatic.com/firebasejs/11.10.0/';
 
@@ -21,6 +21,7 @@ const SHELL_URLS = [
   './src/domain.js',
   './src/manual-entry.js',
   './src/app.js',
+  './src/view-change-events.js',
   './src/auth-login-guard.js',
   './src/category-ui-patch.js',
   './src/category-selection-memory.js',
@@ -34,8 +35,11 @@ const SHELL_URLS = [
   './src/time-budget-feature.js',
   './src/recorded-period-domain.js',
   './src/recorded-period-navigation.js',
-  './src/statistics-offline-rescue.js',
-  './src/statistics-mobile-overflow.js',
+  './src/statistics-state.js',
+  './src/statistics-data-source.js',
+  './src/statistics-view.js',
+  './src/statistics-feature.js',
+  './src/statistics-bootstrap.js',
   './src/persistent-timer.js',
   './src/persistent-timer-ui.js',
   './src/offline-entry-domain.js',
@@ -64,18 +68,25 @@ function isSensitiveApi(url) {
   ].some((host) => url.hostname === host || url.hostname.endsWith(`.${host}`));
 }
 
-function isCacheableModule(url) {
+function isFirebaseModule(url) {
   return url.href.startsWith(FIREBASE_VERSION_ROOT);
 }
 
-async function cacheFirst(request) {
-  const cached = await caches.match(request);
+async function firebaseCacheFirst(request) {
+  const runtime = await caches.open(RUNTIME_CACHE);
+  const cached = await runtime.match(request);
   if (cached) return cached;
   const response = await fetch(request);
-  if (response.ok) {
-    const cache = await caches.open(RUNTIME_CACHE);
-    await cache.put(request, response.clone());
-  }
+  if (response.ok) await runtime.put(request, response.clone());
+  return response;
+}
+
+async function shellCacheFirst(request) {
+  const shell = await caches.open(SHELL_CACHE);
+  const cached = await shell.match(request);
+  if (cached) return cached;
+  const response = await fetch(request);
+  if (response.ok) await shell.put(request, response.clone());
   return response;
 }
 
@@ -83,12 +94,13 @@ async function navigationResponse(request) {
   try {
     const response = await fetch(request);
     if (response.ok) {
-      const cache = await caches.open(SHELL_CACHE);
-      await cache.put('./index.html', response.clone());
+      const shell = await caches.open(SHELL_CACHE);
+      await shell.put('./index.html', response.clone());
     }
     return response;
   } catch {
-    return (await caches.match('./index.html')) || (await caches.match('./')) || Response.error();
+    const shell = await caches.open(SHELL_CACHE);
+    return (await shell.match('./index.html')) || (await shell.match('./')) || Response.error();
   }
 }
 
@@ -128,11 +140,11 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(navigationResponse(request));
     return;
   }
-  if (isCacheableModule(url)) {
-    event.respondWith(cacheFirst(request));
+  if (isFirebaseModule(url)) {
+    event.respondWith(firebaseCacheFirst(request));
     return;
   }
   if (url.origin === self.location.origin) {
-    event.respondWith(cacheFirst(request));
+    event.respondWith(shellCacheFirst(request));
   }
 });
