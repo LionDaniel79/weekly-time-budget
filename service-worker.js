@@ -91,16 +91,17 @@ async function shellCacheFirst(request) {
 }
 
 async function navigationResponse(request) {
+  const shell = await caches.open(SHELL_CACHE);
+  const cached = (await shell.match(request))
+    || (await shell.match('./index.html'))
+    || (await shell.match('./'));
+  if (cached) return cached;
   try {
     const response = await fetch(request);
-    if (response.ok) {
-      const shell = await caches.open(SHELL_CACHE);
-      await shell.put('./index.html', response.clone());
-    }
+    if (response.ok) await shell.put('./index.html', response.clone());
     return response;
   } catch {
-    const shell = await caches.open(SHELL_CACHE);
-    return (await shell.match('./index.html')) || (await shell.match('./')) || Response.error();
+    return Response.error();
   }
 }
 
