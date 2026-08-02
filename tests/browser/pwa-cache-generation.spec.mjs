@@ -31,4 +31,13 @@ test('구형 runtime 캐시가 최신 통계 셸 파일보다 먼저 반환되�
     fetch('/src/statistics-bootstrap.js').then((response) => response.text())
   ));
   expect(source).not.toContain('stale-statistics-v13');
+
+  await page.evaluate(async () => {
+    const shell = await caches.open('weekly-time-budget-shell-v16');
+    await shell.put('/index.html', new Response('<!doctype html><html><body><p id="cached-generation">v16</p></body></html>', {
+      headers: { 'Content-Type': 'text/html' },
+    }));
+  });
+  await page.goto('/index.html');
+  await expect(page.locator('#cached-generation')).toHaveText('v16');
 });
