@@ -33,7 +33,7 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
       - name: Run browser diagnostics
-        run: npm run test:browser -- tests/browser/statistics-current-flow.spec.mjs tests/browser/pwa-cache-generation.spec.mjs
+        run: npm run test:browser -- tests/browser/statistics-current-flow.spec.mjs tests/browser/statistics-feature.spec.mjs tests/browser/pwa-cache-generation.spec.mjs
       - name: Prepare Pages artifact
         env:
           FIREBASE_API_KEY: test-api-key
