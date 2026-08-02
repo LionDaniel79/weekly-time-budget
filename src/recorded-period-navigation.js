@@ -6,10 +6,6 @@ import {
   previousRecordedPeriod,
   nextRecordedPeriodOrCurrent,
   coerceRecordedPeriodSelection,
-  monthOptionStates,
-  recordedYearOptions,
-  defaultMonthForYear,
-  coerceMonthlySelection,
 } from './recorded-period-domain.js';
 
 const appModule = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js');
@@ -48,7 +44,6 @@ function mergedUiState(partial = {}) {
     ...current,
     ...partial,
     dashboard: { ...(current.dashboard || {}), ...(partial.dashboard || {}) },
-    statistics: { ...(current.statistics || {}), ...(partial.statistics || {}) },
   };
   if (globalThis.window) globalThis.window.__weeklyTimeBudgetUiState = merged;
   return merged;
@@ -73,13 +68,6 @@ function applyDashboardWeek(weekStart) {
       mode: 'weekly',
       selectedWeekStart: weekStart,
     },
-  });
-}
-
-function applyStatisticsState(statistics) {
-  applyUiState({
-    activeView: 'statistics',
-    statistics,
   });
 }
 
@@ -137,138 +125,14 @@ function patchDashboard() {
   buttonTarget(model.root.querySelector('[data-week-direction="next"]'), model.nextWeekStart);
 }
 
-function statisticsWeekModel() {
-  const view = document.querySelector('#statistics-view');
-  if (!view || view.classList.contains('hidden')) return null;
-  if (!view.querySelector('[data-rescue-stat-mode="weekly"].active')) return null;
-  const selected = dateFromText(view.querySelector('.week-range')?.textContent);
-  if (!selected) return null;
-  const current = currentWeekStart();
-  const normalized = coerceRecordedPeriodSelection({
-    selected,
-    current,
-    recordedPeriods: state.periods.weekStarts,
-  });
-  return {
-    view,
-    selected,
-    normalized,
-    previousWeekStart: previousRecordedPeriod(state.periods.weekStarts, normalized),
-    nextWeekStart: nextRecordedPeriodOrCurrent(state.periods.weekStarts, normalized, current),
-  };
-}
-
-function patchZeroAchievement(view) {
-  const cards = [...view.querySelectorAll('.statistics-summary > .card')];
-  if (cards.length < 3) return;
-  const budget = cards[0].querySelector('.metric')?.textContent?.trim();
-  const actual = cards[1].querySelector('.metric')?.textContent?.trim();
-  const achievement = cards[2].querySelector('.metric');
-  if (achievement && budget === '0분' && actual === '0분'
-      && achievement.textContent?.trim() !== '—') {
-    achievement.textContent = '—';
-  }
-}
-
-function optionMarkup(option, selectedMonth) {
-  const disabled = option.enabled ? '' : ' disabled aria-disabled="true" class="is-unavailable"';
-  const selected = option.month === selectedMonth ? ' selected' : '';
-  const label = `${option.month}월${option.current ? ' · 이번 달' : ''}`;
-  return `<option value="${option.month}"${selected}${disabled}>${label}</option>`;
-}
-
-function replaceSelectOptions(select, html, selectedValue, signature) {
-  if (!select) return;
-  if (select.dataset.recordedPeriodOptionsSignature === signature) {
-    select.value = String(selectedValue);
-    return;
-  }
-  select.innerHTML = html;
-  select.dataset.recordedPeriodOptionsSignature = signature;
-  select.value = String(selectedValue);
-}
-
-function patchMonthlyStatistics(view) {
-  if (view.dataset.statisticsRescue !== undefined) return;
-  if (!view.querySelector('[data-rescue-stat-mode="monthly"].active')) return;
-  const yearSelect = view.querySelector('#statistics-rescue-year');
-  const monthSelect = view.querySelector('#statistics-rescue-month');
-  if (!yearSelect || !monthSelect) return;
-
-  setControlEnabled(yearSelect, true);
-  setControlEnabled(monthSelect, true);
-
-  const now = new Date();
-  const currentYear = now.getFullYear();
-  const currentMonth = now.getMonth() + 1;
-  const normalized = coerceMonthlySelection({
-    year: Number(yearSelect.value),
-    month: Number(monthSelect.value),
-    currentYear,
-    currentMonth,
-    recordedMonths: state.periods.months,
-  });
-
-  if (normalized.year !== Number(yearSelect.value) || normalized.month !== Number(monthSelect.value)) {
-    applyStatisticsState({ mode: 'monthly', ...normalized });
-    return;
-  }
-
-  const years = recordedYearOptions(state.periods.years, currentYear);
-  const yearHtml = years.map((year) => (
-    `<option value="${year}"${year === normalized.year ? ' selected' : ''}>${year}년</option>`
-  )).join('');
-  const yearSignature = `years:${years.join(',')}`;
-  replaceSelectOptions(yearSelect, yearHtml, normalized.year, yearSignature);
-
-  const months = monthOptionStates({
-    recordedMonths: state.periods.months,
-    year: normalized.year,
-    currentYear,
-    currentMonth,
-  });
-  replaceSelectOptions(
-    monthSelect,
-    months.map((option) => optionMarkup(option, normalized.month)).join(''),
-    normalized.month,
-    `months:${normalized.year}:${months.map((option) => `${option.month}:${option.enabled ? 1 : 0}:${option.current ? 1 : 0}`).join('|')}`,
-  );
-}
-
-function patchStatistics() {
-  if (!state.periodsReady) return;
-  const view = document.querySelector('#statistics-view');
-  if (!view || view.classList.contains('hidden') || !view.dataset.statisticsRescue) return;
-
-  const weekly = statisticsWeekModel();
-  if (weekly) {
-    if (weekly.normalized !== weekly.selected) {
-      applyStatisticsState({ mode: 'weekly', weekStart: weekly.normalized });
-      return;
-    }
-    buttonTarget(weekly.view.querySelector('[data-rescue-week="-1"]'), weekly.previousWeekStart);
-    buttonTarget(weekly.view.querySelector('[data-rescue-week="1"]'), weekly.nextWeekStart);
-  }
-
-  patchMonthlyStatistics(view);
-  patchZeroAchievement(view);
-}
-
-function patchUnreadyControls() {
-  document.querySelectorAll('#dashboard-view [data-week-direction], #statistics-view [data-rescue-week]')
-    .forEach((control) => setControlEnabled(control, false));
-  document.querySelectorAll('#statistics-rescue-year, #statistics-rescue-month')
-    .forEach((control) => setControlEnabled(control, false));
-}
-
 function patchAll() {
   state.patchScheduled = false;
   if (!state.periodsReady) {
-    patchUnreadyControls();
+    document.querySelectorAll('#dashboard-view [data-week-direction]')
+      .forEach((control) => setControlEnabled(control, false));
     return;
   }
   patchDashboard();
-  patchStatistics();
 }
 
 function schedulePatch() {
@@ -348,66 +212,8 @@ function dashboardClick(event) {
   return true;
 }
 
-function statisticsWeekClick(event) {
-  const button = event.target.closest?.('#statistics-view [data-rescue-week]');
-  if (!button) return false;
-  if (blockUntilPeriodsReady(event)) return true;
-  const model = statisticsWeekModel();
-  if (!model) return false;
-  event.preventDefault();
-  event.stopImmediatePropagation();
-  const target = Number(button.dataset.rescueWeek) < 0
-    ? model.previousWeekStart
-    : model.nextWeekStart;
-  if (target) applyStatisticsState({ mode: 'weekly', weekStart: target });
-  return true;
-}
-
 document.addEventListener('click', (event) => {
-  if (dashboardClick(event) || statisticsWeekClick(event)) return;
-}, true);
-
-document.addEventListener('change', (event) => {
-  if (!event.target.matches('#statistics-rescue-year, #statistics-rescue-month')) return;
-  const ownedView = document.querySelector('#statistics-view');
-  if (ownedView?.dataset.statisticsRescue !== undefined) return;
-  if (blockUntilPeriodsReady(event)) return;
-  const view = ownedView;
-  if (!view || view.classList.contains('hidden')) return;
-  const monthSelect = view.querySelector('#statistics-rescue-month');
-  if (!monthSelect) return;
-  const now = new Date();
-  const currentYear = now.getFullYear();
-  const currentMonth = now.getMonth() + 1;
-
-  if (event.target.matches('#statistics-rescue-year')) {
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    const year = Number(event.target.value);
-    const month = defaultMonthForYear({
-      year,
-      currentYear,
-      currentMonth,
-      recordedMonths: state.periods.months,
-    });
-    if (month) applyStatisticsState({ mode: 'monthly', year, month });
-    return;
-  }
-
-  const option = event.target.selectedOptions?.[0];
-  if (!option || option.disabled) {
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    schedulePatch();
-    return;
-  }
-  event.preventDefault();
-  event.stopImmediatePropagation();
-  applyStatisticsState({
-    mode: 'monthly',
-    year: Number(view.querySelector('#statistics-rescue-year')?.value),
-    month: Number(event.target.value),
-  });
+  dashboardClick(event);
 }, true);
 
 for (const eventName of [
@@ -439,7 +245,4 @@ authModule.onAuthStateChanged(auth, (user) => {
   refreshPeriods();
 });
 
-const style = document.createElement('style');
-style.textContent = '#statistics-view option.is-unavailable{color:#9aa39f}';
-document.head.append(style);
 schedulePatch();

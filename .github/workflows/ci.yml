@@ -16,8 +16,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Run tests
+      - name: Install dependencies
+        run: npm install
+      - name: Run Node tests
         run: npm test > test-output.txt 2>&1
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run browser tests
+        run: npm run test:browser
       - name: Prepare Pages artifact
         env:
           FIREBASE_API_KEY: test-api-key
@@ -52,11 +58,24 @@ jobs:
           test -f _site/src/ui-session-state.js
           test -f _site/src/service-worker-cache.js
           test -f _site/src/service-worker-registration.js
-          test -f _site/src/statistics-session-state.js
+          test -f _site/src/view-change-events.js
+          test -f _site/src/statistics-primary.css
+          test -f _site/src/statistics-state.js
+          test -f _site/src/statistics-data-source.js
+          test -f _site/src/statistics-view.js
+          test -f _site/src/statistics-feature.js
+          test -f _site/src/statistics-bootstrap.js
+          test ! -e _site/src/statistics-offline-rescue.js
+          test ! -e _site/src/statistics-ui.js
+          test ! -e _site/src/statistics-session-state.js
+          test ! -e _site/src/statistics-mobile-overflow.js
       - name: Upload failed test output
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: failed-test-output
-          path: test-output.txt
+          path: |
+            test-output.txt
+            playwright-report/
+            test-results/
           retention-days: 7

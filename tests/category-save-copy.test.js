@@ -12,6 +12,6 @@ test('대분류 일괄 적용 버튼은 저장으로 표시한다', async () => 
 
 test('PWA 셸 캐시는 최신 화면을 사용한다', async () => {
   const source = await read('service-worker.js');
-  assert.ok(source.includes("const SHELL_CACHE = 'weekly-time-budget-shell-v15';"));
+  assert.ok(source.includes("const SHELL_CACHE = 'weekly-time-budget-shell-v16';"));
   assert.ok(source.includes('./src/countdown-timer-domain.js'));
 });

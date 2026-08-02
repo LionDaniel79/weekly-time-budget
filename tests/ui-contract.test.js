@@ -7,63 +7,50 @@ import { fileURLToPath } from 'node:url';
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
 test('통계 모듈은 브라우저에서 읽을 수 있는 올바른 자바스크립트 문법이다', () => {
-  const path = fileURLToPath(new URL('../src/statistics-ui.js', import.meta.url));
-  const result = spawnSync(process.execPath, ['--check', path], { encoding: 'utf8' });
-  assert.equal(result.status, 0, result.stderr || result.stdout);
+  for (const relative of ['../src/statistics-state.js', '../src/statistics-data-source.js', '../src/statistics-view.js', '../src/statistics-feature.js', '../src/statistics-bootstrap.js']) {
+    const path = fileURLToPath(new URL(relative, import.meta.url));
+    const result = spawnSync(process.execPath, ['--check', path], { encoding: 'utf8' });
+    assert.equal(result.status, 0, `${relative}: ${result.stderr || result.stdout}`);
+  }
 });
 
-test('통계 화면은 기록 내역과 동시에 보이지 않도록 독립 전환된다', async () => {
-  const statisticsSource = await read('src/statistics-ui.js');
-  assert.match(statisticsSource, /dataset\.view\s*=\s*['"]statistics['"]/);
-  assert.match(statisticsSource, /closest\(\s*['"]\.nav-button['"]\s*\)/);
-  assert.match(statisticsSource, /#statistics-view/);
-  assert.match(statisticsSource, /classList\.add\(['"]hidden['"]\)/);
-  assert.doesNotMatch(statisticsSource, /#history-view[^\n]*innerHTML/);
+test('통계 화면은 기본 앱 전환과 단일 feature 경계로 독립 전환된다', async () => {
+  const [events, bootstrap, feature] = await Promise.all([
+    read('src/view-change-events.js'), read('src/statistics-bootstrap.js'), read('src/statistics-feature.js'),
+  ]);
+  assert.match(events, /weekly-time-budget:view-changed/);
+  assert.match(bootstrap, /feature\.enter\(\)|feature\.leave\(\)/);
+  assert.match(feature, /root\.addEventListener\('click', onClick\)/);
+  assert.doesNotMatch(feature, /#history-view|MutationObserver|stopImmediatePropagation/);
 });
 
 test('통계는 기록 구성비 대신 예산 대비 달성률을 표시한다', async () => {
-  const statisticsSource = await read('src/statistics-ui.js');
-  for (const label of [
-    '기간 예산',
-    '실제 기록',
-    '달성률',
-    '남음',
-    '초과',
-    '기록이 있는 달 기준 월평균 기록 시간',
-    '기록 일수',
-    '하루 평균',
-    '전월 대비',
-    '전년 대비',
-    '월별 대분류 예산·실제',
-    '연도별 대분류 예산·실제',
-  ]) {
-    assert.match(statisticsSource, new RegExp(label));
+  const source = await read('src/statistics-view.js');
+  for (const label of ['기간 예산', '실제 기록', '달성률', '남음', '초과', '기록이 있는 달 기준 월평균', '기록 일수', '하루 평균', '전월 대비', '전년 대비']) {
+    assert.match(source, new RegExp(label));
   }
-  assert.doesNotMatch(statisticsSource, /전체 비율/);
-  assert.doesNotMatch(statisticsSource, /categoryBreakdown/);
-  assert.match(statisticsSource, /summarizeWeeklyBudgetPeriod/);
-  assert.match(statisticsSource, /summarizeRecordedMonthlyBudgetPeriod/);
-  assert.match(statisticsSource, /summarizeRecordedYearlyBudgetPeriod/);
-  assert.match(statisticsSource, /detailedRecordedMonthlyBudgetComparison/);
-  assert.match(statisticsSource, /detailedRecordedYearlyBudgetComparison/);
-  assert.match(statisticsSource, /weeklyBudgets/);
+  assert.doesNotMatch(source, /전체 비율|categoryBreakdown/);
+  for (const token of ['summarizeWeeklyBudgetPeriod', 'summarizeRecordedMonthlyBudgetPeriod', 'summarizeRecordedYearlyBudgetPeriod', 'detailedRecordedMonthlyBudgetComparison', 'detailedRecordedYearlyBudgetComparison', 'weeklyBudgets']) {
+    assert.ok(source.includes(token), token);
+  }
 });
 
 test('통계 탭은 주별 통계를 첫 항목으로 제공한다', async () => {
-  const statisticsSource = await read('src/statistics-ui.js');
-  assert.match(statisticsSource, /\[\['weekly','주별 통계'\]/);
-  assert.match(statisticsSource, /이전 주/);
-  assert.match(statisticsSource, /다음 주/);
-  assert.match(statisticsSource, /data-week-offset/);
-  assert.match(statisticsSource, /moveWeekStart/);
+  const source = await read('src/statistics-view.js');
+  const weekly = source.indexOf("weekly: '주별 통계'");
+  const monthly = source.indexOf("monthly: '월간 통계'");
+  assert.ok(weekly >= 0 && monthly > weekly);
+  assert.match(source, /이전 주/);
+  assert.match(source, /다음 주/);
+  assert.match(source, /data-statistics-week/);
 });
 
 test('통계 화면의 기간 제목은 선택한 통계 기간을 표시한다', async () => {
-  const statisticsSource = await read('src/statistics-ui.js');
-  assert.match(statisticsSource, /예산 대비 통계/);
-  assert.match(statisticsSource, /기록 월 비교/);
-  assert.match(statisticsSource, /전체 연도 비교/);
-  assert.match(statisticsSource, /restoreWeeklyHeader/);
+  const source = await read('src/statistics-view.js');
+  assert.match(source, /예산 대비 통계/);
+  assert.match(source, /기록 월 비교/);
+  assert.match(source, /전체 연도 비교/);
+  assert.match(source, /headerText/);
 });
 
 test('대분류는 이름·기본예산·순서를 한 번에 저장한다', async () => {

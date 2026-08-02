@@ -70,6 +70,63 @@
   text-align: center;
 }
 
+.statistics-rescue-banner {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #eef4f1;
+  color: #355c52;
+  line-height: 1.5;
+  font-size: .86rem;
+}
+
+.statistics-rescue-banner.warning {
+  background: #fff4df;
+  color: #7b5722;
+}
+
+.statistics-rescue-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.statistics-table-wrap {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  box-sizing: border-box;
+}
+
+.statistics-rescue-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 12px;
+}
+
+.statistics-rescue-table th,
+.statistics-rescue-table td {
+  padding: 9px 7px;
+  border-bottom: 1px solid #e1e4de;
+  text-align: right;
+  vertical-align: middle;
+}
+
+.statistics-rescue-table th:first-child,
+.statistics-rescue-table td:first-child {
+  text-align: left;
+}
+
+#statistics-view option.is-unavailable {
+  color: #9aa39f;
+}
+
+.statistics-error .warning {
+  margin-bottom: 8px;
+}
+
 @media (max-width: 800px) {
   .statistics-tabs {
     gap: 6px;
@@ -104,7 +161,70 @@
   }
 
   .statistics-card {
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
     padding: 16px;
+    box-sizing: border-box;
+  }
+
+  .statistics-table-wrap {
+    overflow-x: hidden;
+  }
+
+  .statistics-rescue-table,
+  .statistics-rescue-table tbody {
+    display: grid;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    gap: 10px;
+    box-sizing: border-box;
+  }
+
+  .statistics-rescue-table thead {
+    display: none;
+  }
+
+  .statistics-rescue-table tr {
+    display: grid;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    padding: 12px;
+    border: 1px solid #dde3de;
+    border-radius: 12px;
+    box-sizing: border-box;
+  }
+
+  .statistics-rescue-table td,
+  .statistics-rescue-table td:first-child {
+    display: grid;
+    grid-template-columns: minmax(90px, 38%) minmax(0, 1fr);
+    gap: 10px;
+    min-width: 0;
+    max-width: 100%;
+    border: 0;
+    border-bottom: 1px solid #edf0ec;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    text-align: right;
+    box-sizing: border-box;
+  }
+
+  .statistics-rescue-table td:last-child {
+    border-bottom: 0;
+  }
+
+  .statistics-rescue-table td::before {
+    content: attr(data-label);
+    min-width: 0;
+    color: #6d7873;
+    font-size: .8rem;
+    font-weight: 700;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    text-align: left;
   }
 }
 

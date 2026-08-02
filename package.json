@@ -5,11 +5,14 @@
   "type": "module",
   "scripts": {
     "test": "node --test",
+    "test:browser": "playwright test",
+    "test:all": "npm test && npm run test:browser",
     "prepare:icons": "node scripts/materialize-icons.mjs",
     "start": "npm run prepare:icons && npx serve .",
     "prepare:pages": "node scripts/prepare-pages-site.mjs"
   },
   "devDependencies": {
+    "@playwright/test": "^1.54.0",
     "serve": "^14.2.4"
   }
 }
