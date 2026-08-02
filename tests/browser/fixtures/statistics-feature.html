@@ -5,31 +5,51 @@
   <section id="statistics-view"></section>
   <script type="module">
     import { createStatisticsFeature } from '/src/statistics-feature.js';
-    import { fixtureByName } from '/tests/browser/support/statistics-fixtures.mjs';
+    import { emptyStatisticsFixture, fixtureByName } from '/tests/browser/support/statistics-fixtures.mjs';
 
     const fixture = fixtureByName(new URLSearchParams(location.search).get('fixture') || 'restraint');
+    const emptyFixture = emptyStatisticsFixture();
     const counts = { cacheReads: 0, serverReads: 0, saves: 0 };
     const diagnostics = { modeChanges: 0, aggregateRuns: 0, renderRuns: 0, stateSaves: 0 };
+    let currentUser = { uid: 'browser-user' };
+    let pendingUserSwitch = null;
     const dataSource = {
-      async load(_userId, { onCache, onServer }) {
+      async load(userId, { onCache, onServer }) {
+        const selected = userId === 'browser-user' ? fixture : emptyFixture;
+        if (userId !== 'browser-user') {
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
         counts.cacheReads += 1;
-        await onCache({ data: fixture.data, dataVersion: 'cache:1', source: 'cache', warning: '' });
+        await onCache({ data: selected.data, dataVersion: `cache:${userId}`, source: 'cache', warning: '' });
         counts.serverReads += 1;
-        await onServer({ data: fixture.data, dataVersion: 'server:2', source: 'server', warning: '' });
-        return { data: fixture.data, dataVersion: 'server:2', source: 'server', warning: '' };
+        await onServer({ data: selected.data, dataVersion: `server:${userId}`, source: 'server', warning: '' });
+        return { data: selected.data, dataVersion: `server:${userId}`, source: 'server', warning: '' };
       },
     };
     const feature = createStatisticsFeature({
       root: document.querySelector('#statistics-view'),
       dataSource,
-      getCurrentUser: () => ({ uid: 'browser-user' }),
+      getCurrentUser: () => currentUser,
       saveUiState: async () => { counts.saves += 1; },
       setHeader: () => {},
       now: () => new Date('2026-08-02T12:00:00'),
       diagnostics,
     });
     feature.restore(fixture.restored);
-    globalThis.__statisticsHarness = { feature, counts, diagnostics, fixture, ready: feature.enter() };
+    globalThis.__statisticsHarness = {
+      feature,
+      counts,
+      diagnostics,
+      fixture,
+      ready: feature.enter(),
+      switchUser(uid) {
+        currentUser = { uid };
+        pendingUserSwitch = feature.enter();
+      },
+      waitForUserSwitch() {
+        return pendingUserSwitch;
+      },
+    };
   </script>
 </body>
 </html>
