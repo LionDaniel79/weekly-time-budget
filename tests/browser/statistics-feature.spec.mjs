@@ -48,9 +48,12 @@ test('cache와 server의 다른 dataVersion은 초기 렌더를 두 번만 만�
 test('사용자 전환 시 이전 사용자의 통계를 즉시 숨긴다', async ({ page }) => {
   await harness(page, 'restraint');
   await expect(page.getByText('스마트폰 (절제)', { exact: true })).toBeVisible();
-  await page.evaluate(() => globalThis.__statisticsHarness.switchUser('second-user'));
-  await expect(page.getByText('새 사용자의 자료를 확인하고 있습니다.')).toBeVisible();
-  await expect(page.getByText('스마트폰 (절제)', { exact: true })).toHaveCount(0);
+  const immediateText = await page.evaluate(() => {
+    globalThis.__statisticsHarness.switchUser('second-user');
+    return document.querySelector('#statistics-view')?.textContent || '';
+  });
+  expect(immediateText).toContain('새 사용자의 자료를 확인하고 있습니다.');
+  expect(immediateText).not.toContain('스마트폰 (절제)');
   await page.evaluate(() => globalThis.__statisticsHarness.waitForUserSwitch());
   await expect(page.locator('.statistics-summary .metric').nth(2)).toHaveText('—');
 });
