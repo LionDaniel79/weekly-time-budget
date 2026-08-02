@@ -26,8 +26,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Run tests
+      - name: Install dependencies
+        run: npm install
+      - name: Run Node tests
         run: npm test > test-output.txt 2>&1
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run browser diagnostics
+        run: npm run test:browser -- tests/browser/statistics-current-flow.spec.mjs tests/browser/pwa-cache-generation.spec.mjs
       - name: Prepare Pages artifact
         env:
           FIREBASE_API_KEY: test-api-key
@@ -68,5 +74,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: failed-test-output
-          path: test-output.txt
+          path: |
+            test-output.txt
+            playwright-report/
+            test-results/
           retention-days: 7
