@@ -13,7 +13,7 @@ export default defineConfig({
     ...devices['Desktop Chrome'],
   },
   webServer: {
-    command: 'python3 -m http.server 4173 --bind 127.0.0.1',
+    command: 'npm run prepare:icons && python3 -m http.server 4173 --bind 127.0.0.1',
     url: 'http://127.0.0.1:4173',
     reuseExistingServer: true,
     timeout: 30_000,
