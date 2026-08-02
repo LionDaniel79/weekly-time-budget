@@ -13,16 +13,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Pack source snapshot
-        if: github.event_name == 'pull_request' && github.head_ref == 'design/statistics-subsystem-rebuild'
-        run: git archive --format=tar.gz --output=source-snapshot.tar.gz HEAD
-      - name: Upload source snapshot
-        if: github.event_name == 'pull_request' && github.head_ref == 'design/statistics-subsystem-rebuild'
-        uses: actions/upload-artifact@v4
-        with:
-          name: statistics-source-snapshot
-          path: source-snapshot.tar.gz
-          retention-days: 1
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -32,8 +22,8 @@ jobs:
         run: npm test > test-output.txt 2>&1
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
-      - name: Run browser diagnostics
-        run: npm run test:browser -- tests/browser/statistics-current-flow.spec.mjs tests/browser/statistics-feature.spec.mjs tests/browser/pwa-cache-generation.spec.mjs
+      - name: Run browser tests
+        run: npm run test:browser
       - name: Prepare Pages artifact
         env:
           FIREBASE_API_KEY: test-api-key
@@ -68,7 +58,17 @@ jobs:
           test -f _site/src/ui-session-state.js
           test -f _site/src/service-worker-cache.js
           test -f _site/src/service-worker-registration.js
-          test -f _site/src/statistics-session-state.js
+          test -f _site/src/view-change-events.js
+          test -f _site/src/statistics-primary.css
+          test -f _site/src/statistics-state.js
+          test -f _site/src/statistics-data-source.js
+          test -f _site/src/statistics-view.js
+          test -f _site/src/statistics-feature.js
+          test -f _site/src/statistics-bootstrap.js
+          test ! -e _site/src/statistics-offline-rescue.js
+          test ! -e _site/src/statistics-ui.js
+          test ! -e _site/src/statistics-session-state.js
+          test ! -e _site/src/statistics-mobile-overflow.js
       - name: Upload failed test output
         if: failure()
         uses: actions/upload-artifact@v4
