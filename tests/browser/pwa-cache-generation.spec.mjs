@@ -8,7 +8,7 @@ test('구형 runtime 캐시가 최신 통계 셸 파일보다 먼저 반환되�
     const names = await caches.keys();
     await Promise.all(names.map((name) => caches.delete(name)));
     const runtime = await caches.open('weekly-time-budget-runtime-v1');
-    await runtime.put('/src/statistics-offline-rescue.js', new Response('/* stale-statistics-v13 */', {
+    await runtime.put('/src/statistics-bootstrap.js', new Response('/* stale-statistics-v13 */', {
       headers: { 'Content-Type': 'text/javascript' },
     }));
   });
@@ -28,7 +28,7 @@ test('구형 runtime 캐시가 최신 통계 셸 파일보다 먼저 반환되�
   });
 
   const source = await page.evaluate(() => (
-    fetch('/src/statistics-offline-rescue.js').then((response) => response.text())
+    fetch('/src/statistics-bootstrap.js').then((response) => response.text())
   ));
   expect(source).not.toContain('stale-statistics-v13');
 });
