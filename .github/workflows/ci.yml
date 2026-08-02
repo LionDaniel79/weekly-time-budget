@@ -15,7 +15,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Pack source snapshot
         if: github.event_name == 'pull_request' && github.head_ref == 'design/statistics-subsystem-rebuild'
-        run: tar --exclude=.git --exclude=source-snapshot.tar.gz -czf source-snapshot.tar.gz .
+        run: git archive --format=tar.gz --output=source-snapshot.tar.gz HEAD
       - name: Upload source snapshot
         if: github.event_name == 'pull_request' && github.head_ref == 'design/statistics-subsystem-rebuild'
         uses: actions/upload-artifact@v4
