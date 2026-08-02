@@ -44,10 +44,12 @@ export function applyStatisticsAction(state, action, context) {
     if (weekStart !== state.weekStart) next = { ...state, weekStart };
   }
   if (action.type === 'select-year') {
-    const year = Number(action.year);
-    if (Number.isInteger(year) && year > 0 && year <= context.currentYear && year !== state.year) {
-      next = { ...state, year, warning: '', renderError: null };
-    }
+    const requested = Number(action.year);
+    const allowedYears = new Set([...(context.recordedYears || []), context.currentYear]);
+    const year = Number.isInteger(requested) && allowedYears.has(requested)
+      ? requested
+      : context.currentYear;
+    if (year !== state.year) next = { ...state, year, warning: '', renderError: null };
   }
   if (action.type === 'select-month') {
     const selected = coerceMonthlySelection({
