@@ -41,6 +41,11 @@ test('다음 이동은 기록 없는 중간 주를 건너뛴다', () => {
   assert.equal(nextRecordedPeriodOrCurrent(weeks, '2026-07-06', '2026-08-03'), '2026-07-27');
 });
 
+test('마지막 기록 주의 다음 이동은 현재 주를 선택한다', () => {
+  const weeks = ['2026-07-06', '2026-07-20'];
+  assert.equal(nextRecordedPeriodOrCurrent(weeks, '2026-07-20', '2026-07-27'), '2026-07-27');
+});
+
 test('주간 이동은 기록 없는 중간 주를 건너뛰고 마지막에는 이번 주로 간다', () => {
   const weeks = ['2026-07-06', '2026-07-20'];
   assert.equal(previousRecordedPeriod(weeks, '2026-07-27'), '2026-07-20');
