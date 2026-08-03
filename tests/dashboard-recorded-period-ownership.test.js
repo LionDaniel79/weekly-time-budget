@@ -24,14 +24,15 @@ test('주간 대시보드 버튼은 기록 기간 목적지에 따라 비활성�
   assert.ok(source.includes('aria-disabled'));
 });
 
-test('기록 기간 후처리 모듈은 실행·캐시·배포 대상에서 제거된다', async () => {
+test('기록 기간 후처리 모듈은 실행·캐시 대상에서 제거되고 배포 부재를 검사한다', async () => {
   const [html, worker, workflow] = await Promise.all([
     read('index.html'),
     read('service-worker.js'),
     read('.github/workflows/ci.yml'),
   ]);
-  for (const source of [html, worker, workflow]) {
+  for (const source of [html, worker]) {
     assert.doesNotMatch(source, /recorded-period-navigation\.js/);
   }
+  assert.match(workflow, /test ! -e _site\/src\/recorded-period-navigation\.js/);
   await assert.rejects(access(new URL('../src/recorded-period-navigation.js', import.meta.url)));
 });
