@@ -31,6 +31,11 @@ test('양수 유효 기록만 날짜·주·월·연도 인덱스에 포함한다
   });
 });
 
+test('이전 이동은 가장 가까운 이전 기록 주를 선택한다', () => {
+  const weeks = ['2026-07-06', '2026-07-27'];
+  assert.equal(previousRecordedPeriod(weeks, '2026-07-27'), '2026-07-06');
+});
+
 test('주간 이동은 기록 없는 중간 주를 건너뛰고 마지막에는 이번 주로 간다', () => {
   const weeks = ['2026-07-06', '2026-07-20'];
   assert.equal(previousRecordedPeriod(weeks, '2026-07-27'), '2026-07-20');
