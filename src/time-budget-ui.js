@@ -218,8 +218,9 @@ function renderDashboardTabs(mode) {
 export function renderDashboardHtml(model) {
   const mode = model.mode === 'weekly' ? 'weekly' : 'daily';
   if (mode === 'weekly') {
-    const isCurrent = model.selectedWeekStart >= model.currentWeekStart;
-    return `${renderDashboardTabs(mode)}<div class="period-navigation"><button type="button" class="secondary-button" data-week-direction="prev">전주</button><strong>${escapeHtml(model.weekRangeLabel || model.selectedWeekStart)}</strong><button type="button" class="secondary-button" data-week-direction="next" ${isCurrent ? 'disabled' : ''}>다음 주</button></div>${renderSummaryCards(model.weeklySummary, '주간 예산')}${renderCategorySummary(model.weeklySummary)}`;
+    const previousDisabled = !model.previousWeekStart;
+    const nextDisabled = !model.nextWeekStart;
+    return `${renderDashboardTabs(mode)}<div class="period-navigation"><button type="button" class="secondary-button" data-week-direction="prev" ${previousDisabled ? 'disabled aria-disabled="true"' : 'aria-disabled="false"'}>전주</button><strong>${escapeHtml(model.weekRangeLabel || model.selectedWeekStart)}</strong><button type="button" class="secondary-button" data-week-direction="next" ${nextDisabled ? 'disabled aria-disabled="true"' : 'aria-disabled="false"'}>다음 주</button></div>${renderSummaryCards(model.weeklySummary, '주간 예산')}${renderCategorySummary(model.weeklySummary)}`;
   }
   const previousDisabled = !model.previousDate;
   const nextDisabled = model.selectedDate >= model.today;
