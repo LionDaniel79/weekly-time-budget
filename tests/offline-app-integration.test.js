@@ -16,10 +16,10 @@ test('오프라인 모듈은 올바른 자바스크립트 문법이다', async (
     '../src/statistics-view.js', '../src/statistics-feature.js',
     '../src/statistics-bootstrap.js', '../src/view-change-events.js',
     '../src/category-selection-memory.js', '../src/recorded-period-domain.js',
-    '../src/recorded-period-navigation.js', '../src/orphan-local-timer-cleanup.js',
-    '../src/local-timer-removal-reload.js', '../src/category-bulk-editor.js',
-    '../src/countdown-timer-domain.js', '../src/goal-domain.js',
-    '../src/persistent-timer.js', '../src/persistent-timer-ui.js', '../service-worker.js',
+    '../src/orphan-local-timer-cleanup.js', '../src/local-timer-removal-reload.js',
+    '../src/category-bulk-editor.js', '../src/countdown-timer-domain.js',
+    '../src/goal-domain.js', '../src/persistent-timer.js',
+    '../src/persistent-timer-ui.js', '../service-worker.js',
   ]) {
     const result = spawnSync(process.execPath, ['--check', fileURLToPath(new URL(relative, import.meta.url))], { encoding: 'utf8' });
     assert.equal(result.status, 0, `${relative}: ${result.stderr || result.stdout}`);

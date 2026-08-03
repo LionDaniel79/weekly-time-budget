@@ -41,7 +41,7 @@ jobs:
           test -f _site/src/category-effective-date.js
           test -f _site/src/goal-domain.js
           test -f _site/src/recorded-period-domain.js
-          test -f _site/src/recorded-period-navigation.js
+          test ! -e _site/src/recorded-period-navigation.js
           test -f _site/src/time-budget-domain.js
           test -f _site/src/time-budget-ui.js
           test -f _site/src/time-budget-feature.js

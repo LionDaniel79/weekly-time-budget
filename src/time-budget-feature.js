@@ -1,5 +1,5 @@
 import { firebaseConfig } from '../firebase-config.js';
-import { getWeekRange, moveWeekStart, summarizeCategories, summarizeWeeklyBudgetPeriod, toDateKey } from './domain.js';
+import { getWeekRange, summarizeCategories, summarizeWeeklyBudgetPeriod, toDateKey } from './domain.js';
 import {
   EQUAL_DAY_WEIGHTS,
   buildWeeklyBudgetSnapshot,
@@ -22,6 +22,12 @@ import {
 import { getOfflineRuntime } from './offline-runtime.js';
 import { showOfflineNotice, showToast } from './app-toast.js';
 import { filterCategoriesActiveOnDate, isCategoryActiveInRange } from './category-effective-date.js';
+import {
+  buildRecordedPeriodIndex,
+  previousRecordedPeriod,
+  nextRecordedPeriodOrCurrent,
+  coerceRecordedPeriodSelection,
+} from './recorded-period-domain.js';
 
 const appModule = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js');
 const authModule = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js');
@@ -237,17 +243,39 @@ function weeklySummary(key) {
   return summarizeWeeklyBudgetPeriod(state.entries, categories, state.weekly, key);
 }
 
+function dashboardRecordedWeekModel() {
+  const current = state.dashboard.currentWeekStart;
+  const periods = buildRecordedPeriodIndex(state.entries, state.dashboard.today);
+  const selected = coerceRecordedPeriodSelection({
+    selected: state.dashboard.selectedWeekStart,
+    current,
+    recordedPeriods: periods.weekStarts,
+  });
+  return {
+    selected,
+    previousWeekStart: previousRecordedPeriod(periods.weekStarts, selected),
+    nextWeekStart: nextRecordedPeriodOrCurrent(periods.weekStarts, selected, current),
+  };
+}
+
 function renderDashboard() {
   const root = document.querySelector('#dashboard-view');
   if (!root || !state.user) return;
   const dates = recordedDateKeys(state.entries, state.dashboard.today);
   if (state.dashboard.mode === 'weekly') {
+    const recordedWeek = dashboardRecordedWeekModel();
+    if (recordedWeek.selected !== state.dashboard.selectedWeekStart) {
+      state.dashboard.selectedWeekStart = recordedWeek.selected;
+      saveFeatureUiState({ dashboard: { ...state.dashboard } });
+    }
     root.innerHTML = `<div data-feature-ui="dashboard">${renderDashboardHtml({
       mode: 'weekly',
-      selectedWeekStart: state.dashboard.selectedWeekStart,
+      selectedWeekStart: recordedWeek.selected,
       currentWeekStart: state.dashboard.currentWeekStart,
-      weekRangeLabel: weekLabel(state.dashboard.selectedWeekStart),
-      weeklySummary: weeklySummary(state.dashboard.selectedWeekStart),
+      previousWeekStart: recordedWeek.previousWeekStart,
+      nextWeekStart: recordedWeek.nextWeekStart,
+      weekRangeLabel: weekLabel(recordedWeek.selected),
+      weeklySummary: weeklySummary(recordedWeek.selected),
     })}</div>`;
   } else {
     const date = state.dashboard.selectedDate;
@@ -285,8 +313,11 @@ function renderDashboard() {
     onSelectDate: selectDate,
     onCalendarMove: moveCalendar,
     onWeekMove: (direction) => {
-      const next = moveWeekStart(state.dashboard.selectedWeekStart, direction === 'prev' ? -1 : 1);
-      if (next > state.dashboard.currentWeekStart) return;
+      const recordedWeek = dashboardRecordedWeekModel();
+      const next = direction === 'prev'
+        ? recordedWeek.previousWeekStart
+        : recordedWeek.nextWeekStart;
+      if (!next) return;
       state.dashboard.selectedWeekStart = next;
       saveFeatureUiState({ dashboard: { ...state.dashboard } });
       renderDashboard(); updateHeader('dashboard');
