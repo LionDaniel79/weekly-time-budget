@@ -6,29 +6,16 @@ on:
     branches: [main]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Apply dashboard ownership migration
-        if: github.head_ref == 'agent/dashboard-single-owner'
-        run: |
-          node scripts/apply-dashboard-single-owner.mjs
-          rm -f docs/tmp-placeholder docs/tmp-placeholder-2 docs/tmp-placeholder-3
-          git checkout HEAD -- .github/workflows/ci.yml .github/workflows/apply-dashboard-single-owner.yml
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -m "refactor: move recorded week ownership"
-          git push origin HEAD:agent/dashboard-single-owner
       - name: Install dependencies
         run: npm install
       - name: Run Node tests
@@ -54,7 +41,7 @@ jobs:
           test -f _site/src/category-effective-date.js
           test -f _site/src/goal-domain.js
           test -f _site/src/recorded-period-domain.js
-          test -f _site/src/recorded-period-navigation.js
+          test ! -e _site/src/recorded-period-navigation.js
           test -f _site/src/time-budget-domain.js
           test -f _site/src/time-budget-ui.js
           test -f _site/src/time-budget-feature.js
