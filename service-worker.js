@@ -1,7 +1,7 @@
 import { cacheModuleGraph } from './src/service-worker-cache.js';
 
-// Refreshes the installed shell so archived-category visibility rules reach existing PWAs.
-const SHELL_CACHE = 'weekly-time-budget-shell-v16';
+const APP_BUILD = '2026.08.04-stability-v18';
+const SHELL_CACHE = `weekly-time-budget-shell-${APP_BUILD}`;
 const RUNTIME_CACHE = 'weekly-time-budget-firebase-v2';
 const APP_CACHE_PREFIX = 'weekly-time-budget-';
 const FIREBASE_VERSION_ROOT = 'https://www.gstatic.com/firebasejs/11.10.0/';
@@ -42,6 +42,7 @@ async function firebaseCacheFirst(request) {
   if (response.ok) await runtime.put(request, response.clone());
   return response;
 }
+
 async function shellCacheFirst(request) {
   const shell = await caches.open(SHELL_CACHE);
   const cached = await shell.match(request);
@@ -50,15 +51,16 @@ async function shellCacheFirst(request) {
   if (response.ok) await shell.put(request, response.clone());
   return response;
 }
-async function navigationResponse(request) {
+
+async function navigationNetworkFirst(request) {
   const shell = await caches.open(SHELL_CACHE);
-  const cached = (await shell.match(request)) || (await shell.match('./index.html')) || (await shell.match('./'));
-  if (cached) return cached;
   try {
-    const response = await fetch(request);
+    const response = await fetch(request, { cache: 'no-store' });
     if (response.ok) await shell.put('./index.html', response.clone());
     return response;
-  } catch { return Response.error(); }
+  } catch {
+    return (await shell.match('./index.html')) || (await shell.match('./')) || Response.error();
+  }
 }
 
 self.addEventListener('install', (event) => {
@@ -75,19 +77,23 @@ self.addEventListener('install', (event) => {
     await self.skipWaiting();
   })());
 });
+
 self.addEventListener('activate', (event) => {
   event.waitUntil((async () => {
     const names = await caches.keys();
-    await Promise.all(names.filter((name) => name.startsWith(APP_CACHE_PREFIX) && ![SHELL_CACHE, RUNTIME_CACHE].includes(name)).map((name) => caches.delete(name)));
+    await Promise.all(names
+      .filter((name) => name.startsWith(APP_CACHE_PREFIX) && ![SHELL_CACHE, RUNTIME_CACHE].includes(name))
+      .map((name) => caches.delete(name)));
     await self.clients.claim();
   })());
 });
+
 self.addEventListener('fetch', (event) => {
   const request = event.request;
   if (request.method !== 'GET') return;
   const url = new URL(request.url);
   if (isSensitiveApi(url)) return;
-  if (request.mode === 'navigate') return event.respondWith(navigationResponse(request));
+  if (request.mode === 'navigate') return event.respondWith(navigationNetworkFirst(request));
   if (isFirebaseModule(url)) return event.respondWith(firebaseCacheFirst(request));
   if (url.origin === self.location.origin) event.respondWith(shellCacheFirst(request));
 });
