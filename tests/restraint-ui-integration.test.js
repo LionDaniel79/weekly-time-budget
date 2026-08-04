@@ -16,10 +16,9 @@ test('모든 새 기록은 목표 방식 스냅샷을 저장한다', async () =>
 });
 
 test('대시보드는 목표 준수 점수와 절제 진행 막대를 표시한다', async () => {
-  const [ui, app, css] = await Promise.all([read('src/time-budget-ui.js'), read('src/app.js'), read('styles.css')]);
+  const [ui, css] = await Promise.all([read('src/time-budget-ui.js'), read('styles.css')]);
   assert.ok(ui.includes('목표 준수'));
   assert.ok(ui.includes('goalComplianceScore'));
-  assert.ok(app.includes('목표 준수'));
   assert.ok(ui.includes('restraint-remaining'));
   assert.ok(ui.includes('restraint-overage'));
   assert.ok(css.includes('.restraint-remaining'));

@@ -253,14 +253,6 @@ async function saveCategory({ id, name, defaultBudgetMinutes: budget, goalType }
   await loadData(); renderAll();
 }
 
-async function saveWeeklyBudget(budgets) {
-  const weekKey = currentWeekKey();
-  await firebase.setDoc(firebase.doc(db, 'users', state.user.uid, 'weeklyBudgets', weekKey), {
-    weekStart: weekKey, budgets, updatedAt: firebase.serverTimestamp(),
-  }, { merge: true });
-  await loadData(); renderAll();
-}
-
 async function deleteCategory(id) {
   if (!confirm('이 대분류를 삭제할까요? 기존 기록은 유지됩니다.')) return;
   await firebase.deleteDoc(firebase.doc(db, 'users', state.user.uid, 'categories', id));
@@ -281,7 +273,7 @@ async function saveEntry(entry, { onLocalSaved } = {}) {
       entry: normalizedEntry,
       onLocalSaved: async (record) => {
         await refreshMergedEntries();
-        renderDashboard(); renderHistory();
+        renderHistory();
         showToast({ type: 'queued', title: '✓ 기기에 안전하게 저장했습니다.', message: '서버 반영 상태를 확인하고 있습니다.' });
         document.dispatchEvent(new CustomEvent('weekly-time-budget:entries-changed', {
           detail: { userId: state.user.uid, entries: state.entries, pendingCount: await state.offlineRuntime.pendingCount() },
@@ -294,7 +286,7 @@ async function saveEntry(entry, { onLocalSaved } = {}) {
       await state.offlineRuntime.store.patchSnapshot(state.user.uid, { entries: state.remoteEntries });
     }
     await refreshMergedEntries();
-    renderDashboard(); renderHistory();
+    renderHistory();
     showEntrySaveResult(result);
     document.dispatchEvent(new CustomEvent('weekly-time-budget:entries-changed', {
       detail: { userId: state.user.uid, entries: state.entries, pendingCount: result.pendingCount },
@@ -334,49 +326,7 @@ async function retryEntry(id) {
 function renderAll() {
   const range = getWeekRange();
   $('#week-label').textContent = `${range.start} — ${range.end} · 월~주일`;
-  renderDashboard(); renderRecord(); renderBudget(); renderHistory(); renderCategories();
-}
-
-function legacyGoalProgressHtml(item) {
-  const progress = item.progress || { mode: 'growth', fillPercentage: 0 };
-  const className = progress.mode === 'remaining'
-    ? 'restraint-progress restraint-remaining'
-    : progress.mode === 'overage'
-      ? 'restraint-progress restraint-overage'
-      : progress.mode === 'exact' || progress.mode === 'excluded'
-        ? 'restraint-progress restraint-exact'
-        : 'growth-progress';
-  return `<div class="progress ${className}"><span style="width:${progress.fillPercentage}%"></span></div>`;
-}
-
-function legacyGoalDetail(item) {
-  if (!item.hasBudget) return '달성률 계산 제외';
-  if (item.goalType === 'restraint') {
-    if (item.status === 'overage') return `${formatMinutes(item.differenceMinutes)} 초과 사용`;
-    if (item.status === 'exact') return '예산 소진';
-    return `${formatMinutes(Math.abs(item.differenceMinutes))} 남음`;
-  }
-  if (item.differenceMinutes > 0) return `${formatMinutes(item.differenceMinutes)} 초과 달성`;
-  if (item.differenceMinutes < 0) return `${formatMinutes(Math.abs(item.differenceMinutes))} 남음`;
-  return '예산과 일치';
-}
-
-function renderDashboard() {
-  const range = getWeekRange();
-  const summary = summarizeWeeklyBudgetPeriod(
-    state.entries,
-    state.categories,
-    state.weeklyBudget ? [state.weeklyBudget] : [],
-    range.start,
-  );
-  const scoreText = summary.goalComplianceStatus === 'excluded' ? '계산 제외' : `${summary.goalComplianceScore}점`;
-  const rows = summary.categorySummaries;
-  $('#dashboard-view').innerHTML = `<div class="grid grid-3">
-    <article class="card"><p class="muted">목표 준수</p><div class="metric">${scoreText}</div></article>
-    <article class="card"><p class="muted">이번 주 예산</p><div class="metric">${formatMinutes(summary.totalBudgetMinutes)}</div><p class="muted">월요일부터 주일까지</p></article>
-    <article class="card"><p class="muted">실제 기록</p><div class="metric">${formatMinutes(summary.totalActualMinutes)}</div><p class="muted">월요일부터 주일까지 모두 포함</p></article>
-  </div><div class="card" style="margin-top:18px"><div class="section-title"><h2>대분류별 달성률</h2><span class="badge">${rows.length}개 분야</span></div>
-  ${rows.length ? rows.map((item) => `<div class="budget-row"><div><strong>${escapeHtml(item.name)}</strong>${legacyGoalProgressHtml(item)}</div><div>${formatMinutes(item.actualMinutes)} / ${formatMinutes(item.budgetMinutes)}</div><strong>${item.hasBudget ? `${item.percentage}%` : '—'}</strong><span class="muted">${legacyGoalDetail(item)}</span></div>`).join('') : $('#empty-template').innerHTML}</div>`;
+  renderRecord(); renderHistory(); renderCategories();
 }
 
 function renderRecord() {
@@ -490,12 +440,6 @@ function bindManual() {
   };
 }
 
-function renderBudget() {
-  const categories = filterCategoriesActiveOnDate(state.categories, toDateKey(new Date()));
-  $('#budget-view').innerHTML = `<div class="card"><div class="section-title"><div><h2>이번 주 시간 예산</h2><p class="muted">이번 주에만 적용됩니다. 다음 주에는 대분류의 기본 예산이 다시 표시됩니다.</p></div></div>${categories.length ? `<form id="budget-bulk-form"><div class="category-list">${categories.map((category) => `<div class="category-item budget-edit-row" data-id="${category.id}"><div><strong>${escapeHtml(categoryDisplayName(category))}</strong><div class="muted">기본 ${formatMinutes(defaultBudgetMinutes(category))}</div></div><input type="number" name="hours" min="0" step="0.5" value="${effectiveBudgetMinutes(category) / 60}" aria-label="${escapeHtml(categoryDisplayName(category))} 이번 주 예산 시간"></div>`).join('')}</div><div class="bulk-save-actions"><button class="primary-button" type="submit">이번 주 예산 저장</button></div></form>` : $('#empty-template').innerHTML}</div>`;
-  if ($('#budget-bulk-form')) $('#budget-bulk-form').onsubmit = async (event) => { event.preventDefault(); const budgets = {}; document.querySelectorAll('.budget-edit-row').forEach((row) => { budgets[row.dataset.id] = Number(row.querySelector('[name="hours"]').value) * 60; }); await saveWeeklyBudget(budgets); alert('이번 주 예산을 저장했습니다.'); };
-}
-
 function renderHistory() {
   const categoryById = new Map(state.categories.map((category) => [category.id, category]));
   const entries = state.entries.filter((entry) => isEntryWithinCategoryEffectiveDate(entry, categoryById.get(entry.categoryId)));
@@ -555,7 +499,7 @@ document.addEventListener('weekly-time-budget:entries-changed', async (event) =>
   if (!state.user || event.detail?.userId && event.detail.userId !== state.user.uid) return;
   if (Array.isArray(event.detail?.entries)) state.entries = event.detail.entries;
   else await refreshMergedEntries();
-  renderDashboard(); renderHistory();
+  renderHistory();
 });
 document.addEventListener('weekly-time-budget:data-changed', async () => {
   if (!state.user || loadingData) return;
