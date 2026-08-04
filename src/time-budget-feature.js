@@ -21,7 +21,7 @@ import {
 } from './time-budget-ui.js';
 import { getOfflineRuntime } from './offline-runtime.js';
 import { showOfflineNotice, showToast } from './app-toast.js';
-import { filterCategoriesActiveOnDate, isCategoryActiveInRange } from './category-effective-date.js';
+import { filterCategoriesActiveOnDate, isArchivedCategoryVisibleInRange, isCategoryActiveInRange } from './category-effective-date.js';
 import {
   buildRecordedPeriodIndex,
   previousRecordedPeriod,
@@ -134,6 +134,7 @@ function periodCategories({ start, end, weekDocument, dailyDocument = null }) {
     .map((entry) => entry.categoryId));
   return allKnownCategories()
     .filter((category) => isCategoryActiveInRange(category, start, end))
+    .filter((category) => activeIds.has(category.id) || isArchivedCategoryVisibleInRange(category, start, end))
     .filter((category) => activeIds.has(category.id) || budgetIds.has(category.id) || overrideIds.has(category.id) || entryIds.has(category.id))
     .map((category) => activeIds.has(category.id) ? category : { ...category, defaultBudgetMinutes: 0, budgetMinutes: 0 });
 }
