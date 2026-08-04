@@ -310,118 +310,27 @@ async function retryEntry(id) {
 function renderAll() {
   const range = getWeekRange();
   $('#week-label').textContent = `${range.start} — ${range.end} · 월~주일`;
-  renderRecord(); publishHistoryState(); publishCategoryState();
+  publishRecordState(); publishHistoryState(); publishCategoryState();
 }
 
-function renderRecord() {
-  $('#record-view').innerHTML = `<div class="tabs"><button class="tab-button ${state.activeRecordTab === 'timer' ? 'active' : ''}" data-record-tab="timer">타이머</button><button class="tab-button ${state.activeRecordTab === 'manual' ? 'active' : ''}" data-record-tab="manual">수동 입력</button></div><div class="card">${state.activeRecordTab === 'timer' ? timerForm() : manualForm()}</div>`;
-  document.querySelectorAll('[data-record-tab]').forEach((button) => {
-    button.onclick = () => {
-      state.activeRecordTab = button.dataset.recordTab;
-      persistUiState({ record: { tab: state.activeRecordTab, manualMode: state.manualInputMode } }).catch(console.error);
-      renderRecord();
-    };
-  });
-  if (state.activeRecordTab === 'timer') bindTimer(); else bindManual();
-}
-
-function timerForm() {
-  const elapsed = state.timer ? Math.floor((Date.now() - state.timer.startedAt) / 1000) : 0;
-  const selectedCategoryId = state.timer?.categoryId || '';
-  return `<div class="form-grid"><label>대분류<select id="timer-category" ${state.timer ? 'disabled' : ''}><option value="">선택하세요</option>${optionHtml(selectedCategoryId)}</select></label><label>메모(선택)<textarea id="timer-note" rows="2" ${state.timer ? 'disabled' : ''}>${escapeHtml(state.timer?.note || '')}</textarea></label></div><div id="timer-display" class="timer">${formatClock(elapsed)}</div><div class="actions"><button id="timer-action" class="primary-button">${state.timer ? '종료하고 저장' : '타이머 시작'}</button>${state.timer ? '<button id="timer-cancel" class="secondary-button">취소</button>' : ''}</div>`;
-}
-
-function bindTimer() {
-  $('#timer-action').onclick = async () => {
-    if (!state.timer) {
-      const categoryId = $('#timer-category').value;
-      if (!categoryId) return alert('대분류를 선택하세요.');
-      const startedDate = toDateKey(new Date());
-      const category = state.categories.find((item) => item.id === categoryId);
-      if (!category || !isCategoryActiveOnDate(category, startedDate)) {
-        return alert('이 대분류는 추가일부터 타이머를 시작할 수 있습니다.');
-      }
-      state.timer = { categoryId, note: $('#timer-note').value.trim(), startedAt: Date.now() };
-      renderRecord();
-      state.timerInterval = setInterval(() => {
-        const display = $('#timer-display');
-        if (display) display.textContent = formatClock(Math.floor((Date.now() - state.timer.startedAt) / 1000));
-      }, 1000);
-      return;
-    }
-    const timer = state.timer;
-    const endedAt = Date.now();
-    await saveEntry({ categoryId: timer.categoryId, note: timer.note, date: toDateKey(new Date(timer.startedAt)), durationMinutes: Math.max(1, Math.round((endedAt - timer.startedAt) / 60000)), startTime: new Date(timer.startedAt).toTimeString().slice(0, 5), endTime: new Date(endedAt).toTimeString().slice(0, 5), source: 'timer' });
-    clearInterval(state.timerInterval); state.timer = null; renderRecord();
-  };
-  if ($('#timer-cancel')) $('#timer-cancel').onclick = () => { clearInterval(state.timerInterval); state.timer = null; renderRecord(); };
-}
-
-function manualForm() {
-  const now = new Date();
-  const end = now.toTimeString().slice(0, 5);
-  const start = new Date(now.getTime() - 3600000).toTimeString().slice(0, 5);
-  const durationMode = state.manualInputMode === MANUAL_INPUT_MODES.DURATION;
-  return `<form id="manual-form" class="form-grid" novalidate><div class="manual-mode-switch" role="group" aria-label="수동 입력 방식"><button type="button" class="tab-button ${durationMode ? '' : 'active'}" data-manual-mode="time-range" aria-pressed="${durationMode ? 'false' : 'true'}">시작·종료 시각</button><button type="button" class="tab-button ${durationMode ? 'active' : ''}" data-manual-mode="duration" aria-pressed="${durationMode ? 'true' : 'false'}">분 직접 입력</button></div><label>대분류<select id="manual-category" required><option value="">선택하세요</option>${categoryOptionHtml({ date: toDateKey(now), selectedId: state.manualCategoryId })}</select></label><label>날짜<input id="manual-date" type="date" value="${toDateKey(now)}" required></label>${durationMode ? `<label>직접 기록할 시간<div class="duration-input-row"><input id="manual-duration" type="number" min="1" max="1440" step="1" inputmode="numeric" autocomplete="off" required><span aria-hidden="true">분</span></div></label>` : `<div class="time-fields"><label>시작<input id="manual-start" type="time" value="${start}" required></label><label>종료<input id="manual-end" type="time" value="${end}" required></label></div>`}<label>메모(선택)<textarea id="manual-note" rows="2"></textarea></label><button class="primary-button" type="submit">기록 저장</button></form>`;
-}
-
-function refreshManualCategoryOptions() {
-  const select = $('#manual-category');
-  const date = $('#manual-date')?.value;
-  if (!select || !date) return;
-  const selectedId = select.value;
-  select.innerHTML = `<option value="">선택하세요</option>${categoryOptionHtml({ date, selectedId })}`;
-  if (![...select.options].some((option) => option.value === selectedId)) {
-    select.value = '';
-    state.manualCategoryId = '';
-  }
-}
-
-function bindManual() {
-  $('#manual-date')?.addEventListener('change', refreshManualCategoryOptions);
-  document.querySelectorAll('[data-manual-mode]').forEach((button) => {
-    button.onclick = () => {
-      state.manualCategoryId = $('#manual-category')?.value || state.manualCategoryId;
-      state.manualInputMode = button.dataset.manualMode;
-      persistUiState({ record: { tab: 'manual', manualMode: state.manualInputMode } }).catch(console.error);
-      renderRecord();
-    };
-  });
-  $('#manual-form').onsubmit = async (event) => {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const submit = form.querySelector('[type="submit"]');
-    const categoryId = $('#manual-category').value;
-    const date = $('#manual-date').value;
-    if (!categoryId) return alert('대분류를 선택하세요.');
-    if (!date) return alert('날짜를 선택하세요.');
-    const category = state.categories.find((item) => item.id === categoryId);
-    if (!category || !isCategoryActiveOnDate(category, date)) {
-      alert('이 대분류는 추가일 이전 날짜에 기록할 수 없습니다.');
-      refreshManualCategoryOptions();
-      return;
-    }
-    state.manualCategoryId = categoryId;
-    let entry;
-    try {
-      if (state.manualInputMode === MANUAL_INPUT_MODES.DURATION) {
-        entry = createManualDurationEntry({ categoryId, date, note: $('#manual-note').value, durationMinutes: $('#manual-duration').value });
-      } else {
-        const startTime = $('#manual-start').value;
-        const endTime = $('#manual-end').value;
-        if (!startTime || !endTime) throw new Error('시간 범위를 확인하세요.');
-        const durationMinutes = minutesBetween(startTime, endTime);
-        if (durationMinutes <= 0 || durationMinutes > 1440) throw new Error('시간 범위를 확인하세요.');
-        entry = { categoryId, note: $('#manual-note').value.trim(), date, durationMinutes, startTime, endTime, source: 'manual' };
-      }
-      submit.disabled = true;
-      await saveEntry(entry, { onLocalSaved: () => { if (form.isConnected) renderRecord(); } });
-    } catch (error) {
-      if (!/오프라인 저장소|기기에 기록/.test(String(error.message || error))) alert(error instanceof Error ? error.message : String(error));
-    } finally {
-      if (submit.isConnected) submit.disabled = false;
-    }
-  };
+function publishRecordState() {
+  document.dispatchEvent(new CustomEvent('weekly-time-budget:record-state', {
+    detail: {
+      categories: state.categories,
+      activeRecordTab: state.activeRecordTab,
+      manualInputMode: state.manualInputMode,
+      manualCategoryId: state.manualCategoryId,
+      timer: state.timer,
+      onSaveEntry: saveEntry,
+      onUiChange: ({ activeRecordTab, manualInputMode, manualCategoryId }) => {
+        state.activeRecordTab = activeRecordTab;
+        state.manualInputMode = manualInputMode;
+        state.manualCategoryId = manualCategoryId;
+        persistUiState({ record: { tab: activeRecordTab, manualMode: manualInputMode } }).catch(console.error);
+      },
+      onTimerChange: (timer) => { state.timer = timer; },
+    },
+  }));
 }
 
 function publishHistoryState() {
