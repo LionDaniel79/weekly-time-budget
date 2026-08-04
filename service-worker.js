@@ -36,6 +36,7 @@ const SHELL_URLS = [
   './src/record-feature.js',
   './src/history-feature.js',
   './src/app-shell.js',
+  './src/auth-feature.js',
   './src/category-feature.js',
   './src/recorded-period-domain.js',
   './src/statistics-state.js',
