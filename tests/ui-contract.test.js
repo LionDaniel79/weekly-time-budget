@@ -103,7 +103,7 @@ test('기존 시각 방식은 빈 시각과 잘못된 범위를 검사한다', a
 });
 
 test('기록 내역은 공통 formatter를 사용한다', async () => {
-  const appSource = await read('src/app.js');
-  assert.match(appSource, /manualEntryTimeLabel\(entry,\s*formatMinutes\)/);
-  assert.doesNotMatch(appSource, /\$\{entry\.startTime \|\| ''\}–\$\{entry\.endTime \|\| ''\}/);
+  const historySource = await read('src/history-feature.js');
+  assert.match(historySource, /manualEntryTimeLabel\(entry,\s*formatMinutes\)/);
+  assert.doesNotMatch(historySource, /\$\{entry\.startTime \|\| ''\}–\$\{entry\.endTime \|\| ''\}/);
 });
