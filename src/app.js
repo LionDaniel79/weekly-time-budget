@@ -36,14 +36,6 @@ import {
 
 const configured = !Object.values(firebaseConfig).some((value) => String(value).includes('REPLACE_ME'));
 const views = ['dashboard', 'record', 'budget', 'history', 'statistics', 'categories'];
-const titles = {
-  dashboard: '대시보드',
-  record: '시간 기록',
-  budget: '시간 예산',
-  history: '기록 내역',
-  statistics: '통계',
-  categories: '대분류 관리',
-};
 const state = {
   user: null,
   categories: [],
@@ -356,24 +348,13 @@ function publishCategoryState() {
 
 function formatClock(seconds) { const h = Math.floor(seconds / 3600); const m = Math.floor((seconds % 3600) / 60); const s = seconds % 60; return [h, m, s].map((value) => String(value).padStart(2, '0')).join(':'); }
 
-function switchView(name, { save = true } = {}) {
-  const safe = views.includes(name) ? name : 'dashboard';
-  views.forEach((view) => $(`#${view}-view`)?.classList.toggle('hidden', view !== safe));
-  document.querySelectorAll('.nav-button').forEach((button) => button.classList.toggle('active', button.dataset.view === safe));
-  $('#page-title').textContent = titles[safe] || '대시보드';
-  $('.sidebar')?.classList.remove('open');
-  state.activeView = safe;
-  if (save) persistUiState({ activeView: safe }).catch(console.error);
-}
-
 function restoreVisibleState() {
   const restored = state.uiState || createDefaultUiState(uiContext());
   window.__weeklyTimeBudgetUiState = restored;
-  switchView(restored.activeView, { save: false });
+  document.dispatchEvent(new CustomEvent('weekly-time-budget:shell-state', { detail: { activeView: restored.activeView } }));
   document.dispatchEvent(new CustomEvent('weekly-time-budget:ui-state-restored', { detail: restored }));
 }
 
-document.querySelectorAll('.nav-button').forEach((button) => { button.onclick = () => switchView(button.dataset.view); });
 document.addEventListener('weekly-time-budget:save-ui-state', (event) => { persistUiState(event.detail || {}).catch(console.error); });
 document.addEventListener('weekly-time-budget:entries-changed', async (event) => {
   if (!state.user || event.detail?.userId && event.detail.userId !== state.user.uid) return;
@@ -385,7 +366,6 @@ document.addEventListener('weekly-time-budget:data-changed', async () => {
   if (!state.user || loadingData) return;
   try { await loadData(); renderAll(); restoreVisibleState(); } catch { await refreshMergedEntries(); }
 });
-$('#mobile-menu').onclick = () => $('.sidebar').classList.toggle('open');
 $('#google-login').onclick = async () => {
   if (!firebase || !auth) return alert('로그인 기능을 준비하는 중입니다. 잠시 후 다시 눌러주세요.');
   try { await firebase.signInWithPopup(auth, new firebase.GoogleAuthProvider()); }
