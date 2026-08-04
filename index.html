@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ko" data-app-build="statistics-v16">
+<html lang="ko" data-app-build="2026.08.04-stability-v18">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -24,7 +24,7 @@
   </section>
 
   <div id="app-view" class="app-shell hidden">
-    <aside class="sidebar">
+    <aside class="sidebar" id="app-navigation">
       <div>
         <p class="eyebrow">TIME BUDGET</p>
         <h2>나의 시간 연구</h2>
@@ -49,7 +49,7 @@
           <p id="week-label" class="eyebrow"></p>
           <h1 id="page-title">대시보드</h1>
         </div>
-        <button id="mobile-menu" class="mobile-menu">메뉴</button>
+        <button id="mobile-menu" class="mobile-menu" aria-expanded="false" aria-controls="app-navigation">메뉴</button>
       </header>
 
       <section id="dashboard-view" class="view"></section>
@@ -80,7 +80,6 @@
   <script type="module" src="./src/app.js"></script>
   <script type="module" src="./src/view-change-events.js"></script>
   <script type="module" src="./src/auth-login-guard.js"></script>
-  <script type="module" src="./src/category-ui-patch.js"></script>
   <script type="module" src="./src/statistics-bootstrap.js"></script>
   <script type="module" src="./src/category-selection-memory.js"></script>
   <script type="module" src="./src/category-bulk-editor.js"></script>
