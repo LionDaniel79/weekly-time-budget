@@ -48,6 +48,7 @@ jobs:
           test -f _site/src/record-feature.js
           test -f _site/src/history-feature.js
           test -f _site/src/category-feature.js
+          test -f _site/src/app-shell.js
           test -f _site/src/persistent-timer.js
           test -f _site/src/persistent-timer-ui.js
           test -f _site/src/orphan-local-timer-cleanup.js
