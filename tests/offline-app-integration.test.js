@@ -15,7 +15,7 @@ test('오프라인 모듈은 올바른 자바스크립트 문법이다', async (
     '../src/statistics-state.js', '../src/statistics-data-source.js',
     '../src/statistics-view.js', '../src/statistics-feature.js',
     '../src/statistics-bootstrap.js', '../src/view-change-events.js',
-    '../src/category-selection-memory.js', '../src/history-feature.js', '../src/category-feature.js', '../src/recorded-period-domain.js',
+    '../src/category-selection-memory.js', '../src/record-feature.js', '../src/history-feature.js', '../src/category-feature.js', '../src/recorded-period-domain.js',
     '../src/orphan-local-timer-cleanup.js', '../src/local-timer-removal-reload.js',
     '../src/category-bulk-editor.js', '../src/countdown-timer-domain.js',
     '../src/goal-domain.js', '../src/persistent-timer.js',

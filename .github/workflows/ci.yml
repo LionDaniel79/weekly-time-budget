@@ -45,6 +45,7 @@ jobs:
           test -f _site/src/time-budget-domain.js
           test -f _site/src/time-budget-ui.js
           test -f _site/src/time-budget-feature.js
+          test -f _site/src/record-feature.js
           test -f _site/src/history-feature.js
           test -f _site/src/category-feature.js
           test -f _site/src/persistent-timer.js

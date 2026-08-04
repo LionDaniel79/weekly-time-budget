@@ -17,10 +17,10 @@ test('app의 전체 렌더는 기록을 갱신하고 기록 내역·대분류 �
   const start = source.indexOf('function renderAll()');
   const end = source.indexOf('\nfunction ', start + 1);
   const body = source.slice(start, end);
-  assert.match(body, /renderRecord\(\)/);
+  assert.match(body, /publishRecordState\(\)/);
   assert.match(body, /publishHistoryState\(\)/);
   assert.match(body, /publishCategoryState\(\)/);
-  assert.doesNotMatch(body, /renderDashboard|renderBudget|renderHistory|renderCategories/);
+  assert.doesNotMatch(body, /renderDashboard|renderBudget|renderHistory|renderCategories|renderRecord/);
 });
 
 test('기록 변경 이벤트에서 app은 기록 내역 상태만 다시 발행한다', async () => {

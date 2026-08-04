@@ -33,6 +33,7 @@ const SHELL_URLS = [
   './src/time-budget-domain.js',
   './src/time-budget-ui.js',
   './src/time-budget-feature.js',
+  './src/record-feature.js',
   './src/history-feature.js',
   './src/category-feature.js',
   './src/recorded-period-domain.js',
