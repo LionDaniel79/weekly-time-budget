@@ -18,6 +18,7 @@ const views = ['dashboard', 'record', 'budget', 'history', 'statistics', 'catego
 const state = {
   user: null,
   categories: [],
+  archivedCategories: [],
   entries: [],
   remoteEntries: [],
   timer: null,
@@ -32,7 +33,8 @@ const state = {
 let dataSource;
 let sessionState;
 let entryService;
-let loadingData = false;
+let loadingPromise = null;
+let reloadRequested = false;
 
 const $ = (selector) => document.querySelector(selector);
 const uiContext = () => ({
@@ -40,6 +42,12 @@ const uiContext = () => ({
   currentWeekStart: getWeekRange().start,
   validViews: views,
 });
+
+const allKnownCategories = () => {
+  const byId = new Map(state.archivedCategories.map((category) => [category.id, category]));
+  state.categories.forEach((category) => byId.set(category.id, category));
+  return [...byId.values()];
+};
 
 async function refreshMergedEntries() {
   if (!state.offlineRuntime || !state.user) return;
@@ -65,22 +73,34 @@ function publishAuthState(overrides = {}) {
   }));
 }
 
+async function performLoadData() {
+  const { categories, archivedCategories, entries } = await dataSource.loadUserData(state.user.uid);
+  state.categories = categories;
+  state.archivedCategories = archivedCategories;
+  state.remoteEntries = entries;
+  await refreshMergedEntries();
+  await state.offlineRuntime.store.patchSnapshot(state.user.uid, {
+    categories: state.categories,
+    archivedCategories: state.archivedCategories,
+    entries: state.remoteEntries,
+    updatedAt: Date.now(),
+  });
+}
+
 async function loadData() {
-  if (!state.user || loadingData) return;
-  loadingData = true;
-  try {
-    const { categories, entries } = await dataSource.loadUserData(state.user.uid);
-    state.categories = categories;
-    state.remoteEntries = entries;
-    await refreshMergedEntries();
-    await state.offlineRuntime.store.patchSnapshot(state.user.uid, {
-      categories: state.categories,
-      entries: state.remoteEntries,
-      updatedAt: Date.now(),
-    });
-  } finally {
-    loadingData = false;
+  if (!state.user) return;
+  if (loadingPromise) {
+    reloadRequested = true;
+    return loadingPromise;
   }
+  loadingPromise = (async () => {
+    do {
+      reloadRequested = false;
+      await performLoadData();
+    } while (reloadRequested && state.user);
+  })();
+  try { await loadingPromise; }
+  finally { loadingPromise = null; }
 }
 
 async function saveCategory({ id, name, defaultBudgetMinutes: budget, goalType }) {
@@ -102,6 +122,20 @@ async function saveCategory({ id, name, defaultBudgetMinutes: budget, goalType }
   });
   await loadData();
   renderAll();
+}
+
+async function archiveCategory(id) {
+  await dataSource.archiveCategory(state.user.uid, id);
+  await loadData();
+  renderAll();
+  document.dispatchEvent(new CustomEvent('weekly-time-budget:data-changed'));
+}
+
+async function restoreCategory(id) {
+  await dataSource.restoreCategory(state.user.uid, id);
+  await loadData();
+  renderAll();
+  document.dispatchEvent(new CustomEvent('weekly-time-budget:data-changed'));
 }
 
 async function deleteCategory(id) {
@@ -156,6 +190,7 @@ async function handleSignedInUser({ user, db, storeModule }) {
     uiContext,
     onSnapshot: (snapshot) => {
       if (Array.isArray(snapshot?.categories)) state.categories = snapshot.categories;
+      if (Array.isArray(snapshot?.archivedCategories)) state.archivedCategories = snapshot.archivedCategories;
       if (Array.isArray(snapshot?.entries)) state.remoteEntries = snapshot.entries;
     },
     onUiState: (uiState) => {
@@ -193,11 +228,14 @@ async function onUserChanged({ user, db, storeModule, dataSource: nextDataSource
   if (!user) {
     if (previousUid) stopOfflineRuntime(previousUid);
     state.categories = [];
+    state.archivedCategories = [];
     state.entries = [];
     state.remoteEntries = [];
     state.offlineRuntime = null;
     sessionState = null;
     entryService = null;
+    loadingPromise = null;
+    reloadRequested = false;
     return;
   }
   await handleSignedInUser({ user, db, storeModule });
@@ -234,7 +272,8 @@ function publishRecordState() {
 function publishHistoryState() {
   document.dispatchEvent(new CustomEvent('weekly-time-budget:history-state', {
     detail: {
-      categories: state.categories,
+      categories: allKnownCategories(),
+      activeCategoryIds: state.categories.map((category) => category.id),
       entries: state.entries,
       onDelete: (id) => entryService.deleteEntry(id),
       onRetry: (id) => entryService.retryEntry(id),
@@ -244,7 +283,14 @@ function publishHistoryState() {
 
 function publishCategoryState() {
   document.dispatchEvent(new CustomEvent('weekly-time-budget:category-state', {
-    detail: { categories: state.categories, onSave: saveCategory, onDelete: deleteCategory },
+    detail: {
+      categories: state.categories,
+      archivedCategories: state.archivedCategories,
+      onSave: saveCategory,
+      onArchive: archiveCategory,
+      onRestore: restoreCategory,
+      onDelete: deleteCategory,
+    },
   }));
 }
 
@@ -263,7 +309,7 @@ document.addEventListener('weekly-time-budget:entries-changed', async (event) =>
   publishHistoryState();
 });
 document.addEventListener('weekly-time-budget:data-changed', async () => {
-  if (!state.user || loadingData) return;
+  if (!state.user) return;
   try { await loadData(); renderAll(); restoreVisibleState(); }
   catch { await refreshMergedEntries(); }
 });
