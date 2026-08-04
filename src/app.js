@@ -68,7 +68,6 @@ const $ = (selector) => document.querySelector(selector);
 const escapeHtml = (value = '') => String(value).replace(/[&<>'"]/g, (char) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;',
 }[char]));
-const defaultBudgetMinutes = (category) => Number(category.defaultBudgetMinutes ?? category.budgetMinutes ?? 0);
 const currentWeekKey = () => getWeekRange().start;
 const uiContext = () => ({
   today: toDateKey(new Date()),
@@ -311,7 +310,7 @@ async function retryEntry(id) {
 function renderAll() {
   const range = getWeekRange();
   $('#week-label').textContent = `${range.start} — ${range.end} · 월~주일`;
-  renderRecord(); publishHistoryState(); renderCategories();
+  renderRecord(); publishHistoryState(); publishCategoryState();
 }
 
 function renderRecord() {
@@ -436,30 +435,14 @@ function publishHistoryState() {
   }));
 }
 
-function renderCategories() {
-  $('#categories-view').innerHTML = `<div class="grid grid-2"><div class="card"><h2>대분류 추가</h2><form id="category-add" class="form-grid"><label>이름<input name="name" placeholder="예: 논문" required maxlength="30"></label><label>기본 주간 예산(시간)<input name="hours" type="number" min="0" step="0.5" value="0"></label><label class="restraint-goal-option"><input name="restraint" type="checkbox"><span><strong>절제 목표</strong><small>설정한 예산시간 이하로 사용하는 것이 목표입니다.</small></span></label><button class="primary-button">추가</button></form></div><div class="card"><h2>등록된 대분류</h2>${state.categories.length ? `<div class="category-list">${state.categories.map((category) => `<form class="category-item category-edit-row" data-id="${category.id}" data-goal-type="${normalizeGoalType(category.goalType)}"><span class="category-name-edit"><input name="name" value="${escapeHtml(category.name)}" required aria-label="대분류 이름">${normalizeGoalType(category.goalType) === 'restraint' ? '<span class="goal-type-label">(절제)</span>' : ''}</span><input name="hours" type="number" min="0" step="0.5" value="${defaultBudgetMinutes(category) / 60}" aria-label="${escapeHtml(categoryDisplayName(category))} 기본 예산 시간"><div class="category-row-actions"><button class="secondary-button" type="submit">수정</button><button class="danger-button category-delete" type="button">삭제</button></div></form>`).join('')}</div>` : $('#empty-template').innerHTML}</div></div>`;
-  $('#category-add').onsubmit = async (event) => {
-    event.preventDefault();
-    const data = new FormData(event.currentTarget);
-    await saveCategory({
-      name: data.get('name'),
-      defaultBudgetMinutes: Number(data.get('hours')) * 60,
-      goalType: data.get('restraint') === 'on' ? 'restraint' : 'growth',
-    });
-    $('#category-add input[name="name"]')?.focus();
-  };
-  document.querySelectorAll('.category-edit-row').forEach((form) => {
-    form.onsubmit = async (event) => {
-      event.preventDefault();
-      await saveCategory({
-        id: form.dataset.id,
-        name: form.querySelector('[name="name"]').value,
-        defaultBudgetMinutes: Number(form.querySelector('[name="hours"]').value) * 60,
-      });
-      alert('대분류를 수정했습니다.');
-    };
-    form.querySelector('.category-delete').onclick = () => deleteCategory(form.dataset.id);
-  });
+function publishCategoryState() {
+  document.dispatchEvent(new CustomEvent('weekly-time-budget:category-state', {
+    detail: {
+      categories: state.categories,
+      onSave: saveCategory,
+      onDelete: deleteCategory,
+    },
+  }));
 }
 
 function formatClock(seconds) { const h = Math.floor(seconds / 3600); const m = Math.floor((seconds % 3600) / 60); const s = seconds % 60; return [h, m, s].map((value) => String(value).padStart(2, '0')).join(':'); }
