@@ -12,15 +12,15 @@ test('app은 대시보드와 시간 예산 DOM을 렌더링하지 않는다', as
   assert.doesNotMatch(source, /function saveWeeklyBudget\(/);
 });
 
-test('app의 전체 렌더는 기록·대분류를 갱신하고 기록 내역 상태를 발행한다', async () => {
+test('app의 전체 렌더는 기록을 갱신하고 기록 내역·대분류 상태를 발행한다', async () => {
   const source = await read('src/app.js');
   const start = source.indexOf('function renderAll()');
   const end = source.indexOf('\nfunction ', start + 1);
   const body = source.slice(start, end);
   assert.match(body, /renderRecord\(\)/);
   assert.match(body, /publishHistoryState\(\)/);
-  assert.match(body, /renderCategories\(\)/);
-  assert.doesNotMatch(body, /renderDashboard|renderBudget|renderHistory/);
+  assert.match(body, /publishCategoryState\(\)/);
+  assert.doesNotMatch(body, /renderDashboard|renderBudget|renderHistory|renderCategories/);
 });
 
 test('기록 변경 이벤트에서 app은 기록 내역 상태만 다시 발행한다', async () => {
