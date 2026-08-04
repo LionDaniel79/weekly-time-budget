@@ -29,6 +29,53 @@ export function createAppDataSource({ firebase, db }) {
       };
     },
 
+    async loadTimeBudgetData(userId) {
+      const [weeklySnapshot, dailySnapshot, settingsSnapshot] = await Promise.all([
+        firebase.getDocs(userCollection(userId, 'weeklyBudgets')),
+        firebase.getDocs(userCollection(userId, 'dailyBudgets')),
+        firebase.getDoc(userDocument(userId, 'settings', 'timeBudget')),
+      ]);
+      return {
+        weeklyBudgets: weeklySnapshot.docs.map(plainDocument),
+        dailyBudgets: dailySnapshot.docs.map(plainDocument),
+        defaultDayWeights: settingsSnapshot.exists()
+          ? settingsSnapshot.data().defaultDayWeights
+          : null,
+      };
+    },
+
+    async ensureCurrentWeekBudget(userId, snapshot) {
+      await firebase.setDoc(
+        userDocument(userId, 'weeklyBudgets', snapshot.weekStart),
+        { ...snapshot, updatedAt: firebase.serverTimestamp() },
+        { merge: true },
+      );
+    },
+
+    async saveDailyBudget(userId, date, overrides) {
+      const ref = userDocument(userId, 'dailyBudgets', date);
+      if (Object.keys(overrides).length) {
+        await firebase.setDoc(ref, { date, overrides, updatedAt: firebase.serverTimestamp() });
+      } else {
+        await firebase.deleteDoc(ref);
+      }
+    },
+
+    async saveWeeklyBudget(userId, snapshot) {
+      const batch = firebase.writeBatch(db);
+      batch.set(
+        userDocument(userId, 'weeklyBudgets', snapshot.weekStart),
+        { ...snapshot, updatedAt: firebase.serverTimestamp() },
+        { merge: true },
+      );
+      batch.set(
+        userDocument(userId, 'settings', 'timeBudget'),
+        { defaultDayWeights: snapshot.dayWeights, updatedAt: firebase.serverTimestamp() },
+        { merge: true },
+      );
+      await batch.commit();
+    },
+
     async saveCategory(userId, { id, payload }) {
       const collectionRef = userCollection(userId, 'categories');
       if (id) {
