@@ -5,7 +5,7 @@ import { readFile } from 'node:fs/promises';
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
 test('공통 절제 이름을 기록·예산·타이머·보관 화면에서 사용한다', async () => {
-  const files = await Promise.all([read('src/record-feature.js'), read('src/time-budget-ui.js'), read('src/persistent-timer-ui.js'), read('src/category-ui-patch.js')]);
+  const files = await Promise.all([read('src/record-feature.js'), read('src/time-budget-ui.js'), read('src/persistent-timer-ui.js'), read('src/category-feature.js')]);
   files.forEach((source) => assert.ok(source.includes('categoryDisplayName')));
 });
 
