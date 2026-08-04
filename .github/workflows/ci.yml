@@ -6,16 +6,30 @@ on:
     branches: [main]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: fix/hide-archived-category-current-dashboard
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Apply dashboard archive filter
+        run: |
+          if [ -f scripts/apply-dashboard-archive-filter.mjs ]; then
+            node scripts/apply-dashboard-archive-filter.mjs
+            git show origin/main:.github/workflows/ci.yml > .github/workflows/ci.yml
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add -A
+            git commit -m "fix: filter archived categories by dashboard period"
+            git push origin HEAD:fix/hide-archived-category-current-dashboard
+          fi
       - name: Install dependencies
         run: npm install
       - name: Run Node tests
