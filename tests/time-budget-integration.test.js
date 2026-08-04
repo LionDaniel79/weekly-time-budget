@@ -9,6 +9,7 @@ const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 test('신규 모듈과 연결 파일은 올바른 자바스크립트 문법이다', () => {
   for (const relative of [
     '../src/app.js',
+    '../src/app-data-source.js',
     '../src/time-budget-domain.js',
     '../src/time-budget-ui.js',
     '../src/persistent-timer.js',
@@ -29,17 +30,23 @@ test('메뉴와 페이지 제목은 시간 예산으로 변경된다', async () 
   assert.ok(html.includes('./src/time-budget-feature.js'));
 });
 
-test('기능 모듈은 일간·주간 예산 문서와 기본 비율을 읽고 저장한다', async () => {
-  const feature = await read('src/time-budget-feature.js');
-  for (const token of ['weeklyBudgets', 'dailyBudgets', "'settings', 'timeBudget'", 'defaultDayWeights', 'explicitBudgetIds']) {
-    assert.ok(feature.includes(token), token);
+test('공통 데이터 소스는 일간·주간 예산 문서와 기본 비율을 읽고 저장한다', async () => {
+  const [feature, dataSource] = await Promise.all([
+    read('src/time-budget-feature.js'),
+    read('src/app-data-source.js'),
+  ]);
+  for (const token of ['loadTimeBudgetData', 'weeklyBudgets', 'dailyBudgets', "'settings', 'timeBudget'", 'defaultDayWeights']) {
+    assert.ok(dataSource.includes(token), token);
+  }
+  for (const token of ['saveDailyBudget', 'saveWeeklyBudget', 'ensureCurrentWeekBudget', 'writeBatch']) {
+    assert.ok(dataSource.includes(token), token);
   }
   assert.match(feature, /async function saveDaily/);
   assert.match(feature, /async function saveWeekly/);
-  assert.match(feature, /writeBatch/);
-  for (const token of ['ensureCurrentWeekSnapshot', 'preservedOverrides', 'preservedBudgets', 'async function switchOwnedView']) {
+  for (const token of ['ensureCurrentWeekSnapshot', 'preservedOverrides', 'preservedBudgets', 'weekly-time-budget:view-changed']) {
     assert.ok(feature.includes(token), token);
   }
+  assert.doesNotMatch(feature, /writeBatch|onAuthStateChanged|MutationObserver|switchOwnedView/);
   const start = feature.indexOf('async function saveWeekly');
   const end = feature.indexOf('function updateHeader', start);
   assert.doesNotMatch(feature.slice(start, end), /dailyBudgets/);

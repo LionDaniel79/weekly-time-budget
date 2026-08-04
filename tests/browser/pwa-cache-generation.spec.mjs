@@ -40,5 +40,5 @@ test('구형 runtime과 셸 캐시는 최신 앱 파일보다 먼저 반환되�
   await page.goto('/index.html');
   await expect(page.locator('#cached-generation')).toHaveCount(0);
   await expect(page.locator('h1').first()).toHaveText('주간 시간 예산');
-  await expect(page.locator('html')).toHaveAttribute('data-app-build', '2026.08.04-stability-v18');
+  await expect(page.locator('html')).toHaveAttribute('data-app-build', '2026.08.04-infrastructure-v19');
 });

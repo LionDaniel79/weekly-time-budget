@@ -68,7 +68,7 @@ test('사용자 전환 시 화면 모듈은 이전 사용자의 캐시 데이터
   const [budgetSource, timerSource, statisticsSource] = await Promise.all([
     read('src/time-budget-feature.js'), read('src/persistent-timer-ui.js'), read('src/statistics-data-source.js'),
   ]);
-  assert.match(budgetSource, /if \(!user\) \{[\s\S]*state\.categories = \[\];[\s\S]*state\.archived = \[\];[\s\S]*state\.entries = \[\];/);
+  assert.match(budgetSource, /weekly-time-budget:infrastructure-state[\s\S]*if \(!state\.user\) \{[\s\S]*state\.weekly = \[\];[\s\S]*state\.daily = \[\];/);
   assert.match(timerSource, /if \(!user\) \{[\s\S]*state\.categories = \[\];[\s\S]*state\.archived = \[\];[\s\S]*state\.entries = \[\];/);
   assert.match(statisticsSource, /runtimeForUser\(userId\)/);
 });

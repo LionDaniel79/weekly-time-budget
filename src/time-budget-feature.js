@@ -1,5 +1,4 @@
-import { firebaseConfig } from '../firebase-config.js';
-import { getWeekRange, summarizeCategories, summarizeWeeklyBudgetPeriod, toDateKey } from './domain.js';
+import { getWeekRange, summarizeWeeklyBudgetPeriod, toDateKey } from './domain.js';
 import {
   EQUAL_DAY_WEIGHTS,
   buildWeeklyBudgetSnapshot,
@@ -8,7 +7,6 @@ import {
   previousRecordedDate,
   nextRecordedDateOrToday,
   recordedDateKeys,
-  resolveWeeklyBudgetMinutes,
   summarizeDailyCategories,
 } from './time-budget-domain.js';
 import {
@@ -19,7 +17,6 @@ import {
   renderDashboardHtml,
   renderTimeBudgetHtml,
 } from './time-budget-ui.js';
-import { getOfflineRuntime } from './offline-runtime.js';
 import { showOfflineNotice, showToast } from './app-toast.js';
 import { filterCategoriesActiveOnDate, isArchivedCategoryVisibleInRange, isCategoryActiveInRange } from './category-effective-date.js';
 import {
@@ -29,39 +26,25 @@ import {
   coerceRecordedPeriodSelection,
 } from './recorded-period-domain.js';
 
-const appModule = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js');
-const authModule = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js');
-const store = await import('https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js');
-const app = appModule.getApps().length ? appModule.getApp() : appModule.initializeApp(firebaseConfig);
-const auth = authModule.getAuth(app);
-const db = store.getFirestore(app);
-
 const today = () => toDateKey(new Date());
 const currentWeekStart = () => getWeekRange().start;
 const state = {
   user: null,
   runtime: null,
-  categories: [], archived: [], entries: [], weekly: [], daily: [],
+  dataSource: null,
+  categories: [], archived: [], entries: [], remoteEntries: [], weekly: [], daily: [],
   defaultDayWeights: { ...EQUAL_DAY_WEIGHTS },
   dashboard: createDashboardUiState(today(), currentWeekStart()),
   budget: createTimeBudgetUiState(today()),
   loading: false,
   cacheLoaded: false,
+  activeView: 'dashboard',
 };
-let patchQueued = false;
 let loadingPromise = null;
+let reloadRequested = false;
 
 const activeCategories = (date = today()) => filterCategoriesActiveOnDate(state.categories, date);
 const defaultBudget = (category) => Number(category.defaultBudgetMinutes ?? category.budgetMinutes ?? 0) || 0;
-
-function plainEntry(doc) {
-  const data = doc.data();
-  return {
-    id: doc.id,
-    ...data,
-    createdAt: data.createdAt?.toMillis?.() ?? (Number(data.localCreatedAt || 0) || Date.now()),
-  };
-}
 
 function saveFeatureUiState(partial = {}) {
   document.dispatchEvent(new CustomEvent('weekly-time-budget:save-ui-state', { detail: partial }));
@@ -82,13 +65,10 @@ function applyRestoredUiState(saved = {}) {
 if (globalThis.window?.__weeklyTimeBudgetUiState) {
   applyRestoredUiState(globalThis.window.__weeklyTimeBudgetUiState);
 }
+
 document.addEventListener('weekly-time-budget:ui-state-restored', (event) => {
   applyRestoredUiState(event.detail || {});
-  if (!state.user) return;
-  const dashboard = document.querySelector('#dashboard-view');
-  const budget = document.querySelector('#budget-view');
-  if (dashboard && !dashboard.classList.contains('hidden')) { renderDashboard(); updateHeader('dashboard'); }
-  if (budget && !budget.classList.contains('hidden')) { renderBudget(); updateHeader('budget'); }
+  renderActiveView();
 });
 
 function allKnownCategories() {
@@ -158,13 +138,7 @@ async function ensureCurrentWeekSnapshot() {
     : (source ? { ...EQUAL_DAY_WEIGHTS } : { ...state.defaultDayWeights });
   if (!source?.dayWeights) changed = true;
   const snapshot = { id: source?.id || weekStart, weekStart, budgets, explicitBudgetIds, dayWeights };
-  if (changed) {
-    await store.setDoc(
-      store.doc(db, 'users', state.user.uid, 'weeklyBudgets', weekStart),
-      { weekStart, budgets, explicitBudgetIds, dayWeights, updatedAt: store.serverTimestamp() },
-      { merge: true },
-    );
-  }
+  if (changed) await state.dataSource.ensureCurrentWeekBudget(state.user.uid, snapshot);
   const index = state.weekly.findIndex((week) => (week.weekStart || week.id) === weekStart);
   if (index >= 0) state.weekly[index] = snapshot;
   else state.weekly.push(snapshot);
@@ -175,63 +149,55 @@ async function applyCachedData() {
   const snapshot = await state.runtime.store.getSnapshot(state.user.uid);
   state.cacheLoaded = true;
   if (!snapshot) return false;
-  if (Array.isArray(snapshot.categories)) state.categories = snapshot.categories;
-  if (Array.isArray(snapshot.archivedCategories)) state.archived = snapshot.archivedCategories;
   if (Array.isArray(snapshot.weeklyBudgets)) state.weekly = snapshot.weeklyBudgets;
   if (Array.isArray(snapshot.dailyBudgets)) state.daily = snapshot.dailyBudgets;
   if (snapshot.defaultDayWeights) state.defaultDayWeights = effectiveDayWeights(null, snapshot.defaultDayWeights);
-  state.entries = await state.runtime.mergedEntries(Array.isArray(snapshot.entries) ? snapshot.entries : []);
   applyRestoredUiState(globalThis.window?.__weeklyTimeBudgetUiState || {});
   return true;
 }
 
+async function performLoadData() {
+  state.loading = true;
+  const hadCache = await applyCachedData();
+  try {
+    const result = await state.dataSource.loadTimeBudgetData(state.user.uid);
+    state.weekly = result.weeklyBudgets;
+    state.daily = result.dailyBudgets;
+    state.defaultDayWeights = effectiveDayWeights(null, result.defaultDayWeights || EQUAL_DAY_WEIGHTS);
+    await ensureCurrentWeekSnapshot();
+    await state.runtime.store.patchSnapshot(state.user.uid, {
+      weeklyBudgets: state.weekly,
+      dailyBudgets: state.daily,
+      defaultDayWeights: state.defaultDayWeights,
+      updatedAt: Date.now(),
+    });
+  } catch (error) {
+    if (!hadCache && !state.weekly.length && !state.daily.length) throw error;
+    console.warn('대시보드 오프라인 스냅숏 사용', error);
+    showOfflineNotice();
+  } finally {
+    const now = today();
+    const week = currentWeekStart();
+    state.dashboard.today = now;
+    state.dashboard.currentWeekStart = week;
+    state.budget.today = now;
+    if (state.dashboard.selectedDate > now) state.dashboard.selectedDate = now;
+    if (state.dashboard.selectedWeekStart > week) state.dashboard.selectedWeekStart = week;
+    state.loading = false;
+  }
+}
+
 async function loadData() {
-  if (!state.user || !state.runtime) return;
-  if (loadingPromise) return loadingPromise;
+  if (!state.user || !state.runtime || !state.dataSource) return;
+  if (loadingPromise) {
+    reloadRequested = true;
+    return loadingPromise;
+  }
   loadingPromise = (async () => {
-    state.loading = true;
-    const hadCache = await applyCachedData();
-    try {
-      const root = ['users', state.user.uid];
-      const [categories, archived, entries, weekly, daily, settings] = await Promise.all([
-        store.getDocs(store.query(store.collection(db, ...root, 'categories'), store.orderBy('order'))),
-        store.getDocs(store.collection(db, ...root, 'archivedCategories')),
-        store.getDocs(store.query(store.collection(db, ...root, 'entries'), store.orderBy('date', 'desc'))),
-        store.getDocs(store.collection(db, ...root, 'weeklyBudgets')),
-        store.getDocs(store.collection(db, ...root, 'dailyBudgets')),
-        store.getDoc(store.doc(db, ...root, 'settings', 'timeBudget')),
-      ]);
-      state.categories = categories.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-      state.archived = archived.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-      const remoteEntries = entries.docs.map(plainEntry);
-      state.entries = await state.runtime.mergedEntries(remoteEntries);
-      state.weekly = weekly.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-      state.daily = daily.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-      state.defaultDayWeights = effectiveDayWeights(null, settings.exists() ? settings.data().defaultDayWeights : EQUAL_DAY_WEIGHTS);
-      await ensureCurrentWeekSnapshot();
-      await state.runtime.store.patchSnapshot(state.user.uid, {
-        categories: state.categories,
-        archivedCategories: state.archived,
-        entries: remoteEntries,
-        weeklyBudgets: state.weekly,
-        dailyBudgets: state.daily,
-        defaultDayWeights: state.defaultDayWeights,
-        updatedAt: Date.now(),
-      });
-    } catch (error) {
-      if (!hadCache && !state.categories.length) throw error;
-      console.warn('대시보드 오프라인 스냅숏 사용', error);
-      showOfflineNotice();
-    } finally {
-      const now = today();
-      const week = currentWeekStart();
-      state.dashboard.today = now;
-      state.dashboard.currentWeekStart = week;
-      state.budget.today = now;
-      if (state.dashboard.selectedDate > now) state.dashboard.selectedDate = now;
-      if (state.dashboard.selectedWeekStart > week) state.dashboard.selectedWeekStart = week;
-      state.loading = false;
-    }
+    do {
+      reloadRequested = false;
+      await performLoadData();
+    } while (reloadRequested && state.user);
   })();
   try { await loadingPromise; }
   finally { loadingPromise = null; }
@@ -384,11 +350,8 @@ async function saveDaily(inputs) {
     const parsed = parseOptionalHours(inputs[category.id]);
     if (parsed.explicit) overrides[category.id] = parsed.minutes;
   }
-  const ref = store.doc(db, 'users', state.user.uid, 'dailyBudgets', date);
-  try {
-    if (Object.keys(overrides).length) await store.setDoc(ref, { date, overrides, updatedAt: store.serverTimestamp() });
-    else await store.deleteDoc(ref);
-  } catch (error) {
+  try { await state.dataSource.saveDailyBudget(state.user.uid, date, overrides); }
+  catch (error) {
     showToast({ type: 'error', title: '오늘 시간 예산을 저장하지 못했습니다.', message: '예산 변경은 인터넷 연결 후 다시 시도하세요.' });
     throw error;
   }
@@ -410,10 +373,7 @@ async function saveWeekly({ budgetInputs, dayWeightInputs }) {
   const snapshot = buildWeeklyBudgetSnapshot({ weekStart, categories: currentCategories, budgetInputs, dayWeightInputs });
   snapshot.budgets = { ...preservedBudgets, ...snapshot.budgets };
   snapshot.explicitBudgetIds = [...new Set([...preservedExplicitBudgetIds, ...snapshot.explicitBudgetIds])];
-  const batch = store.writeBatch(db);
-  batch.set(store.doc(db, 'users', state.user.uid, 'weeklyBudgets', weekStart), { ...snapshot, updatedAt: store.serverTimestamp() }, { merge: true });
-  batch.set(store.doc(db, 'users', state.user.uid, 'settings', 'timeBudget'), { defaultDayWeights: snapshot.dayWeights, updatedAt: store.serverTimestamp() }, { merge: true });
-  try { await batch.commit(); }
+  try { await state.dataSource.saveWeeklyBudget(state.user.uid, snapshot); }
   catch (error) {
     showToast({ type: 'error', title: '이번 주 시간 예산을 저장하지 못했습니다.', message: '예산 변경은 인터넷 연결 후 다시 시도하세요.' });
     throw error;
@@ -429,7 +389,7 @@ function updateHeader(view) {
     document.querySelector('#week-label').textContent = state.dashboard.mode === 'daily'
       ? `${state.dashboard.selectedDate} · 일간 현황`
       : `${weekLabel(state.dashboard.selectedWeekStart)} · 주간 현황`;
-  } else {
+  } else if (view === 'budget') {
     document.querySelector('#page-title').textContent = '시간 예산';
     document.querySelector('#week-label').textContent = state.budget.mode === 'today'
       ? `${state.budget.today} · 오늘 시간 예산`
@@ -437,83 +397,52 @@ function updateHeader(view) {
   }
 }
 
-async function switchOwnedView(name) {
-  document.querySelectorAll('.view').forEach((view) => view.classList.add('hidden'));
-  document.querySelector(`#${name}-view`)?.classList.remove('hidden');
-  document.querySelectorAll('.nav-button').forEach((button) => button.classList.toggle('active', button.dataset.view === name));
-  document.querySelector('.sidebar')?.classList.remove('open');
-  saveFeatureUiState({ activeView: name });
-  await loadData();
-  if (name === 'dashboard') renderDashboard(); else renderBudget();
-  updateHeader(name);
+function renderActiveView() {
+  if (!state.user) return;
+  if (state.activeView === 'dashboard') { renderDashboard(); updateHeader('dashboard'); }
+  if (state.activeView === 'budget') { renderBudget(); updateHeader('budget'); }
 }
 
-function patchNavigation() {
-  const budgetButton = document.querySelector('[data-view="budget"]');
-  if (budgetButton && budgetButton.textContent !== '시간 예산') budgetButton.textContent = '시간 예산';
-}
+document.addEventListener('weekly-time-budget:infrastructure-state', async (event) => {
+  const detail = event.detail || {};
+  const previousUid = state.user?.uid;
+  state.user = detail.user || null;
+  state.runtime = detail.offlineRuntime || null;
+  state.dataSource = detail.dataSource || null;
+  state.categories = Array.isArray(detail.categories) ? detail.categories : [];
+  state.archived = Array.isArray(detail.archivedCategories) ? detail.archivedCategories : [];
+  state.entries = Array.isArray(detail.entries) ? detail.entries : [];
+  state.remoteEntries = Array.isArray(detail.remoteEntries) ? detail.remoteEntries : [];
+  if (!state.user) {
+    state.weekly = [];
+    state.daily = [];
+    state.defaultDayWeights = { ...EQUAL_DAY_WEIGHTS };
+    state.cacheLoaded = false;
+    loadingPromise = null;
+    reloadRequested = false;
+    return;
+  }
+  if (previousUid !== state.user.uid) state.cacheLoaded = false;
+  try { await loadData(); } catch (error) { console.error('시간 예산 데이터를 불러오지 못했습니다.', error); }
+  renderActiveView();
+});
 
-function schedulePatch() {
-  if (patchQueued || !state.user) return;
-  patchQueued = true;
-  queueMicrotask(async () => {
-    patchQueued = false;
-    patchNavigation();
-    const dashboard = document.querySelector('#dashboard-view');
-    const budget = document.querySelector('#budget-view');
-    if (dashboard && !dashboard.classList.contains('hidden') && !dashboard.querySelector('[data-feature-ui="dashboard"]')) {
-      await loadData(); renderDashboard(); updateHeader('dashboard');
-    }
-    if (budget && !budget.classList.contains('hidden') && !budget.querySelector('[data-feature-ui="budget"]')) {
-      await loadData(); renderBudget(); updateHeader('budget');
-    }
-  });
-}
-
-document.addEventListener('click', (event) => {
-  const button = event.target.closest('.nav-button[data-view="dashboard"], .nav-button[data-view="budget"]');
-  if (!button) return;
-  event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation();
-  switchOwnedView(button.dataset.view).catch((error) => {
-    console.error(error);
-    alert(`화면을 불러오지 못했습니다: ${error.message}`);
-  });
-}, true);
+document.addEventListener('weekly-time-budget:view-changed', async (event) => {
+  state.activeView = event.detail?.view || state.activeView;
+  if (!['dashboard', 'budget'].includes(state.activeView) || !state.user) return;
+  try { await loadData(); } catch { /* cached data remains */ }
+  renderActiveView();
+});
 
 document.addEventListener('weekly-time-budget:entries-changed', async (event) => {
   if (!state.user || event.detail?.userId && event.detail.userId !== state.user.uid) return;
-  state.entries = await state.runtime.mergedEntries(
-    Array.isArray((await state.runtime.store.getSnapshot(state.user.uid))?.entries)
-      ? (await state.runtime.store.getSnapshot(state.user.uid)).entries
-      : [],
-  );
-  if (!document.querySelector('#dashboard-view')?.classList.contains('hidden')) renderDashboard();
+  if (Array.isArray(event.detail?.entries)) state.entries = event.detail.entries;
+  else if (state.runtime) state.entries = await state.runtime.mergedEntries(state.remoteEntries);
+  if (state.activeView === 'dashboard') renderDashboard();
 });
 
 document.addEventListener('weekly-time-budget:data-changed', async () => {
   if (!state.user) return;
   try { await loadData(); } catch { /* cached data remains */ }
-  if (!document.querySelector('#dashboard-view')?.classList.contains('hidden')) renderDashboard();
-  if (!document.querySelector('#budget-view')?.classList.contains('hidden')) renderBudget();
-});
-
-const observer = new MutationObserver(schedulePatch);
-observer.observe(document.body, { childList: true, subtree: true });
-patchNavigation();
-authModule.onAuthStateChanged(auth, async (user) => {
-  state.user = user;
-  state.cacheLoaded = false;
-  if (!user) {
-    state.runtime = null;
-    state.categories = [];
-    state.archived = [];
-    state.entries = [];
-    state.weekly = [];
-    state.daily = [];
-    state.defaultDayWeights = { ...EQUAL_DAY_WEIGHTS };
-    return;
-  }
-  state.runtime = await getOfflineRuntime({ userId: user.uid, firestore: store, db });
-  await loadData();
-  schedulePatch();
+  renderActiveView();
 });

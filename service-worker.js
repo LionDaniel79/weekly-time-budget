@@ -1,6 +1,6 @@
 import { cacheModuleGraph } from './src/service-worker-cache.js';
 
-const APP_BUILD = '2026.08.04-stability-v18';
+const APP_BUILD = '2026.08.04-infrastructure-v19';
 const SHELL_CACHE = `weekly-time-budget-shell-${APP_BUILD}`;
 // Migration marker for older installed clients and legacy contract tests:
 // const SHELL_CACHE = 'weekly-time-budget-shell-v16';
