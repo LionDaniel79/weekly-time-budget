@@ -115,10 +115,24 @@ async function restoreCachedState() {
   return Boolean(snapshot);
 }
 
+function publishAuthState(overrides = {}) {
+  document.dispatchEvent(new CustomEvent('weekly-time-budget:auth-state', {
+    detail: {
+      configured,
+      user: state.user,
+      onLogin: async () => {
+        if (!firebase || !auth) throw new Error('로그인 기능을 준비하는 중입니다. 잠시 후 다시 눌러주세요.');
+        await firebase.signInWithPopup(auth, new firebase.GoogleAuthProvider());
+      },
+      onLogout: () => firebase?.signOut(auth),
+      ...overrides,
+    },
+  }));
+}
+
 async function initFirebase() {
   if (!configured) {
-    $('#config-warning').classList.remove('hidden');
-    $('#google-login').disabled = true;
+    publishAuthState({ configured: false });
     return;
   }
 
@@ -136,8 +150,7 @@ async function initFirebase() {
   authModule.onAuthStateChanged(auth, async (user) => {
     const previousUid = state.user?.uid;
     state.user = user;
-    $('#login-view').classList.toggle('hidden', Boolean(user));
-    $('#app-view').classList.toggle('hidden', !user);
+    publishAuthState({ user });
 
     if (!user) {
       if (previousUid) stopOfflineRuntime(previousUid);
@@ -148,7 +161,6 @@ async function initFirebase() {
       return;
     }
 
-    $('#user-name').textContent = user.displayName || user.email;
     try {
       state.offlineRuntime = await getOfflineRuntime({
         userId: user.uid,
@@ -366,15 +378,8 @@ document.addEventListener('weekly-time-budget:data-changed', async () => {
   if (!state.user || loadingData) return;
   try { await loadData(); renderAll(); restoreVisibleState(); } catch { await refreshMergedEntries(); }
 });
-$('#google-login').onclick = async () => {
-  if (!firebase || !auth) return alert('로그인 기능을 준비하는 중입니다. 잠시 후 다시 눌러주세요.');
-  try { await firebase.signInWithPopup(auth, new firebase.GoogleAuthProvider()); }
-  catch (error) { console.error(error); alert(`Google 로그인에 실패했습니다: ${error.message}`); }
-};
-$('#logout').onclick = () => firebase.signOut(auth);
 
 initFirebase().catch((error) => {
   console.error(error);
-  $('#config-warning').textContent = `초기화 오류: ${error.message}`;
-  $('#config-warning').classList.remove('hidden');
+  publishAuthState({ configured: false, errorMessage: `초기화 오류: ${error.message}` });
 });
