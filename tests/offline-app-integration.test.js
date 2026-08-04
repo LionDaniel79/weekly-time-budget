@@ -15,7 +15,7 @@ test('오프라인 모듈은 올바른 자바스크립트 문법이다', async (
     '../src/statistics-state.js', '../src/statistics-data-source.js',
     '../src/statistics-view.js', '../src/statistics-feature.js',
     '../src/statistics-bootstrap.js', '../src/view-change-events.js',
-    '../src/category-selection-memory.js', '../src/recorded-period-domain.js',
+    '../src/category-selection-memory.js', '../src/history-feature.js', '../src/recorded-period-domain.js',
     '../src/orphan-local-timer-cleanup.js', '../src/local-timer-removal-reload.js',
     '../src/category-bulk-editor.js', '../src/countdown-timer-domain.js',
     '../src/goal-domain.js', '../src/persistent-timer.js',
@@ -27,14 +27,20 @@ test('오프라인 모듈은 올바른 자바스크립트 문법이다', async (
 });
 
 test('app은 addDoc 대신 local-first 저장과 pending 병합을 사용한다', async () => {
-  const source = await read('src/app.js');
-  for (const token of ['getOfflineRuntime', 'saveEntryLocalFirst', 'mergedEntries', 'patchSnapshot', 'showEntrySaveResult', '동기화 대기', 'sync-retry']) {
-    assert.ok(source.includes(token), token);
+  const [appSource, historySource] = await Promise.all([
+    read('src/app.js'),
+    read('src/history-feature.js'),
+  ]);
+  for (const token of ['getOfflineRuntime', 'saveEntryLocalFirst', 'mergedEntries', 'patchSnapshot', 'showEntrySaveResult']) {
+    assert.ok(appSource.includes(token), token);
   }
-  const saveStart = source.indexOf('async function saveEntry');
-  const saveEnd = source.indexOf('async function deleteEntry', saveStart);
-  assert.doesNotMatch(source.slice(saveStart, saveEnd), /addDoc\(/);
-  assert.match(source.slice(saveStart, saveEnd), /onLocalSaved/);
+  for (const token of ['동기화 대기', 'sync-retry']) {
+    assert.ok(historySource.includes(token), token);
+  }
+  const saveStart = appSource.indexOf('async function saveEntry');
+  const saveEnd = appSource.indexOf('async function deleteEntry', saveStart);
+  assert.doesNotMatch(appSource.slice(saveStart, saveEnd), /addDoc\(/);
+  assert.match(appSource.slice(saveStart, saveEnd), /onLocalSaved/);
 });
 
 test('캐시 스냅숏을 먼저 복원하고 원격 실패 시 오프라인 안내를 유지한다', async () => {
