@@ -51,7 +51,6 @@ const state = {
   categories: [],
   entries: [],
   remoteEntries: [],
-  weeklyBudget: null,
   timer: null,
   timerInterval: null,
   activeRecordTab: 'timer',
@@ -79,14 +78,6 @@ const uiContext = () => ({
   validViews: views,
 });
 
-const effectiveBudgetMinutes = (category) => {
-  const weeklyValue = state.weeklyBudget?.budgets?.[category.id];
-  return weeklyValue === undefined ? defaultBudgetMinutes(category) : Number(weeklyValue) || 0;
-};
-const categoriesForSummary = () => state.categories.map((category) => ({
-  ...category,
-  budgetMinutes: effectiveBudgetMinutes(category),
-}));
 const categoryOptionHtml = ({ date, selectedId = '' }) => filterCategoriesActiveOnDate(state.categories, date)
   .map((category) => `<option value="${category.id}" ${category.id === selectedId ? 'selected' : ''}>${escapeHtml(categoryDisplayName(category))}</option>`)
   .join('');
@@ -102,7 +93,6 @@ function plainEntry(doc) {
 function applySnapshotToState(snapshot = {}) {
   if (Array.isArray(snapshot.categories)) state.categories = snapshot.categories;
   if (Array.isArray(snapshot.entries)) state.remoteEntries = snapshot.entries;
-  if (snapshot.weeklyBudget !== undefined) state.weeklyBudget = snapshot.weeklyBudget;
 }
 
 async function refreshMergedEntries() {
@@ -211,19 +201,16 @@ async function loadData() {
   loadingData = true;
   try {
     const root = ['users', state.user.uid];
-    const [categorySnapshot, entrySnapshot, weeklySnapshot] = await Promise.all([
+    const [categorySnapshot, entrySnapshot] = await Promise.all([
       firebase.getDocs(firebase.query(firebase.collection(db, ...root, 'categories'), firebase.orderBy('order'))),
       firebase.getDocs(firebase.query(firebase.collection(db, ...root, 'entries'), firebase.orderBy('date', 'desc'))),
-      firebase.getDoc(firebase.doc(db, ...root, 'weeklyBudgets', currentWeekKey())),
     ]);
     state.categories = categorySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
     state.remoteEntries = entrySnapshot.docs.map(plainEntry);
-    state.weeklyBudget = weeklySnapshot.exists() ? { id: weeklySnapshot.id, ...weeklySnapshot.data() } : null;
     await refreshMergedEntries();
     await state.offlineRuntime.store.patchSnapshot(state.user.uid, {
       categories: state.categories,
       entries: state.remoteEntries,
-      weeklyBudget: state.weeklyBudget,
       updatedAt: Date.now(),
     });
   } finally {
