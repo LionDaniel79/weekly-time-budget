@@ -21,6 +21,7 @@ const SHELL_URLS = [
   './src/domain.js',
   './src/manual-entry.js',
   './src/app.js',
+  './src/app-data-source.js',
   './src/view-change-events.js',
   './src/auth-login-guard.js',
   './src/category-ui-patch.js',
