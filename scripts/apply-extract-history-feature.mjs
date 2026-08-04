@@ -38,11 +38,6 @@ await update('service-worker.js', (source) => source.replace(
   "  './src/time-budget-feature.js',\n  './src/history-feature.js',",
 ));
 
-await update('.github/workflows/ci.yml', (source) => source.replace(
-  '          test -f _site/src/time-budget-feature.js',
-  '          test -f _site/src/time-budget-feature.js\n          test -f _site/src/history-feature.js',
-));
-
 await update('tests/offline-app-integration.test.js', (source) => source.replace(
   "'../src/category-selection-memory.js', '../src/recorded-period-domain.js',",
   "'../src/category-selection-memory.js', '../src/history-feature.js', '../src/recorded-period-domain.js',",
