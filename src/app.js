@@ -220,22 +220,20 @@ async function saveCategory({ id, name, defaultBudgetMinutes: budget, goalType }
     defaultBudgetMinutes: Number(budget) || 0,
     order: existing?.order || state.categories.length + 1,
   };
-  const collectionRef = firebase.collection(db, 'users', state.user.uid, 'categories');
-  if (id) {
-    await firebase.setDoc(firebase.doc(collectionRef, id), basePayload, { merge: true });
-  } else {
-    await firebase.addDoc(collectionRef, {
+  await dataSource.saveCategory(state.user.uid, {
+    id,
+    payload: id ? basePayload : {
       ...basePayload,
       goalType: normalizeGoalType(goalType),
       createdDate: toDateKey(new Date()),
-    });
-  }
+    },
+  });
   await loadData(); renderAll();
 }
 
 async function deleteCategory(id) {
   if (!confirm('이 대분류를 삭제할까요? 기존 기록은 유지됩니다.')) return;
-  await firebase.deleteDoc(firebase.doc(db, 'users', state.user.uid, 'categories', id));
+  await dataSource.deleteCategory(state.user.uid, id);
   await loadData(); renderAll();
 }
 
@@ -285,7 +283,7 @@ async function deleteEntry(id) {
   if (entry?.syncStatus === 'pending' || entry?.syncStatus === 'failed') {
     await state.offlineRuntime.store.deletePending(id);
   } else {
-    await firebase.deleteDoc(firebase.doc(db, 'users', state.user.uid, 'entries', id));
+    await dataSource.deleteEntry(state.user.uid, id);
     state.remoteEntries = state.remoteEntries.filter((item) => item.id !== id);
   }
   await refreshMergedEntries();
