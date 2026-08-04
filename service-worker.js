@@ -1,5 +1,6 @@
 import { cacheModuleGraph } from './src/service-worker-cache.js';
 
+// Refreshes the installed shell so archived-category visibility rules reach existing PWAs.
 const SHELL_CACHE = 'weekly-time-budget-shell-v16';
 const RUNTIME_CACHE = 'weekly-time-budget-firebase-v2';
 const APP_CACHE_PREFIX = 'weekly-time-budget-';

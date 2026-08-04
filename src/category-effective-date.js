@@ -14,6 +14,30 @@ export function normalizeCategoryCreatedDate(category = {}) {
   return normalizeDateKey(category.createdDate);
 }
 
+function archivedDateValue(value) {
+  if (!value) return null;
+  if (typeof value.toDate === 'function') return value.toDate();
+  if (typeof value.toMillis === 'function') return new Date(value.toMillis());
+  if (value instanceof Date) return value;
+  const seconds = Number(value.seconds ?? value._seconds);
+  if (Number.isFinite(seconds)) return new Date(seconds * 1000);
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+export function normalizeCategoryArchivedDate(category = {}) {
+  const date = archivedDateValue(category.archivedAt);
+  return date ? localDateKey(date) : null;
+}
+
+export function isArchivedCategoryVisibleInRange(category = {}, startDate, endDate) {
+  const start = normalizeDateKey(startDate);
+  const end = normalizeDateKey(endDate);
+  if (!start || !end || start > end) return false;
+  const archivedDate = normalizeCategoryArchivedDate(category);
+  return Boolean(archivedDate && end < archivedDate);
+}
+
 export function isCategoryActiveOnDate(category = {}, dateKey) {
   const date = normalizeDateKey(dateKey);
   if (!date) return false;
