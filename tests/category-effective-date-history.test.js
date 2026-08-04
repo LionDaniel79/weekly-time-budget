@@ -3,12 +3,12 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
-const history = await read('src/category-ui-patch.js');
+const history = await read('src/history-feature.js');
 const statisticsView = await read('src/statistics-view.js');
 
 test('기록 내역은 생성일 이전 비정상 기록을 필터링한다', () => {
   assert.match(history, /isEntryWithinCategoryEffectiveDate/);
-  assert.match(history, /entriesSnapshot\.docs[\s\S]*?\.filter\(/);
+  assert.match(history, /model\.entries\.filter/);
   assert.match(history, /최근 기록[\s\S]*?\$\{entries\.length\}건/);
 });
 
