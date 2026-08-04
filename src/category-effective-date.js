@@ -42,8 +42,7 @@ export function isCategoryActiveOnDate(category = {}, dateKey) {
   const date = normalizeDateKey(dateKey);
   if (!date) return false;
   const createdDate = normalizeCategoryCreatedDate(category);
-  const archivedDate = normalizeCategoryArchivedDate(category);
-  return (!createdDate || date >= createdDate) && (!archivedDate || date < archivedDate);
+  return !createdDate || date >= createdDate;
 }
 
 export function isCategoryActiveInRange(category = {}, startDate, endDate) {
@@ -51,15 +50,12 @@ export function isCategoryActiveInRange(category = {}, startDate, endDate) {
   const end = normalizeDateKey(endDate);
   if (!start || !end || start > end) return false;
   const createdDate = normalizeCategoryCreatedDate(category);
-  const archivedDate = normalizeCategoryArchivedDate(category);
-  return (!createdDate || createdDate <= end) && (!archivedDate || end < archivedDate);
+  return !createdDate || createdDate <= end;
 }
 
 export function isEntryWithinCategoryEffectiveDate(entry = {}, category = null) {
   if (!category) return true;
-  const createdDate = normalizeCategoryCreatedDate(category);
-  const date = normalizeDateKey(entry.date);
-  return Boolean(date && (!createdDate || date >= createdDate));
+  return isCategoryActiveOnDate(category, entry.date);
 }
 
 export function filterCategoriesActiveOnDate(categories = [], dateKey) {
