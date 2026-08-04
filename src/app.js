@@ -10,7 +10,6 @@ import {
 import {
   MANUAL_INPUT_MODES,
   createManualDurationEntry,
-  manualEntryTimeLabel,
 } from './manual-entry.js';
 import { getOfflineRuntime, stopOfflineRuntime } from './offline-runtime.js';
 import {
@@ -33,7 +32,6 @@ import {
 import {
   filterCategoriesActiveOnDate,
   isCategoryActiveOnDate,
-  isEntryWithinCategoryEffectiveDate,
 } from './category-effective-date.js';
 
 const configured = !Object.values(firebaseConfig).some((value) => String(value).includes('REPLACE_ME'));
@@ -260,7 +258,7 @@ async function saveEntry(entry, { onLocalSaved } = {}) {
       entry: normalizedEntry,
       onLocalSaved: async (record) => {
         await refreshMergedEntries();
-        renderHistory();
+        publishHistoryState();
         showToast({ type: 'queued', title: '✓ 기기에 안전하게 저장했습니다.', message: '서버 반영 상태를 확인하고 있습니다.' });
         document.dispatchEvent(new CustomEvent('weekly-time-budget:entries-changed', {
           detail: { userId: state.user.uid, entries: state.entries, pendingCount: await state.offlineRuntime.pendingCount() },
@@ -273,7 +271,7 @@ async function saveEntry(entry, { onLocalSaved } = {}) {
       await state.offlineRuntime.store.patchSnapshot(state.user.uid, { entries: state.remoteEntries });
     }
     await refreshMergedEntries();
-    renderHistory();
+    publishHistoryState();
     showEntrySaveResult(result);
     document.dispatchEvent(new CustomEvent('weekly-time-budget:entries-changed', {
       detail: { userId: state.user.uid, entries: state.entries, pendingCount: result.pendingCount },
@@ -313,7 +311,7 @@ async function retryEntry(id) {
 function renderAll() {
   const range = getWeekRange();
   $('#week-label').textContent = `${range.start} — ${range.end} · 월~주일`;
-  renderRecord(); renderHistory(); renderCategories();
+  renderRecord(); publishHistoryState(); renderCategories();
 }
 
 function renderRecord() {
@@ -427,12 +425,15 @@ function bindManual() {
   };
 }
 
-function renderHistory() {
-  const categoryById = new Map(state.categories.map((category) => [category.id, category]));
-  const entries = state.entries.filter((entry) => isEntryWithinCategoryEffectiveDate(entry, categoryById.get(entry.categoryId)));
-  $('#history-view').innerHTML = `<div class="card"><div class="section-title"><h2>최근 기록</h2><span class="badge">${entries.length}건</span></div>${entries.length ? entries.map((entry) => { const category = state.categories.find((item) => item.id === entry.categoryId); const timeDescription = manualEntryTimeLabel(entry, formatMinutes); const pending = entry.syncStatus === 'pending'; const failed = entry.syncStatus === 'failed'; return `<div class="entry"><strong>${entry.date}</strong><div><strong>${escapeHtml(category ? categoryDisplayName(category) : '삭제된 대분류')}</strong><div>${escapeHtml(timeDescription)}</div>${entry.note ? `<p class="muted">${escapeHtml(entry.note)}</p>` : ''}${pending ? '<span class="sync-status pending">동기화 대기</span>' : ''}${failed ? `<span class="sync-status failed">동기화 실패</span><button class="sync-retry" data-id="${entry.id}" type="button">다시 시도</button>` : ''}</div><div class="entry-actions"><button class="text-button delete-entry" data-id="${entry.id}">삭제</button></div></div>`; }).join('') : '<div class="empty-state"><h3>아직 기록이 없습니다.</h3><p>타이머 또는 수동 입력으로 첫 시간을 기록하세요.</p></div>'}</div>`;
-  document.querySelectorAll('.delete-entry').forEach((button) => { button.onclick = () => deleteEntry(button.dataset.id); });
-  document.querySelectorAll('.sync-retry').forEach((button) => { button.onclick = () => retryEntry(button.dataset.id).catch((error) => showToast({ type: 'error', title: '동기화하지 못했습니다.', message: error.message })); });
+function publishHistoryState() {
+  document.dispatchEvent(new CustomEvent('weekly-time-budget:history-state', {
+    detail: {
+      categories: state.categories,
+      entries: state.entries,
+      onDelete: deleteEntry,
+      onRetry: retryEntry,
+    },
+  }));
 }
 
 function renderCategories() {
@@ -486,7 +487,7 @@ document.addEventListener('weekly-time-budget:entries-changed', async (event) =>
   if (!state.user || event.detail?.userId && event.detail.userId !== state.user.uid) return;
   if (Array.isArray(event.detail?.entries)) state.entries = event.detail.entries;
   else await refreshMergedEntries();
-  renderHistory();
+  publishHistoryState();
 });
 document.addEventListener('weekly-time-budget:data-changed', async () => {
   if (!state.user || loadingData) return;
