@@ -6,31 +6,16 @@ on:
     branches: [main]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Apply app data mutation extraction
-        if: github.head_ref == 'agent/extract-app-data-mutations'
-        run: |
-          if [ -f scripts/apply-extract-app-data-mutations.mjs ]; then
-            node scripts/apply-extract-app-data-mutations.mjs
-            rm scripts/apply-extract-app-data-mutations.mjs
-            git checkout HEAD -- .github/workflows/ci.yml
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add -A
-            git commit -m "refactor: move app data mutations to data source"
-            git push origin HEAD:agent/extract-app-data-mutations
-          fi
       - name: Install dependencies
         run: npm install
       - name: Run Node tests
