@@ -5,13 +5,13 @@ import { readFile } from 'node:fs/promises';
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
 test('공통 절제 이름을 기록·예산·타이머·보관 화면에서 사용한다', async () => {
-  const files = await Promise.all([read('src/app.js'), read('src/time-budget-ui.js'), read('src/persistent-timer-ui.js'), read('src/category-ui-patch.js')]);
+  const files = await Promise.all([read('src/record-feature.js'), read('src/time-budget-ui.js'), read('src/persistent-timer-ui.js'), read('src/category-ui-patch.js')]);
   files.forEach((source) => assert.ok(source.includes('categoryDisplayName')));
 });
 
 test('모든 새 기록은 목표 방식 스냅샷을 저장한다', async () => {
-  const [app, timer] = await Promise.all([read('src/app.js'), read('src/persistent-timer-ui.js')]);
-  assert.match(app, /normalizedEntry[\s\S]*goalType: normalizeGoalType/);
+  const [entryService, timer] = await Promise.all([read('src/app-entry-service.js'), read('src/persistent-timer-ui.js')]);
+  assert.match(entryService, /normalizedEntry[\s\S]*goalType: normalizeGoalType/);
   assert.match(timer, /source: 'timer',[\s\S]*goalType: normalizeGoalType/);
 });
 
