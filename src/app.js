@@ -1,5 +1,6 @@
 import { firebaseConfig } from '../firebase-config.js';
 import { createAppDataSource } from './app-data-source.js';
+import { createAppSessionState } from './app-session-state.js';
 import {
   formatMinutes,
   getWeekRange,
@@ -22,8 +23,6 @@ import {
 } from './app-toast.js';
 import {
   createDefaultUiState,
-  mergeUiState,
-  normalizeUiState,
 } from './ui-session-state.js';
 import {
   calculateGoalComplianceScore,
@@ -56,6 +55,7 @@ let auth;
 let db;
 let firebase;
 let dataSource;
+let sessionState;
 let loadingData = false;
 
 const $ = (selector) => document.querySelector(selector);
@@ -74,40 +74,15 @@ const categoryOptionHtml = ({ date, selectedId = '' }) => filterCategoriesActive
   .join('');
 const optionHtml = (selectedId = '') => categoryOptionHtml({ date: toDateKey(new Date()), selectedId });
 
-function applySnapshotToState(snapshot = {}) {
-  if (Array.isArray(snapshot.categories)) state.categories = snapshot.categories;
-  if (Array.isArray(snapshot.entries)) state.remoteEntries = snapshot.entries;
-}
-
 async function refreshMergedEntries() {
   if (!state.offlineRuntime || !state.user) return;
   state.entries = await state.offlineRuntime.mergedEntries(state.remoteEntries);
 }
 
-async function persistUiState(partial) {
-  if (!state.user || !state.offlineRuntime) return;
-  state.uiState = mergeUiState(
-    state.uiState || createDefaultUiState(uiContext()),
-    partial,
-    uiContext(),
-  );
+async function saveUiState(partial) {
+  if (!sessionState) return;
+  state.uiState = await sessionState.persist(state.uiState, partial);
   window.__weeklyTimeBudgetUiState = state.uiState;
-  await state.offlineRuntime.store.putUiState(state.user.uid, state.uiState);
-}
-
-async function restoreCachedState() {
-  const [snapshot, savedUi] = await Promise.all([
-    state.offlineRuntime.store.getSnapshot(state.user.uid),
-    state.offlineRuntime.store.getUiState(state.user.uid),
-  ]);
-  if (snapshot) applySnapshotToState(snapshot);
-  await refreshMergedEntries();
-  state.uiState = normalizeUiState(savedUi || {}, uiContext());
-  state.activeView = state.uiState.activeView;
-  state.activeRecordTab = state.uiState.record.tab;
-  state.manualInputMode = state.uiState.record.manualMode;
-  window.__weeklyTimeBudgetUiState = state.uiState;
-  return Boolean(snapshot);
 }
 
 function publishAuthState(overrides = {}) {
@@ -154,6 +129,7 @@ async function initFirebase() {
       state.entries = [];
       state.remoteEntries = [];
       state.offlineRuntime = null;
+      sessionState = null;
       return;
     }
 
@@ -175,7 +151,25 @@ async function initFirebase() {
       return;
     }
 
-    const hadSnapshot = await restoreCachedState();
+    sessionState = createAppSessionState({
+      store: state.offlineRuntime.store,
+      userId: user.uid,
+      uiContext,
+      onSnapshot: (snapshot) => {
+        if (Array.isArray(snapshot?.categories)) state.categories = snapshot.categories;
+        if (Array.isArray(snapshot?.entries)) state.remoteEntries = snapshot.entries;
+      },
+      onUiState: (uiState) => {
+        state.uiState = uiState;
+        state.activeView = uiState.activeView;
+        state.activeRecordTab = uiState.record.tab;
+        state.manualInputMode = uiState.record.manualMode;
+        window.__weeklyTimeBudgetUiState = uiState;
+      },
+      refreshMergedEntries,
+    });
+
+    const hadSnapshot = await sessionState.restore();
     if (hadSnapshot) {
       renderAll();
       restoreVisibleState();
@@ -320,7 +314,7 @@ function publishRecordState() {
         state.activeRecordTab = activeRecordTab;
         state.manualInputMode = manualInputMode;
         state.manualCategoryId = manualCategoryId;
-        persistUiState({ record: { tab: activeRecordTab, manualMode: manualInputMode } }).catch(console.error);
+        saveUiState({ record: { tab: activeRecordTab, manualMode: manualInputMode } }).catch(console.error);
       },
       onTimerChange: (timer) => { state.timer = timer; },
     },
@@ -357,7 +351,7 @@ function restoreVisibleState() {
   document.dispatchEvent(new CustomEvent('weekly-time-budget:ui-state-restored', { detail: restored }));
 }
 
-document.addEventListener('weekly-time-budget:save-ui-state', (event) => { persistUiState(event.detail || {}).catch(console.error); });
+document.addEventListener('weekly-time-budget:save-ui-state', (event) => { saveUiState(event.detail || {}).catch(console.error); });
 document.addEventListener('weekly-time-budget:entries-changed', async (event) => {
   if (!state.user || event.detail?.userId && event.detail.userId !== state.user.uid) return;
   if (Array.isArray(event.detail?.entries)) state.entries = event.detail.entries;
