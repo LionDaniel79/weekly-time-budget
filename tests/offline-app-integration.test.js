@@ -106,6 +106,6 @@ test('완전 삭제는 서버 기록과 동기화 대기 기록을 함께 경고
     read('src/category-delete-guard.js'), read('src/orphan-local-timer-cleanup.js'), read('src/local-timer-removal-reload.js'),
   ]);
   for (const token of ['countPendingByCategory', 'deletePendingByCategory', '동기화 대기 기록', 'cleanupOfflineCategory']) assert.ok(deleteSource.includes(token), token);
-  assert.match(cleanupSource, /deletePendingByCategory/);
-  assert.match(reloadSource, /weekly-time-budget:data-changed/);
+  assert.ok(cleanupSource.includes('weekly-time-budget:local-timer-removed'));
+  assert.ok(reloadSource.includes('location.reload()'));
 });
