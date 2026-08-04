@@ -16,12 +16,14 @@ test('절제 체크박스는 대분류 추가 폼에만 제공한다', async () 
 });
 
 test('새 대분류만 정규화된 goalType을 저장한다', async () => {
-  const [app, feature] = await Promise.all([
+  const [app, feature, dataSource] = await Promise.all([
     read('src/app.js'),
     read('src/category-feature.js'),
+    read('src/app-data-source.js'),
   ]);
   assert.match(app, /async function saveCategory\(\{ id, name, defaultBudgetMinutes: budget, goalType \}\)/);
-  assert.match(app, /if \(id\)[\s\S]*setDoc\([^;]+basePayload[\s\S]*else[\s\S]*addDoc\([^;]+goalType: normalizeGoalType\(goalType\)/);
+  assert.match(app, /payload: id \? basePayload : \{[\s\S]*goalType: normalizeGoalType\(goalType\)[\s\S]*createdDate: toDateKey\(new Date\(\)\)/);
+  assert.match(dataSource, /async saveCategory\(userId, \{ id, payload \}\)[\s\S]*if \(id\)[\s\S]*setDoc[\s\S]*addDoc/);
   assert.match(feature, /data\.get\('restraint'\) === 'on' \? 'restraint' : 'growth'/);
 });
 
