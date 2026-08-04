@@ -6,31 +6,16 @@ on:
     branches: [main]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Apply app weekly budget ownership migration
-        if: github.head_ref == 'agent/remove-app-weekly-budget-state-final3'
-        run: |
-          if [ -f scripts/apply-remove-app-weekly-budget.mjs ]; then
-            node scripts/apply-remove-app-weekly-budget.mjs
-            rm scripts/apply-remove-app-weekly-budget.mjs
-            git checkout HEAD -- .github/workflows/ci.yml
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add -A
-            git commit -m "refactor: remove weekly budget state from app"
-            git push origin HEAD:agent/remove-app-weekly-budget-state-final3
-          fi
       - name: Install dependencies
         run: npm install
       - name: Run Node tests
