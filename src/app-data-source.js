@@ -1,3 +1,5 @@
+import { normalizeGoalType } from './goal-domain.js';
+
 function plainEntry(doc) {
   const data = doc.data();
   const createdAt = data.createdAt?.toMillis?.()
@@ -57,7 +59,11 @@ export function createAppDataSource({ firebase, db }) {
       const data = snapshot.data();
       const { archivedAt, ...activeData } = data;
       const batch = firebase.writeBatch(db);
-      batch.set(userDocument(userId, 'categories', categoryId), activeData, { merge: true });
+      batch.set(userDocument(userId, 'categories', categoryId), {
+        ...activeData,
+        goalType: normalizeGoalType(data.goalType),
+        ...(data.createdDate !== undefined ? { createdDate: data.createdDate } : {}),
+      }, { merge: true });
       batch.delete(archivedRef);
       await batch.commit();
     },
