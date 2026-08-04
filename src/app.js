@@ -73,6 +73,20 @@ function publishAuthState(overrides = {}) {
   }));
 }
 
+function publishInfrastructureState() {
+  document.dispatchEvent(new CustomEvent('weekly-time-budget:infrastructure-state', {
+    detail: {
+      user: state.user,
+      categories: state.categories,
+      archivedCategories: state.archivedCategories,
+      entries: state.entries,
+      remoteEntries: state.remoteEntries,
+      offlineRuntime: state.offlineRuntime,
+      dataSource,
+    },
+  }));
+}
+
 async function performLoadData() {
   const { categories, archivedCategories, entries } = await dataSource.loadUserData(state.user.uid);
   state.categories = categories;
@@ -236,6 +250,7 @@ async function onUserChanged({ user, db, storeModule, dataSource: nextDataSource
     entryService = null;
     loadingPromise = null;
     reloadRequested = false;
+    publishInfrastructureState();
     return;
   }
   await handleSignedInUser({ user, db, storeModule });
@@ -244,6 +259,7 @@ async function onUserChanged({ user, db, storeModule, dataSource: nextDataSource
 function renderAll() {
   const range = getWeekRange();
   $('#week-label').textContent = `${range.start} — ${range.end} · 월~주일`;
+  publishInfrastructureState();
   publishRecordState();
   publishHistoryState();
   publishCategoryState();
@@ -306,12 +322,13 @@ document.addEventListener('weekly-time-budget:entries-changed', async (event) =>
   if (!state.user || event.detail?.userId && event.detail.userId !== state.user.uid) return;
   if (Array.isArray(event.detail?.entries)) state.entries = event.detail.entries;
   else await refreshMergedEntries();
+  publishInfrastructureState();
   publishHistoryState();
 });
 document.addEventListener('weekly-time-budget:data-changed', async () => {
   if (!state.user) return;
   try { await loadData(); renderAll(); restoreVisibleState(); }
-  catch { await refreshMergedEntries(); }
+  catch { await refreshMergedEntries(); publishInfrastructureState(); }
 });
 
 bootstrap = createAppBootstrap({ publishAuthState, onUserChanged });
