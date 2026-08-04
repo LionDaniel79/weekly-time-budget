@@ -1,4 +1,5 @@
 import { firebaseConfig } from '../firebase-config.js';
+import { createAppDataSource } from './app-data-source.js';
 import {
   formatMinutes,
   getWeekRange,
@@ -54,6 +55,7 @@ const state = {
 let auth;
 let db;
 let firebase;
+let dataSource;
 let loadingData = false;
 
 const $ = (selector) => document.querySelector(selector);
@@ -71,13 +73,6 @@ const categoryOptionHtml = ({ date, selectedId = '' }) => filterCategoriesActive
   .map((category) => `<option value="${category.id}" ${category.id === selectedId ? 'selected' : ''}>${escapeHtml(categoryDisplayName(category))}</option>`)
   .join('');
 const optionHtml = (selectedId = '') => categoryOptionHtml({ date: toDateKey(new Date()), selectedId });
-
-function plainEntry(doc) {
-  const data = doc.data();
-  const createdAt = data.createdAt?.toMillis?.()
-    ?? (Number(data.localCreatedAt || 0) || Date.now());
-  return { id: doc.id, ...data, createdAt };
-}
 
 function applySnapshotToState(snapshot = {}) {
   if (Array.isArray(snapshot.categories)) state.categories = snapshot.categories;
@@ -143,6 +138,7 @@ async function initFirebase() {
   auth = authModule.getAuth(app);
   db = storeModule.getFirestore(app);
   firebase = { ...authModule, ...storeModule };
+  dataSource = createAppDataSource({ firebase, db });
   await authModule.setPersistence(auth, authModule.browserLocalPersistence).catch((error) => {
     console.warn('로그인 상태 영속화 설정 실패', error);
   });
@@ -201,13 +197,9 @@ async function loadData() {
   if (!state.user || loadingData) return;
   loadingData = true;
   try {
-    const root = ['users', state.user.uid];
-    const [categorySnapshot, entrySnapshot] = await Promise.all([
-      firebase.getDocs(firebase.query(firebase.collection(db, ...root, 'categories'), firebase.orderBy('order'))),
-      firebase.getDocs(firebase.query(firebase.collection(db, ...root, 'entries'), firebase.orderBy('date', 'desc'))),
-    ]);
-    state.categories = categorySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-    state.remoteEntries = entrySnapshot.docs.map(plainEntry);
+    const { categories, entries } = await dataSource.loadUserData(state.user.uid);
+    state.categories = categories;
+    state.remoteEntries = entries;
     await refreshMergedEntries();
     await state.offlineRuntime.store.patchSnapshot(state.user.uid, {
       categories: state.categories,
