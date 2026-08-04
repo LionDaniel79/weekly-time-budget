@@ -11,7 +11,7 @@ test('오프라인 모듈은 올바른 자바스크립트 문법이다', async (
     '../src/offline-entry-domain.js', '../src/offline-store.js',
     '../src/offline-entry-repository.js', '../src/offline-sync.js',
     '../src/offline-runtime.js', '../src/app-toast.js', '../src/ui-session-state.js',
-    '../src/service-worker-cache.js', '../src/service-worker-registration.js',
+    '../src/app-session-state.js', '../src/service-worker-cache.js', '../src/service-worker-registration.js',
     '../src/statistics-state.js', '../src/statistics-data-source.js',
     '../src/statistics-view.js', '../src/statistics-feature.js',
     '../src/statistics-bootstrap.js', '../src/view-change-events.js',
@@ -44,9 +44,14 @@ test('app은 addDoc 대신 local-first 저장과 pending 병합을 사용한다'
 });
 
 test('캐시 스냅숏을 먼저 복원하고 원격 실패 시 오프라인 안내를 유지한다', async () => {
-  const [appSource, toastSource] = await Promise.all([read('src/app.js'), read('src/app-toast.js')]);
-  for (const token of ['restoreCachedState', 'getSnapshot', 'applySnapshotToState', '온라인에서 한 번 실행한 뒤']) {
+  const [appSource, sessionSource, toastSource] = await Promise.all([
+    read('src/app.js'), read('src/app-session-state.js'), read('src/app-toast.js'),
+  ]);
+  for (const token of ['createAppSessionState', 'sessionState.restore', '온라인에서 한 번 실행한 뒤']) {
     assert.ok(appSource.includes(token), token);
+  }
+  for (const token of ['getSnapshot', 'onSnapshot', 'refreshMergedEntries']) {
+    assert.ok(sessionSource.includes(token), token);
   }
   assert.ok(toastSource.includes('오프라인 상태입니다.'));
 });
@@ -59,12 +64,15 @@ test('저장 결과 토스트는 서버·기기·동기화 완료 상태와 iOS 
 });
 
 test('앱은 마지막 메뉴와 통계 내부 상태를 사용자별로 저장하고 직접 복원한다', async () => {
-  const [appSource, budgetSource, statisticsFeature, statisticsBootstrap] = await Promise.all([
-    read('src/app.js'), read('src/time-budget-feature.js'),
+  const [appSource, sessionSource, budgetSource, statisticsFeature, statisticsBootstrap] = await Promise.all([
+    read('src/app.js'), read('src/app-session-state.js'), read('src/time-budget-feature.js'),
     read('src/statistics-feature.js'), read('src/statistics-bootstrap.js'),
   ]);
-  for (const token of ['getUiState', 'putUiState', 'weekly-time-budget:ui-state-restored', 'weekly-time-budget:save-ui-state', 'activeView', 'manualMode']) {
+  for (const token of ['weekly-time-budget:ui-state-restored', 'weekly-time-budget:save-ui-state', 'activeView', 'manualMode']) {
     assert.ok(appSource.includes(token), token);
+  }
+  for (const token of ['getUiState', 'putUiState', 'normalizeUiState', 'mergeUiState']) {
+    assert.ok(sessionSource.includes(token), token);
   }
   for (const token of ['dashboard', 'budget', 'selectedDate', 'selectedWeekStart']) assert.ok(budgetSource.includes(token), token);
   for (const token of ['weekStart', 'year', 'month', 'saveUiState', 'restore(saved']) assert.ok(statisticsFeature.includes(token), token);
@@ -98,6 +106,6 @@ test('완전 삭제는 서버 기록과 동기화 대기 기록을 함께 경고
     read('src/category-delete-guard.js'), read('src/orphan-local-timer-cleanup.js'), read('src/local-timer-removal-reload.js'),
   ]);
   for (const token of ['countPendingByCategory', 'deletePendingByCategory', '동기화 대기 기록', 'cleanupOfflineCategory']) assert.ok(deleteSource.includes(token), token);
-  assert.ok(cleanupSource.includes('weekly-time-budget:local-timer-removed'));
-  assert.ok(reloadSource.includes('location.reload()'));
+  assert.match(cleanupSource, /deletePendingByCategory/);
+  assert.match(reloadSource, /weekly-time-budget:data-changed/);
 });
