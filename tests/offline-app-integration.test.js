@@ -11,7 +11,8 @@ test('오프라인 모듈은 올바른 자바스크립트 문법이다', async (
     '../src/offline-entry-domain.js', '../src/offline-store.js',
     '../src/offline-entry-repository.js', '../src/offline-sync.js',
     '../src/offline-runtime.js', '../src/app-toast.js', '../src/ui-session-state.js',
-    '../src/app-session-state.js', '../src/service-worker-cache.js', '../src/service-worker-registration.js',
+    '../src/app-bootstrap.js', '../src/app-entry-service.js', '../src/app-session-state.js',
+    '../src/service-worker-cache.js', '../src/service-worker-registration.js',
     '../src/statistics-state.js', '../src/statistics-data-source.js',
     '../src/statistics-view.js', '../src/statistics-feature.js',
     '../src/statistics-bootstrap.js', '../src/view-change-events.js',
@@ -26,41 +27,28 @@ test('오프라인 모듈은 올바른 자바스크립트 문법이다', async (
   }
 });
 
-test('app은 addDoc 대신 local-first 저장과 pending 병합을 사용한다', async () => {
-  const [appSource, historySource] = await Promise.all([
-    read('src/app.js'),
-    read('src/history-feature.js'),
+test('앱은 addDoc 대신 entry service의 local-first 저장과 pending 병합을 사용한다', async () => {
+  const [appSource, entrySource, historySource] = await Promise.all([
+    read('src/app.js'), read('src/app-entry-service.js'), read('src/history-feature.js'),
   ]);
-  for (const token of ['getOfflineRuntime', 'saveEntryLocalFirst', 'mergedEntries', 'patchSnapshot', 'showEntrySaveResult']) {
-    assert.ok(appSource.includes(token), token);
-  }
-  for (const token of ['동기화 대기', 'sync-retry']) {
-    assert.ok(historySource.includes(token), token);
-  }
-  const saveStart = appSource.indexOf('async function saveEntry');
-  const saveEnd = appSource.indexOf('async function deleteEntry', saveStart);
-  assert.doesNotMatch(appSource.slice(saveStart, saveEnd), /addDoc\(/);
-  assert.match(appSource.slice(saveStart, saveEnd), /onLocalSaved/);
+  for (const token of ['createAppEntryService', 'mergedEntries', 'patchSnapshot']) assert.ok(appSource.includes(token), token);
+  for (const token of ['saveEntryLocalFirst', 'onLocalSaved', 'showEntrySaveResult']) assert.ok(entrySource.includes(token), token);
+  for (const token of ['동기화 대기', 'sync-retry']) assert.ok(historySource.includes(token), token);
+  assert.doesNotMatch(entrySource, /addDoc\(/);
 });
 
 test('캐시 스냅숏을 먼저 복원하고 원격 실패 시 오프라인 안내를 유지한다', async () => {
   const [appSource, sessionSource, toastSource] = await Promise.all([
     read('src/app.js'), read('src/app-session-state.js'), read('src/app-toast.js'),
   ]);
-  for (const token of ['createAppSessionState', 'sessionState.restore', '온라인에서 한 번 실행한 뒤']) {
-    assert.ok(appSource.includes(token), token);
-  }
-  for (const token of ['getSnapshot', 'onSnapshot', 'refreshMergedEntries']) {
-    assert.ok(sessionSource.includes(token), token);
-  }
+  for (const token of ['createAppSessionState', 'sessionState.restore', '온라인에서 한 번 실행한 뒤']) assert.ok(appSource.includes(token), token);
+  for (const token of ['getSnapshot', 'onSnapshot', 'refreshMergedEntries']) assert.ok(sessionSource.includes(token), token);
   assert.ok(toastSource.includes('오프라인 상태입니다.'));
 });
 
 test('저장 결과 토스트는 서버·기기·동기화 완료 상태와 iOS safe area를 제공한다', async () => {
   const source = await read('src/app-toast.js');
-  for (const token of ['기록을 서버에 저장했습니다', '기기에 안전하게 저장했습니다', '인터넷 연결 시 자동으로 반영됩니다', '대기 중이던 기록', 'env(safe-area-inset-bottom)', '.sync-status.pending', '.sync-status.failed']) {
-    assert.ok(source.includes(token), token);
-  }
+  for (const token of ['기록을 서버에 저장했습니다', '기기에 안전하게 저장했습니다', '인터넷 연결 시 자동으로 반영됩니다', '대기 중이던 기록', 'env(safe-area-inset-bottom)', '.sync-status.pending', '.sync-status.failed']) assert.ok(source.includes(token), token);
 });
 
 test('앱은 마지막 메뉴와 통계 내부 상태를 사용자별로 저장하고 직접 복원한다', async () => {
@@ -68,12 +56,8 @@ test('앱은 마지막 메뉴와 통계 내부 상태를 사용자별로 저장�
     read('src/app.js'), read('src/app-session-state.js'), read('src/time-budget-feature.js'),
     read('src/statistics-feature.js'), read('src/statistics-bootstrap.js'),
   ]);
-  for (const token of ['weekly-time-budget:ui-state-restored', 'weekly-time-budget:save-ui-state', 'activeView', 'manualMode']) {
-    assert.ok(appSource.includes(token), token);
-  }
-  for (const token of ['getUiState', 'putUiState', 'normalizeUiState', 'mergeUiState']) {
-    assert.ok(sessionSource.includes(token), token);
-  }
+  for (const token of ['weekly-time-budget:ui-state-restored', 'weekly-time-budget:save-ui-state', 'activeView', 'manualMode']) assert.ok(appSource.includes(token), token);
+  for (const token of ['getUiState', 'putUiState', 'normalizeUiState', 'mergeUiState']) assert.ok(sessionSource.includes(token), token);
   for (const token of ['dashboard', 'budget', 'selectedDate', 'selectedWeekStart']) assert.ok(budgetSource.includes(token), token);
   for (const token of ['weekStart', 'year', 'month', 'saveUiState', 'restore(saved']) assert.ok(statisticsFeature.includes(token), token);
   assert.match(statisticsBootstrap, /weekly-time-budget:ui-state-restored[\s\S]*feature\.restore/);
@@ -91,13 +75,9 @@ test('사용자 전환 시 화면 모듈은 이전 사용자의 캐시 데이터
 
 test('서비스 워커는 앱 셸과 Firebase 런타임 캐시를 분리한다', async () => {
   const [html, serviceWorker] = await Promise.all([read('index.html'), read('service-worker.js')]);
-  for (const token of ['./src/service-worker-registration.js', './src/statistics-primary.css', './src/statistics-bootstrap.js', './src/view-change-events.js']) {
-    assert.ok(html.includes(token), token);
-  }
+  for (const token of ['./src/service-worker-registration.js', './src/statistics-primary.css', './src/statistics-bootstrap.js', './src/view-change-events.js']) assert.ok(html.includes(token), token);
   assert.doesNotMatch(html, /statistics-offline-rescue|statistics-ui|statistics-session-state|statistics-mobile-overflow/);
-  for (const token of ['weekly-time-budget-shell-v16', 'weekly-time-budget-firebase-v2', 'firebaseCacheFirst', 'shellCacheFirst', 'firestore.googleapis.com', "request.mode === 'navigate'", './src/statistics-feature.js', './src/statistics-bootstrap.js']) {
-    assert.ok(serviceWorker.includes(token), token);
-  }
+  for (const token of ['weekly-time-budget-shell-v16', 'weekly-time-budget-firebase-v2', 'firebaseCacheFirst', 'shellCacheFirst', 'firestore.googleapis.com', "request.mode === 'navigate'", './src/statistics-feature.js', './src/statistics-bootstrap.js']) assert.ok(serviceWorker.includes(token), token);
   assert.doesNotMatch(serviceWorker, /caches\.match\(/);
 });
 
