@@ -50,7 +50,9 @@ jobs:
           test -f _site/src/category-feature.js
           test -f _site/src/app-shell.js
           test -f _site/src/auth-feature.js
+          test -f _site/src/app-bootstrap.js
           test -f _site/src/app-data-source.js
+          test -f _site/src/app-entry-service.js
           test -f _site/src/app-session-state.js
           test -f _site/src/persistent-timer.js
           test -f _site/src/persistent-timer-ui.js
