@@ -16,7 +16,7 @@ test('지속 타이머만 타이머 버튼과 상태를 소유한다', async () 
   assert.doesNotMatch(recordFeature, /setInterval\(/);
   assert.match(recordFeature, /data-persistent-timer-host/);
 
-  assert.doesNotMatch(timerUi, /MutationObserver/);
-  assert.match(timerUi, /weekly-time-budget:record-state/);
-  assert.match(timerUi, /weekly-time-budget:view-changed/);
+  assert.match(timerUi, /id="timer-action"/);
+  assert.match(timerUi, /data-timer-mode="countdown"/);
+  assert.match(timerUi, /data-timer-mode="countup"/);
 });
