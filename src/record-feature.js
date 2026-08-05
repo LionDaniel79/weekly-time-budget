@@ -13,19 +13,9 @@ let model = {
   activeRecordTab: 'timer',
   manualInputMode: MANUAL_INPUT_MODES.TIME_RANGE,
   manualCategoryId: '',
-  timer: null,
-  timerInterval: null,
   onSaveEntry: null,
   onUiChange: null,
-  onTimerChange: null,
 };
-
-function formatClock(seconds) {
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = seconds % 60;
-  return [h, m, s].map((value) => String(value).padStart(2, '0')).join(':');
-}
 
 function categoryOptionHtml({ date, selectedId = '' }) {
   return filterCategoriesActiveOnDate(model.categories, date)
@@ -33,10 +23,8 @@ function categoryOptionHtml({ date, selectedId = '' }) {
     .join('');
 }
 
-function timerForm() {
-  const elapsed = model.timer ? Math.floor((Date.now() - model.timer.startedAt) / 1000) : 0;
-  const selectedCategoryId = model.timer?.categoryId || '';
-  return `<div class="form-grid"><label>대분류<select id="timer-category" ${model.timer ? 'disabled' : ''}><option value="">선택하세요</option>${categoryOptionHtml({ date: toDateKey(new Date()), selectedId: selectedCategoryId })}</select></label><label>메모(선택)<textarea id="timer-note" rows="2" ${model.timer ? 'disabled' : ''}>${escapeHtml(model.timer?.note || '')}</textarea></label></div><div id="timer-display" class="timer">${formatClock(elapsed)}</div><div class="actions"><button id="timer-action" class="primary-button">${model.timer ? '종료하고 저장' : '타이머 시작'}</button>${model.timer ? '<button id="timer-cancel" class="secondary-button">취소</button>' : ''}</div>`;
+function timerHost() {
+  return '<div data-persistent-timer-host aria-live="polite"></div>';
 }
 
 function manualForm() {
@@ -56,11 +44,6 @@ function updateUi(patch) {
   });
 }
 
-function setTimer(timer) {
-  model.timer = timer;
-  model.onTimerChange?.(timer);
-}
-
 function refreshManualCategoryOptions() {
   const select = $('#manual-category');
   const date = $('#manual-date')?.value;
@@ -71,54 +54,6 @@ function refreshManualCategoryOptions() {
     select.value = '';
     updateUi({ manualCategoryId: '' });
   }
-}
-
-function bindTimer() {
-  const action = $('#timer-action');
-  if (!action) return;
-  action.onclick = async () => {
-    if (!model.timer) {
-      const categoryId = $('#timer-category').value;
-      if (!categoryId) return alert('대분류를 선택하세요.');
-      const startedDate = toDateKey(new Date());
-      const category = model.categories.find((item) => item.id === categoryId);
-      if (!category || !isCategoryActiveOnDate(category, startedDate)) {
-        return alert('이 대분류는 추가일부터 타이머를 시작할 수 있습니다.');
-      }
-      setTimer({ categoryId, note: $('#timer-note').value.trim(), startedAt: Date.now() });
-      renderRecord();
-      clearInterval(model.timerInterval);
-      model.timerInterval = setInterval(() => {
-        const display = $('#timer-display');
-        if (display && model.timer) display.textContent = formatClock(Math.floor((Date.now() - model.timer.startedAt) / 1000));
-      }, 1000);
-      return;
-    }
-
-    const timer = model.timer;
-    const endedAt = Date.now();
-    await model.onSaveEntry?.({
-      categoryId: timer.categoryId,
-      note: timer.note,
-      date: toDateKey(new Date(timer.startedAt)),
-      durationMinutes: Math.max(1, Math.round((endedAt - timer.startedAt) / 60000)),
-      startTime: new Date(timer.startedAt).toTimeString().slice(0, 5),
-      endTime: new Date(endedAt).toTimeString().slice(0, 5),
-      source: 'timer',
-    });
-    clearInterval(model.timerInterval);
-    model.timerInterval = null;
-    setTimer(null);
-    renderRecord();
-  };
-
-  const cancel = $('#timer-cancel');
-  if (cancel) cancel.onclick = () => {
-    clearInterval(model.timerInterval);
-    model.timerInterval = null;
-    setTimer(null);
-    renderRecord();
-  };
 }
 
 function bindManual() {
@@ -182,15 +117,14 @@ function bindManual() {
 function renderRecord() {
   const root = $('#record-view');
   if (!root) return;
-  root.innerHTML = `<div class="tabs"><button class="tab-button ${model.activeRecordTab === 'timer' ? 'active' : ''}" data-record-tab="timer">타이머</button><button class="tab-button ${model.activeRecordTab === 'manual' ? 'active' : ''}" data-record-tab="manual">수동 입력</button></div><div class="card">${model.activeRecordTab === 'timer' ? timerForm() : manualForm()}</div>`;
+  root.innerHTML = `<div class="tabs"><button class="tab-button ${model.activeRecordTab === 'timer' ? 'active' : ''}" data-record-tab="timer">타이머</button><button class="tab-button ${model.activeRecordTab === 'manual' ? 'active' : ''}" data-record-tab="manual">수동 입력</button></div><div class="card">${model.activeRecordTab === 'timer' ? timerHost() : manualForm()}</div>`;
   root.querySelectorAll('[data-record-tab]').forEach((button) => {
     button.onclick = () => {
       updateUi({ activeRecordTab: button.dataset.recordTab });
       renderRecord();
     };
   });
-  if (model.activeRecordTab === 'timer') bindTimer();
-  else bindManual();
+  if (model.activeRecordTab === 'manual') bindManual();
 }
 
 document.addEventListener('weekly-time-budget:record-state', (event) => {
@@ -200,10 +134,8 @@ document.addEventListener('weekly-time-budget:record-state', (event) => {
     activeRecordTab: event.detail?.activeRecordTab || 'timer',
     manualInputMode: event.detail?.manualInputMode || MANUAL_INPUT_MODES.TIME_RANGE,
     manualCategoryId: event.detail?.manualCategoryId || '',
-    timer: event.detail?.timer || null,
     onSaveEntry: event.detail?.onSaveEntry,
     onUiChange: event.detail?.onUiChange,
-    onTimerChange: event.detail?.onTimerChange,
   };
   renderRecord();
 });
