@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ko" data-app-build="2026.08.06-equal-budget-v20">
+<html lang="ko" data-app-build="2026.08.06-equal-budget-v21">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -25,10 +25,7 @@
 
   <div id="app-view" class="app-shell hidden">
     <aside class="sidebar" id="app-navigation">
-      <div>
-        <p class="eyebrow">TIME BUDGET</p>
-        <h2>나의 시간 연구</h2>
-      </div>
+      <div><p class="eyebrow">TIME BUDGET</p><h2>나의 시간 연구</h2></div>
       <nav>
         <button data-view="dashboard" class="nav-button active">대시보드</button>
         <button data-view="record" class="nav-button">시간 기록</button>
@@ -37,53 +34,14 @@
         <button data-view="statistics" class="nav-button">통계</button>
         <button data-view="categories" class="nav-button">대분류 관리</button>
       </nav>
-      <div class="profile-box">
-        <span id="user-name">사용자</span>
-        <button id="logout" class="text-button">로그아웃</button>
-      </div>
+      <div class="profile-box"><span id="user-name">사용자</span><button id="logout" class="text-button">로그아웃</button></div>
     </aside>
-
     <main class="main-content">
-      <header class="topbar">
-        <div>
-          <p id="week-label" class="eyebrow"></p>
-          <h1 id="page-title">대시보드</h1>
-        </div>
-        <button id="mobile-menu" class="mobile-menu" aria-expanded="false" aria-controls="app-navigation">메뉴</button>
-      </header>
-
-      <section id="dashboard-view" class="view"></section>
-      <section id="record-view" class="view hidden"></section>
-      <section id="budget-view" class="view hidden"></section>
-      <section id="history-view" class="view hidden"></section>
-      <section id="statistics-view" class="view hidden"></section>
-      <section id="categories-view" class="view hidden"></section>
+      <header class="topbar"><div><p id="week-label" class="eyebrow"></p><h1 id="page-title">대시보드</h1></div><button id="mobile-menu" class="mobile-menu" aria-expanded="false" aria-controls="app-navigation">메뉴</button></header>
+      <section id="dashboard-view" class="view"></section><section id="record-view" class="view hidden"></section><section id="budget-view" class="view hidden"></section><section id="history-view" class="view hidden"></section><section id="statistics-view" class="view hidden"></section><section id="categories-view" class="view hidden"></section>
     </main>
   </div>
-
-  <template id="empty-template">
-    <div class="empty-state">
-      <h3>아직 등록된 대분류가 없습니다.</h3>
-      <p>대분류 관리에서 논문, 설교, 기도, 운동처럼 시간을 관리할 영역을 등록하세요.</p>
-    </div>
-  </template>
-
-  <script type="module" src="./src/service-worker-registration.js"></script>
-  <script type="module" src="./src/local-timer-removal-reload.js"></script>
-  <script type="module" src="./src/category-delete-guard.js"></script>
-  <script type="module" src="./src/orphan-local-timer-cleanup.js"></script>
-  <script type="module" src="./src/record-feature.js"></script>
-  <script type="module" src="./src/history-feature.js"></script>
-  <script type="module" src="./src/category-feature.js"></script>
-  <script type="module" src="./src/app-shell.js"></script>
-  <script type="module" src="./src/auth-feature.js"></script>
-  <script type="module" src="./src/app.js"></script>
-  <script type="module" src="./src/view-change-events.js"></script>
-  <script type="module" src="./src/auth-login-guard.js"></script>
-  <script type="module" src="./src/statistics-bootstrap.js"></script>
-  <script type="module" src="./src/category-selection-memory.js"></script>
-  <script type="module" src="./src/category-bulk-editor.js"></script>
-  <script type="module" src="./src/time-budget-feature.js"></script>
-  <script type="module" src="./src/persistent-timer-ui.js"></script>
+  <template id="empty-template"><div class="empty-state"><h3>아직 등록된 대분류가 없습니다.</h3><p>대분류 관리에서 논문, 설교, 기도, 운동처럼 시간을 관리할 영역을 등록하세요.</p></div></template>
+  <script type="module" src="./src/service-worker-registration.js"></script><script type="module" src="./src/local-timer-removal-reload.js"></script><script type="module" src="./src/category-delete-guard.js"></script><script type="module" src="./src/orphan-local-timer-cleanup.js"></script><script type="module" src="./src/record-feature.js"></script><script type="module" src="./src/history-feature.js"></script><script type="module" src="./src/category-feature.js"></script><script type="module" src="./src/app-shell.js"></script><script type="module" src="./src/auth-feature.js"></script><script type="module" src="./src/app.js"></script><script type="module" src="./src/view-change-events.js"></script><script type="module" src="./src/auth-login-guard.js"></script><script type="module" src="./src/statistics-bootstrap.js"></script><script type="module" src="./src/category-selection-memory.js"></script><script type="module" src="./src/category-bulk-editor.js"></script><script type="module" src="./src/time-budget-feature.js"></script><script type="module" src="./src/persistent-timer-ui.js"></script>
 </body>
 </html>
