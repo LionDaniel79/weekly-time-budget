@@ -25,11 +25,12 @@ test('시간 예산은 오늘/이번 주 탭과 저장 문구를 제공한다', 
   assert.doesNotMatch(html, /이번 주 예산과 비율 저장/);
 });
 
-test('이번 주 화면은 7개 공통 비율과 환산값을 표시한다', () => {
+test('이번 주 화면은 대분류별 주간 예산만 표시한다', () => {
   const html = renderTimeBudgetHtml({ ...model, mode: 'week' });
-  for (const key of ['mon','tue','wed','thu','fri','sat','sun']) assert.match(html, new RegExp(`name="day-weight-${key}"`));
-  assert.match(html, /요일별 공통 배분 비율/);
-  assert.match(html, /환산:/);
+  assert.match(html, /이번 주 전체 예산/);
+  assert.match(html, /name="reading"/);
+  assert.doesNotMatch(html, /day-weight-/);
+  assert.doesNotMatch(html, /요일별 공통 배분 비율|환산:/);
 });
 
 test('대시보드 기본은 일간 오늘이다', () => {
