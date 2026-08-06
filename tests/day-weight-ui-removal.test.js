@@ -10,20 +10,11 @@ test('시간 예산 화면은 요일별 공통 배분 비율 편집 UI를 제공
   assert.doesNotMatch(ui, /day-weight-section|day-weight-grid|day-weight-preview/);
   assert.doesNotMatch(ui, /name=\"day-weight-/);
   assert.doesNotMatch(ui, /updateWeightPreview/);
+  assert.doesNotMatch(ui, /DAY_KEYS|DAY_LABELS|normalizeDayWeights|effectiveDayWeights/);
 });
 
-test('주간 예산 저장은 기존 요일 배분값을 보존하고 설정 문서를 다시 쓰지 않는다', async () => {
-  const [feature, dataSource] = await Promise.all([
-    read('src/time-budget-feature.js'),
-    read('src/app-data-source.js'),
-  ]);
-  assert.match(feature, /buildWeeklyBudgetSnapshot\([\s\S]*dayWeightInputs:\s*existing\.dayWeights/);
-  assert.doesNotMatch(feature, /async function saveWeekly\(\{ budgetInputs, dayWeightInputs \}\)/);
-  assert.match(feature, /이번 주 시간 예산을 저장했습니다/);
-
-  const start = dataSource.indexOf('async saveWeeklyBudget');
-  const end = dataSource.indexOf('async saveCategory', start);
-  const saveWeeklySource = dataSource.slice(start, end);
-  assert.doesNotMatch(saveWeeklySource, /settings/);
-  assert.doesNotMatch(saveWeeklySource, /defaultDayWeights/);
+test('주간 예산 저장 이벤트는 대분류별 예산만 전달한다', async () => {
+  const ui = await read('src/time-budget-ui.js');
+  assert.match(ui, /onSaveWeekly\(\{ budgetInputs \}\)/);
+  assert.doesNotMatch(ui, /dayWeightInputs/);
 });

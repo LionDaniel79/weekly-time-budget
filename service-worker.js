@@ -1,6 +1,6 @@
 import { cacheModuleGraph } from './src/service-worker-cache.js';
 
-// Refresh installed clients with the single-owner timer UI fix.
+// Refresh installed clients after removing the weekday allocation editor.
 const APP_BUILD = '2026.08.04-infrastructure-v19';
 const SHELL_CACHE = `weekly-time-budget-shell-${APP_BUILD}`;
 // Migration marker for older installed clients and legacy contract tests:

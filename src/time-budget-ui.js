@@ -1,17 +1,10 @@
 import {
-  DAY_KEYS,
   calendarMonthCells,
-  effectiveDayWeights,
   explicitBudgetIdSet,
-  normalizeDayWeights,
   resolveDailyBudget,
   resolveWeeklyBudgetMinutes,
 } from './time-budget-domain.js';
 import { categoryDisplayName } from './goal-domain.js';
-
-const DAY_LABELS = Object.freeze({
-  mon: '월', tue: '화', wed: '수', thu: '목', fri: '금', sat: '토', sun: '일',
-});
 
 const escapeHtml = (value = '') => String(value).replace(/[&<>'"]/g, (char) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;',
@@ -123,12 +116,8 @@ function renderWeekBudget(model) {
       <span class="hours-input"><input type="number" name="${escapeHtml(category.id)}" min="0" step="0.5" inputmode="decimal" value="${explicit ? hoursValue(model.weekDocument?.budgets?.[category.id]) : ''}" placeholder="기본 ${hoursValue(category.defaultBudgetMinutes ?? category.budgetMinutes ?? 0)}"><span>시간</span></span>
     </label>`;
   }).join('');
-  const weights = effectiveDayWeights(model.weekDocument, model.defaultDayWeights);
-  const weightInputs = DAY_KEYS.map((key) => `<label><span>${DAY_LABELS[key]}</span><input type="number" min="0" step="any" inputmode="decimal" name="day-weight-${key}" value="${Math.round(weights[key] * 10000) / 100}"></label>`).join('');
-  const preview = DAY_KEYS.map((key) => `${DAY_LABELS[key]} ${Math.round(weights[key] * 1000) / 10}%`).join(' · ');
   return `<form id="weekly-budget-form" class="time-budget-form" novalidate>
     <section><div class="section-title"><div><h2>이번 주 전체 예산</h2><p class="muted">빈칸은 기본 주간 예산, 0은 이번 주 명시적 0시간입니다.</p></div></div><div class="time-budget-category-list">${rows || model.emptyHtml || ''}</div></section>
-    <section class="day-weight-section"><div class="section-title"><div><h2>요일별 공통 배분 비율</h2><p class="muted">입력값의 상대 비율을 자동으로 100%로 환산해 모든 대분류에 공통 적용합니다.</p></div></div><div class="day-weight-grid">${weightInputs}</div><p id="day-weight-preview" class="day-weight-preview">환산: ${preview}</p></section>
     <div class="bulk-save-actions"><button class="primary-button" type="submit">저장</button></div>
   </form>`;
 }
@@ -151,15 +140,10 @@ export function bindTimeBudgetControls({ root, state, rerender, onSaveDaily, onS
     const values = Object.fromEntries([...event.currentTarget.querySelectorAll('input[name]')].map((input) => [input.name, input.value]));
     await runSave(button, () => onSaveDaily(values));
   });
-  const weeklyForm = root.querySelector('#weekly-budget-form');
-  weeklyForm?.querySelectorAll('[name^="day-weight-"]').forEach((input) => {
-    input.addEventListener('input', () => updateWeightPreview(weeklyForm));
-  });
-  weeklyForm?.addEventListener('submit', async (event) => {
+  root.querySelector('#weekly-budget-form')?.addEventListener('submit', async (event) => {
     event.preventDefault();
     const budgetInputs = Object.fromEntries([...event.currentTarget.querySelectorAll('.time-budget-category-row input[name]')].map((input) => [input.name, input.value]));
-    const dayWeightInputs = Object.fromEntries(DAY_KEYS.map((key) => [key, event.currentTarget.querySelector(`[name="day-weight-${key}"]`)?.value ?? '']));
-    await runSave(event.currentTarget.querySelector('button[type="submit"]'), () => onSaveWeekly({ budgetInputs, dayWeightInputs }));
+    await runSave(event.currentTarget.querySelector('button[type="submit"]'), () => onSaveWeekly({ budgetInputs }));
   });
 }
 
@@ -176,17 +160,6 @@ async function runSave(button, callback) {
       button.disabled = false;
       button.textContent = '저장';
     }
-  }
-}
-
-function updateWeightPreview(form) {
-  const raw = Object.fromEntries(DAY_KEYS.map((key) => [key, form.querySelector(`[name="day-weight-${key}"]`)?.value ?? '']));
-  const preview = form.querySelector('#day-weight-preview');
-  try {
-    const weights = normalizeDayWeights(raw);
-    preview.textContent = `환산: ${DAY_KEYS.map((key) => `${DAY_LABELS[key]} ${Math.round(weights[key] * 1000) / 10}%`).join(' · ')}`;
-  } catch (error) {
-    preview.textContent = error.message;
   }
 }
 
