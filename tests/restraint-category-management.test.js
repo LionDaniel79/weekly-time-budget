@@ -17,7 +17,7 @@ test('새 대분류만 정규화된 goalType을 저장한다', async () => {
   const [app, feature, dataSource] = await Promise.all([
     read('src/app.js'), read('src/category-feature.js'), read('src/app-data-source.js'),
   ]);
-  assert.match(app, /async function saveCategory\(\{ id, name, defaultBudgetMinutes: budget, goalType \}\)/);
+  assert.match(app, /async function saveCategory\(\{ id, name, goalType \}\)/);
   assert.match(app, /goalType: normalizeGoalType\(goalType\)/);
   assert.match(dataSource, /async saveCategory/);
   assert.match(feature, /data\.get\('restraint'\) === 'on' \? 'restraint' : 'growth'/);
