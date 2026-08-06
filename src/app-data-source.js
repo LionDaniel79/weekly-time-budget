@@ -48,10 +48,24 @@ export function createAppDataSource({ firebase, db }) {
       );
     },
 
+    async saveDailyBudgetSnapshot(userId, date, snapshot) {
+      await firebase.setDoc(
+        userDocument(userId, 'dailyBudgets', date),
+        { date, ...snapshot, updatedAt: firebase.serverTimestamp() },
+        { merge: true },
+      );
+    },
+
     async saveDailyBudget(userId, date, overrides) {
       const ref = userDocument(userId, 'dailyBudgets', date);
       if (Object.keys(overrides).length) {
-        await firebase.setDoc(ref, { date, overrides, updatedAt: firebase.serverTimestamp() });
+        await firebase.setDoc(ref, {
+          date,
+          overrides,
+          userModified: true,
+          defaultSourceVersion: 'previous-results-v3',
+          updatedAt: firebase.serverTimestamp(),
+        });
       } else {
         await firebase.deleteDoc(ref);
       }
@@ -60,7 +74,12 @@ export function createAppDataSource({ firebase, db }) {
     async saveWeeklyBudget(userId, snapshot) {
       await firebase.setDoc(
         userDocument(userId, 'weeklyBudgets', snapshot.weekStart),
-        { ...snapshot, updatedAt: firebase.serverTimestamp() },
+        {
+          ...snapshot,
+          userModified: true,
+          defaultSourceVersion: 'previous-results-v3',
+          updatedAt: firebase.serverTimestamp(),
+        },
         { merge: true },
       );
     },
