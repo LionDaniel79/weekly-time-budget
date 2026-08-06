@@ -20,7 +20,8 @@ jobs:
           git apply .github/patches/02-features.patch
           git apply .github/patches/03-tests.patch
           git apply --exclude=.github/workflows/ci.yml .github/patches/04-build.patch
-          git checkout origin/main -- .github/workflows/ci.yml
+          git fetch origin main --depth=1
+          git checkout FETCH_HEAD -- .github/workflows/ci.yml
           rm -rf .github/patches
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
