@@ -1,5 +1,6 @@
 import { getWeekRange } from './domain.js';
 import {
+  adjacentWeekStart,
   buildRecordedPeriodIndex,
   defaultMonthForYear,
 } from './recorded-period-domain.js';
@@ -92,8 +93,9 @@ export function createStatisticsFeature({
     const signature = presentationSignature(state);
     if (!force && signature === lastRenderedSignature) return false;
 
+    let context;
     try {
-      contextFor(state);
+      context = contextFor(state);
     } catch (error) {
       showFailure(error.statisticsStage || '기록 기간 인덱스', error);
       return false;
@@ -104,6 +106,10 @@ export function createStatisticsFeature({
     try {
       diagnostics.aggregateRuns += 1;
       model = buildStatisticsViewModel(state, { now: now() });
+      if (model.mode === 'weekly') {
+        model.previousWeekStart = adjacentWeekStart(state.weekStart, 'previous', context.currentWeekStart);
+        model.nextWeekStart = adjacentWeekStart(state.weekStart, 'next', context.currentWeekStart);
+      }
     } catch (error) {
       showFailure('통계 집계', error);
       return false;
@@ -280,7 +286,7 @@ export function createStatisticsFeature({
         ? lastModel?.previousWeekStart
         : lastModel?.nextWeekStart;
       if (!target) return;
-      const next = applyStatisticsAction(state, { type: 'select-week', weekStart: target }, contextFor(state)).state;
+      const next = { ...state, weekStart: target, warning: '', renderError: null };
       await transition(next);
       return;
     }
