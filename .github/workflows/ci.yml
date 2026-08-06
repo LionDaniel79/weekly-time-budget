@@ -6,40 +6,13 @@ on:
     branches: [main]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Apply staged repair patches
-        if: ${{ hashFiles('.github/patches/*.patch') != '' }}
-        run: |
-          git fetch origin agent/remove-day-weight-calculations --depth=1
-          git checkout -B agent/remove-day-weight-calculations FETCH_HEAD
-          git apply .github/patches/01-domain.patch
-          git apply .github/patches/02-features.patch
-          git apply .github/patches/03-tests.patch
-          git apply --exclude=.github/workflows/ci.yml .github/patches/04-build.patch
-          git fetch origin main:refs/remotes/origin/main --depth=1
-          git checkout origin/main -- .github/workflows/ci.yml
-          rm -rf .github/patches
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -m "refactor: remove weekday ratio calculations"
-          git push origin HEAD:agent/remove-day-weight-calculations
-      - name: Upload branch source
-        uses: actions/upload-artifact@v4
-        with:
-          name: branch-source
-          path: |
-            .
-            !node_modules
-            !_site
-          include-hidden-files: true
-          retention-days: 1
       - uses: actions/setup-node@v4
         with:
           node-version: 22

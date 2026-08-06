@@ -88,13 +88,12 @@ function renderTodayBudget(model) {
       date: model.today,
       weekDocument: model.weekDocument,
       dailyDocument: null,
-      defaultDayWeights: model.defaultDayWeights,
     });
     const direct = hasOwn(overrides, category.id);
     return `<label class="time-budget-category-row">
       <span class="time-budget-category-copy">
         <strong>${escapeHtml(categoryDisplayName(category))}</strong>
-        <small>${direct ? '직접 설정' : '요일 비율 적용'} · 자동 ${formatMinutes(automatic.minutes)}</small>
+        <small>${direct ? '직접 설정' : '주간 예산 균등 배분'} · 자동 ${formatMinutes(automatic.minutes)}</small>
       </span>
       <span class="hours-input"><input type="number" name="${escapeHtml(category.id)}" min="0" step="0.5" inputmode="decimal" value="${direct ? hoursValue(overrides[category.id]) : ''}" placeholder="자동 ${hoursValue(automatic.minutes)}"><span>시간</span></span>
     </label>`;
@@ -173,7 +172,7 @@ function renderSummaryCards(summary, budgetLabel) {
 
 function renderCategorySummary(summary) {
   const items = summary.categorySummaries || [];
-  return `<div class="card dashboard-category-card"><div class="section-title"><h2>대분류별 달성률</h2><span class="badge">${items.length}개 분야</span></div>${items.length ? items.map((item) => `<div class="dashboard-category-row"><div><strong>${escapeHtml(item.name)}</strong>${item.budgetSource ? `<small>${item.budgetSource === 'direct' ? '직접 설정' : '요일 비율 적용'}</small>` : ''}${categoryProgressHtml(item)}<small class="goal-detail">${categoryGoalDetail(item)}</small></div><span>${formatMinutes(item.actualMinutes)} / ${formatMinutes(item.budgetMinutes)}</span><strong class="dashboard-achievement-text">${categoryAchievementText(item)}</strong></div>`).join('') : '<div class="empty-state"><p>표시할 대분류가 없습니다.</p></div>'}</div>`;
+  return `<div class="card dashboard-category-card"><div class="section-title"><h2>대분류별 달성률</h2><span class="badge">${items.length}개 분야</span></div>${items.length ? items.map((item) => `<div class="dashboard-category-row"><div><strong>${escapeHtml(item.name)}</strong>${item.budgetSource ? `<small>${item.budgetSource === 'direct' ? '직접 설정' : '주간 예산 균등 배분'}</small>` : ''}${categoryProgressHtml(item)}<small class="goal-detail">${categoryGoalDetail(item)}</small></div><span>${formatMinutes(item.actualMinutes)} / ${formatMinutes(item.budgetMinutes)}</span><strong class="dashboard-achievement-text">${categoryAchievementText(item)}</strong></div>`).join('') : '<div class="empty-state"><p>표시할 대분류가 없습니다.</p></div>'}</div>`;
 }
 
 function renderCalendar(model) {

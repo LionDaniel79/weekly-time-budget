@@ -2,9 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as timeBudgetDomain from '../src/time-budget-domain.js';
 import {
-  DAY_KEYS,
-  normalizeDayWeights,
-  distributeWeeklyMinutes,
+  equalDailyBudgetMinutes,
   parseOptionalHours,
   buildWeeklyBudgetSnapshot,
   resolveDailyBudget,
@@ -16,19 +14,10 @@ import {
   summarizeDailyCategories,
 } from '../src/time-budget-domain.js';
 
-test('상대 비율을 100%로 환산하고 총분을 보정한다', () => {
-  const weights = normalizeDayWeights({ mon: 2, tue: 2, wed: 1, thu: 1, fri: 1, sat: 2, sun: 1 });
-  assert.deepEqual(DAY_KEYS.map((key) => Math.round(weights[key] * 100)), [20, 20, 10, 10, 10, 20, 10]);
-  const days = distributeWeeklyMinutes(421, weights);
-  assert.deepEqual(DAY_KEYS.map((key) => days[key]), [84, 84, 42, 42, 42, 84, 43]);
-  assert.equal(Object.values(days).reduce((sum, value) => sum + value, 0), 421);
-  const tiny = distributeWeeklyMinutes(1, normalizeDayWeights({ mon: 1, tue: 1, wed: 1, thu: 1, fri: 1, sat: 1, sun: 1 }));
-  assert.equal(Object.values(tiny).reduce((sum, value) => sum + value, 0), 1);
-});
-
-test('요일 값이 없거나 모두 0이면 균등 배분한다', () => {
-  const weights = normalizeDayWeights({});
-  assert.equal(Math.round(Object.values(weights).reduce((a, b) => a + b, 0) * 1e6), 1e6);
+test('주간 예산을 7일 균등 배분하고 나머지는 주 앞쪽부터 배정한다', () => {
+  const dates = ['2026-07-20','2026-07-21','2026-07-22','2026-07-23','2026-07-24','2026-07-25','2026-07-26'];
+  assert.deepEqual(dates.map((date) => equalDailyBudgetMinutes(421, date)), [61, 60, 60, 60, 60, 60, 60]);
+  assert.deepEqual(dates.map((date) => equalDailyBudgetMinutes(1, date)), [1, 0, 0, 0, 0, 0, 0]);
 });
 
 test('빈칸과 0을 구분하고 0.5시간 단위를 검사한다', () => {
@@ -47,7 +36,6 @@ test('주간 스냅숏은 기본값과 명시적 0을 함께 보존한다', () =
       { id: 'thesis', defaultBudgetMinutes: 900 },
     ],
     budgetInputs: { reading: '', thesis: '0' },
-    dayWeightInputs: { mon: 2, tue: 2, wed: 1, thu: 1, fri: 1, sat: 2, sun: 1 },
   });
   assert.deepEqual(snapshot.budgets, { reading: 420, thesis: 0 });
   assert.deepEqual(snapshot.explicitBudgetIds, ['thesis']);
@@ -55,8 +43,8 @@ test('주간 스냅숏은 기본값과 명시적 0을 함께 보존한다', () =
 
 test('오늘 직접 예산은 자동 예산보다 우선하며 0도 유효하다', () => {
   const category = { id: 'reading', defaultBudgetMinutes: 700 };
-  const weekDocument = { budgets: { reading: 700 }, dayWeights: normalizeDayWeights({ mon: 2, tue: 2, wed: 1, thu: 1, fri: 1, sat: 2, sun: 1 }) };
-  assert.deepEqual(resolveDailyBudget({ category, date: '2026-07-20', weekDocument, dailyDocument: null }), { minutes: 140, source: 'day-weight' });
+  const weekDocument = { budgets: { reading: 700 } };
+  assert.deepEqual(resolveDailyBudget({ category, date: '2026-07-20', weekDocument, dailyDocument: null }), { minutes: 100, source: 'equal' });
   assert.deepEqual(resolveDailyBudget({ category, date: '2026-07-20', weekDocument, dailyDocument: { overrides: { reading: 0 } } }), { minutes: 0, source: 'direct' });
 });
 
@@ -84,13 +72,13 @@ test('카운트다운 기준값은 주간 배분과 동기화 대기 기록을 �
     category: { id: 'reading', defaultBudgetMinutes: 70 },
     date: '2026-07-27',
     entries: [{ categoryId: 'reading', date: '2026-07-27', durationMinutes: 25, syncStatus: 'pending' }],
-    weekDocument: { budgets: { reading: 140 }, dayWeights: { mon: 1, tue: 0, wed: 0, thu: 0, fri: 0, sat: 0, sun: 0 } },
+    weekDocument: { budgets: { reading: 140 } },
     dailyDocument: null,
   });
-  assert.equal(result.initialBudgetMinutes, 140);
+  assert.equal(result.initialBudgetMinutes, 20);
   assert.equal(result.priorRecordedMinutes, 25);
-  assert.equal(result.initialRemainingMs, 115 * 60_000);
-  assert.equal(result.budgetSource, 'day-weight');
+  assert.equal(result.initialRemainingMs, -5 * 60_000);
+  assert.equal(result.budgetSource, 'equal');
 });
 
 test('카운트다운 기준값은 예산 초과를 음수로 보존한다', () => {
@@ -133,7 +121,7 @@ test('일간 요약은 직접·자동 예산과 실제 기록을 계산한다', 
     categories: [{ id: 'reading', name: '독서', defaultBudgetMinutes: 700 }],
     entries: [{ categoryId: 'reading', date: '2026-07-20', durationMinutes: 60 }],
     date: '2026-07-20',
-    weekDocument: { budgets: { reading: 700 }, dayWeights: { mon: 1, tue: 0, wed: 0, thu: 0, fri: 0, sat: 0, sun: 0 } },
+    weekDocument: { budgets: { reading: 700 } },
     dailyDocument: { overrides: { reading: 120 } },
   });
   assert.equal(result.totalBudgetMinutes, 120);
@@ -171,7 +159,6 @@ test('일간 요약은 절제 목표와 전체 목표 준수를 계산한다', (
     date: '2026-07-27',
     weekDocument: {
       budgets: { prayer: 1260, reading: 420, phone: 1260 },
-      dayWeights: { mon: 1, tue: 0, wed: 0, thu: 0, fri: 0, sat: 0, sun: 0 },
     },
     dailyDocument: {
       overrides: { prayer: 180, reading: 60, phone: 180 },

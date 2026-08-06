@@ -9,11 +9,13 @@ const forbidden = /defaultDayWeights|dayWeights|DAY_KEYS|EQUAL_DAY_WEIGHTS|norma
 
 test('요일 비율 관련 UI·상태·저장·계산 코드를 모두 제거한다', async () => {
   const files = await Promise.all([
+    'src/domain.js',
     'src/time-budget-ui.js',
     'src/time-budget-feature.js',
     'src/time-budget-domain.js',
     'src/app-data-source.js',
     'src/persistent-timer-ui.js',
+    'styles.css',
   ].map(read));
   for (const source of files) assert.doesNotMatch(source, forbidden);
 });

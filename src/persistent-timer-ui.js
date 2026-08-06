@@ -2,8 +2,6 @@ import { firebaseConfig } from '../firebase-config.js';
 import { getWeekRange } from './domain.js';
 import { createPersistentTimerController, localDateKey } from './persistent-timer.js';
 import {
-  EQUAL_DAY_WEIGHTS,
-  effectiveDayWeights,
   resolveCountdownBudgetBaseline,
 } from './time-budget-domain.js';
 import { formatSignedTimerMilliseconds } from './countdown-timer-domain.js';
@@ -27,7 +25,6 @@ const state = {
   entries: [],
   weekly: [],
   daily: [],
-  defaultDayWeights: { ...EQUAL_DAY_WEIGHTS },
   selectedMode: 'countdown',
   selectedCategoryId: '',
   previewBaseline: null,
@@ -81,7 +78,6 @@ function countdownBaselineFor(categoryId, date = localDateKey(new Date())) {
     entries: state.entries,
     weekDocument: currentWeekDocument(date),
     dailyDocument: currentDailyDocument(date),
-    defaultDayWeights: state.defaultDayWeights,
   });
 }
 
@@ -101,9 +97,6 @@ async function restoreCachedTimerData(user = state.user) {
   if (Array.isArray(cached.archivedCategories)) state.archived = cached.archivedCategories;
   if (Array.isArray(cached.weeklyBudgets)) state.weekly = cached.weeklyBudgets;
   if (Array.isArray(cached.dailyBudgets)) state.daily = cached.dailyBudgets;
-  if (cached.defaultDayWeights) {
-    state.defaultDayWeights = effectiveDayWeights(null, cached.defaultDayWeights);
-  }
   state.entries = await state.runtime.mergedEntries(Array.isArray(cached.entries) ? cached.entries : []);
   state.budgetReady = true;
   updatePreviewBaseline();
@@ -119,13 +112,12 @@ async function refreshTimerData() {
     const hadCache = await restoreCachedTimerData(user) || state.budgetReady;
     const root = ['users', user.uid];
     try {
-      const [categories, archived, entries, weekly, daily, settings] = await Promise.all([
+      const [categories, archived, entries, weekly, daily] = await Promise.all([
         store.getDocs(store.query(store.collection(db, ...root, 'categories'), store.orderBy('order'))),
         store.getDocs(store.collection(db, ...root, 'archivedCategories')),
         store.getDocs(store.query(store.collection(db, ...root, 'entries'), store.orderBy('date', 'desc'))),
         store.getDocs(store.collection(db, ...root, 'weeklyBudgets')),
         store.getDocs(store.collection(db, ...root, 'dailyBudgets')),
-        store.getDoc(store.doc(db, ...root, 'settings', 'timeBudget')),
       ]);
       if (state.user?.uid !== user.uid) return;
       state.categories = categories.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
@@ -134,10 +126,6 @@ async function refreshTimerData() {
       state.entries = await state.runtime.mergedEntries(remoteEntries);
       state.weekly = weekly.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
       state.daily = daily.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-      state.defaultDayWeights = effectiveDayWeights(
-        null,
-        settings.exists() ? settings.data().defaultDayWeights : EQUAL_DAY_WEIGHTS,
-      );
       state.budgetReady = true;
       await state.runtime.store.patchSnapshot(user.uid, {
         categories: state.categories,
@@ -145,7 +133,6 @@ async function refreshTimerData() {
         entries: remoteEntries,
         weeklyBudgets: state.weekly,
         dailyBudgets: state.daily,
-        defaultDayWeights: state.defaultDayWeights,
         updatedAt: Date.now(),
       });
     } catch (error) {
@@ -659,7 +646,6 @@ authModule.onAuthStateChanged(auth, async (user) => {
     state.entries = [];
     state.weekly = [];
     state.daily = [];
-    state.defaultDayWeights = { ...EQUAL_DAY_WEIGHTS };
     state.selectedMode = 'countdown';
     state.selectedCategoryId = '';
     state.previewBaseline = null;
