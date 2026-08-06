@@ -123,21 +123,32 @@ function periodCategories({ start, end, weekDocument, dailyDocument = null }) {
     .map((category) => activeIds.has(category.id) ? category : { ...category, defaultBudgetMinutes: 0, budgetMinutes: 0 });
 }
 
+function shouldInitializeFromPreviousResults(source) {
+  if (!source) return true;
+  if (source.initializedFromPreviousResults) return false;
+  const explicitBudgetIds = Array.isArray(source.explicitBudgetIds)
+    ? source.explicitBudgetIds
+    : Object.keys(source.budgets || {});
+  return explicitBudgetIds.length === 0;
+}
+
 async function ensureCurrentWeekSnapshot() {
   const weekStart = currentWeekStart();
   const source = findWeekDocument(weekStart);
-  if (source) return;
+  if (!shouldInitializeFromPreviousResults(source)) return;
   const categories = activeCategories(today());
   const budgets = buildPreviousWeekBudgetDefaults({ categories, entries: state.entries, weekStart });
   const snapshot = {
-    id: weekStart,
+    id: source?.id || weekStart,
     weekStart,
     budgets,
     explicitBudgetIds: [],
     initializedFromPreviousResults: true,
   };
   await state.dataSource.ensureCurrentWeekBudget(state.user.uid, snapshot);
-  state.weekly.push(snapshot);
+  const index = state.weekly.findIndex((week) => (week.weekStart || week.id) === weekStart);
+  if (index >= 0) state.weekly[index] = snapshot;
+  else state.weekly.push(snapshot);
 }
 
 async function applyCachedData() {
@@ -372,6 +383,7 @@ async function saveWeekly({ budgetInputs }) {
   });
   snapshot.budgets = { ...preservedBudgets, ...snapshot.budgets };
   snapshot.explicitBudgetIds = [...new Set([...preservedExplicitBudgetIds, ...snapshot.explicitBudgetIds])];
+  snapshot.initializedFromPreviousResults = true;
   try { await state.dataSource.saveWeeklyBudget(state.user.uid, snapshot); }
   catch (error) {
     showToast({ type: 'error', title: '이번 주 시간 예산을 저장하지 못했습니다.', message: '예산 변경은 인터넷 연결 후 다시 시도하세요.' });
