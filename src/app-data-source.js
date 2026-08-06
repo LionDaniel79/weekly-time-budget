@@ -30,17 +30,13 @@ export function createAppDataSource({ firebase, db }) {
     },
 
     async loadTimeBudgetData(userId) {
-      const [weeklySnapshot, dailySnapshot, settingsSnapshot] = await Promise.all([
+      const [weeklySnapshot, dailySnapshot] = await Promise.all([
         firebase.getDocs(userCollection(userId, 'weeklyBudgets')),
         firebase.getDocs(userCollection(userId, 'dailyBudgets')),
-        firebase.getDoc(userDocument(userId, 'settings', 'timeBudget')),
       ]);
       return {
         weeklyBudgets: weeklySnapshot.docs.map(plainDocument),
         dailyBudgets: dailySnapshot.docs.map(plainDocument),
-        defaultDayWeights: settingsSnapshot.exists()
-          ? settingsSnapshot.data().defaultDayWeights
-          : null,
       };
     },
 
@@ -62,18 +58,11 @@ export function createAppDataSource({ firebase, db }) {
     },
 
     async saveWeeklyBudget(userId, snapshot) {
-      const batch = firebase.writeBatch(db);
-      batch.set(
+      await firebase.setDoc(
         userDocument(userId, 'weeklyBudgets', snapshot.weekStart),
         { ...snapshot, updatedAt: firebase.serverTimestamp() },
         { merge: true },
       );
-      batch.set(
-        userDocument(userId, 'settings', 'timeBudget'),
-        { defaultDayWeights: snapshot.dayWeights, updatedAt: firebase.serverTimestamp() },
-        { merge: true },
-      );
-      await batch.commit();
     },
 
     async saveCategory(userId, { id, payload }) {

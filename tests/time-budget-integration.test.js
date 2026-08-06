@@ -30,15 +30,15 @@ test('메뉴와 페이지 제목은 시간 예산으로 변경된다', async () 
   assert.ok(html.includes('./src/time-budget-feature.js'));
 });
 
-test('공통 데이터 소스는 일간·주간 예산 문서와 기본 비율을 읽고 저장한다', async () => {
+test('공통 데이터 소스는 일간·주간 예산 문서만 읽고 저장한다', async () => {
   const [feature, dataSource] = await Promise.all([
     read('src/time-budget-feature.js'),
     read('src/app-data-source.js'),
   ]);
-  for (const token of ['loadTimeBudgetData', 'weeklyBudgets', 'dailyBudgets', "'settings', 'timeBudget'", 'defaultDayWeights']) {
+  for (const token of ['loadTimeBudgetData', 'weeklyBudgets', 'dailyBudgets']) {
     assert.ok(dataSource.includes(token), token);
   }
-  for (const token of ['saveDailyBudget', 'saveWeeklyBudget', 'ensureCurrentWeekBudget', 'writeBatch']) {
+  for (const token of ['saveDailyBudget', 'saveWeeklyBudget', 'ensureCurrentWeekBudget', 'setDoc']) {
     assert.ok(dataSource.includes(token), token);
   }
   assert.match(feature, /async function saveDaily/);
@@ -46,7 +46,8 @@ test('공통 데이터 소스는 일간·주간 예산 문서와 기본 비율�
   for (const token of ['ensureCurrentWeekSnapshot', 'preservedOverrides', 'preservedBudgets', 'weekly-time-budget:view-changed']) {
     assert.ok(feature.includes(token), token);
   }
-  assert.doesNotMatch(feature, /writeBatch|onAuthStateChanged|MutationObserver|switchOwnedView/);
+  assert.doesNotMatch(feature, /writeBatch|onAuthStateChanged|MutationObserver|switchOwnedView|defaultDayWeights|dayWeights/);
+  assert.doesNotMatch(dataSource, /settings.*timeBudget|defaultDayWeights|dayWeights/);
   const start = feature.indexOf('async function saveWeekly');
   const end = feature.indexOf('function updateHeader', start);
   assert.doesNotMatch(feature.slice(start, end), /dailyBudgets/);
@@ -95,5 +96,5 @@ test('화면 폭 선택 버튼 없이 적응형 화면을 사용한다', async (
   const [css, html, ui] = await Promise.all([read('styles.css'), read('index.html'), read('src/time-budget-ui.js')]);
   assert.doesNotMatch(html + ui, /넓은 화면|모바일 화면/);
   const compact = css.replace(/\s+/g, '');
-  for (const token of ['.time-budget-tabs', '.dashboard-tabs', '.day-weight-grid', '.record-calendar', 'minmax(0,1fr)', '@media(max-width:600px)']) assert.ok(compact.includes(token), token);
+  for (const token of ['.time-budget-tabs', '.dashboard-tabs', '.record-calendar', 'minmax(0,1fr)', '@media(max-width:600px)']) assert.ok(compact.includes(token), token);
 });

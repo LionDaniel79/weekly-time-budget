@@ -14,12 +14,6 @@ import {
 } from './goal-domain.js';
 import { isCategoryActiveOnDate } from './category-effective-date.js';
 
-export const DAY_KEYS = Object.freeze(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']);
-
-export const EQUAL_DAY_WEIGHTS = Object.freeze(
-  Object.fromEntries(DAY_KEYS.map((key) => [key, 1 / DAY_KEYS.length])),
-);
-
 const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object || {}, key);
 
 export function removeUnknownCategoryReferences(values = {}, knownCategoryIds = new Set()) {
@@ -29,32 +23,6 @@ export function removeUnknownCategoryReferences(values = {}, knownCategoryIds = 
   );
 }
 
-export function normalizeDayWeights(rawValues = {}) {
-  const values = Object.fromEntries(DAY_KEYS.map((key) => {
-    const raw = rawValues[key];
-    const value = raw === '' || raw === null || raw === undefined ? 0 : Number(raw);
-    if (!Number.isFinite(value)) throw new Error('요일 비율은 숫자로 입력하세요.');
-    if (value < 0) throw new Error('요일 비율은 0 이상이어야 합니다.');
-    return [key, value];
-  }));
-  const total = Object.values(values).reduce((sum, value) => sum + value, 0);
-  if (!total) return { ...EQUAL_DAY_WEIGHTS };
-  return Object.fromEntries(DAY_KEYS.map((key) => [key, values[key] / total]));
-}
-
-export function distributeWeeklyMinutes(totalMinutes, rawWeights = EQUAL_DAY_WEIGHTS) {
-  const total = Math.max(0, Math.round(Number(totalMinutes) || 0));
-  const weights = normalizeDayWeights(rawWeights);
-  let assigned = 0;
-  return Object.fromEntries(DAY_KEYS.map((key, index) => {
-    const remaining = Math.max(0, total - assigned);
-    const minutes = index === DAY_KEYS.length - 1
-      ? remaining
-      : Math.min(remaining, Math.max(0, Math.round(total * weights[key])));
-    assigned += minutes;
-    return [key, minutes];
-  }));
-}
 
 export function parseOptionalHours(value) {
   if (value === '' || value === null || value === undefined) {
@@ -66,9 +34,6 @@ export function parseOptionalHours(value) {
   return { explicit: true, minutes: Math.round(hours * 60) };
 }
 
-export function effectiveDayWeights(weekDocument, defaultDayWeights = EQUAL_DAY_WEIGHTS) {
-  return normalizeDayWeights(weekDocument?.dayWeights || defaultDayWeights);
-}
 
 export function explicitBudgetIdSet(weekDocument = {}) {
   if (Array.isArray(weekDocument.explicitBudgetIds)) return new Set(weekDocument.explicitBudgetIds);
@@ -85,7 +50,6 @@ export function buildWeeklyBudgetSnapshot({
   weekStart,
   categories,
   budgetInputs = {},
-  dayWeightInputs = {},
 }) {
   const budgets = {};
   const explicitBudgetIds = [];
@@ -105,14 +69,19 @@ export function buildWeeklyBudgetSnapshot({
     weekStart,
     budgets,
     explicitBudgetIds,
-    dayWeights: normalizeDayWeights(dayWeightInputs),
   };
 }
 
-export function dateKeyToDayKey(dateKey) {
+function weekdayIndex(dateKey) {
   const date = new Date(`${dateKey}T12:00:00`);
-  const index = (date.getDay() + 6) % 7;
-  return DAY_KEYS[index];
+  return (date.getDay() + 6) % 7;
+}
+
+export function equalDailyBudgetMinutes(totalMinutes, dateKey) {
+  const total = Math.max(0, Math.round(Number(totalMinutes) || 0));
+  const base = Math.floor(total / 7);
+  const remainder = total % 7;
+  return base + (weekdayIndex(dateKey) < remainder ? 1 : 0);
 }
 
 export function resolveDailyBudget({
@@ -120,7 +89,6 @@ export function resolveDailyBudget({
   date,
   weekDocument,
   dailyDocument,
-  defaultDayWeights = EQUAL_DAY_WEIGHTS,
 }) {
   if (!isCategoryActiveOnDate(category, date)) return { minutes: 0, source: 'inactive' };
   const overrides = dailyDocument?.overrides || {};
@@ -131,11 +99,7 @@ export function resolveDailyBudget({
     };
   }
   const weeklyMinutes = resolveWeeklyBudgetMinutes(category, weekDocument);
-  const distributed = distributeWeeklyMinutes(
-    weeklyMinutes,
-    effectiveDayWeights(weekDocument, defaultDayWeights),
-  );
-  return { minutes: distributed[dateKeyToDayKey(date)] || 0, source: 'day-weight' };
+  return { minutes: equalDailyBudgetMinutes(weeklyMinutes, date), source: 'equal' };
 }
 
 export function resolveCountdownBudgetBaseline({
@@ -144,7 +108,6 @@ export function resolveCountdownBudgetBaseline({
   entries = [],
   weekDocument,
   dailyDocument,
-  defaultDayWeights = EQUAL_DAY_WEIGHTS,
 }) {
   if (!isCategoryActiveOnDate(category, date)) return null;
   const budget = resolveDailyBudget({
@@ -152,7 +115,6 @@ export function resolveCountdownBudgetBaseline({
     date,
     weekDocument,
     dailyDocument,
-    defaultDayWeights,
   });
   const recordedMinutes = entries
     .filter((entry) => entry.date === date && entry.categoryId === category.id)
@@ -195,7 +157,6 @@ export function summarizeDailyCategories({
   date,
   weekDocument,
   dailyDocument,
-  defaultDayWeights = EQUAL_DAY_WEIGHTS,
 }) {
   const activeCategories = categories.filter((category) => isCategoryActiveOnDate(category, date));
   const categoryById = new Map(activeCategories.map((category) => [category.id, category]));
@@ -210,7 +171,6 @@ export function summarizeDailyCategories({
       date,
       weekDocument,
       dailyDocument,
-      defaultDayWeights,
     });
     const actualMinutes = relevant
       .filter((entry) => entry.categoryId === category.id)

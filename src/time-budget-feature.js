@@ -1,8 +1,6 @@
 import { getWeekRange, summarizeWeeklyBudgetPeriod, toDateKey } from './domain.js';
 import {
-  EQUAL_DAY_WEIGHTS,
   buildWeeklyBudgetSnapshot,
-  effectiveDayWeights,
   parseOptionalHours,
   previousRecordedDate,
   nextRecordedDateOrToday,
@@ -33,7 +31,6 @@ const state = {
   runtime: null,
   dataSource: null,
   categories: [], archived: [], entries: [], remoteEntries: [], weekly: [], daily: [],
-  defaultDayWeights: { ...EQUAL_DAY_WEIGHTS },
   dashboard: createDashboardUiState(today(), currentWeekStart()),
   budget: createTimeBudgetUiState(today()),
   loading: false,
@@ -93,10 +90,6 @@ function normalizeWeek(weekStart) {
     explicitBudgetIds: Array.isArray(source?.explicitBudgetIds)
       ? [...source.explicitBudgetIds]
       : Object.keys(source?.budgets || {}),
-    dayWeights: effectiveDayWeights(
-      source,
-      source ? EQUAL_DAY_WEIGHTS : (weekStart === currentWeekStart() ? state.defaultDayWeights : EQUAL_DAY_WEIGHTS),
-    ),
   };
 }
 
@@ -133,11 +126,7 @@ async function ensureCurrentWeekSnapshot() {
     ? [...source.explicitBudgetIds]
     : Object.keys(source?.budgets || {});
   if (source && !Array.isArray(source.explicitBudgetIds)) changed = true;
-  const dayWeights = source?.dayWeights
-    ? effectiveDayWeights(source, EQUAL_DAY_WEIGHTS)
-    : (source ? { ...EQUAL_DAY_WEIGHTS } : { ...state.defaultDayWeights });
-  if (!source?.dayWeights) changed = true;
-  const snapshot = { id: source?.id || weekStart, weekStart, budgets, explicitBudgetIds, dayWeights };
+  const snapshot = { id: source?.id || weekStart, weekStart, budgets, explicitBudgetIds };
   if (changed) await state.dataSource.ensureCurrentWeekBudget(state.user.uid, snapshot);
   const index = state.weekly.findIndex((week) => (week.weekStart || week.id) === weekStart);
   if (index >= 0) state.weekly[index] = snapshot;
@@ -151,7 +140,6 @@ async function applyCachedData() {
   if (!snapshot) return false;
   if (Array.isArray(snapshot.weeklyBudgets)) state.weekly = snapshot.weeklyBudgets;
   if (Array.isArray(snapshot.dailyBudgets)) state.daily = snapshot.dailyBudgets;
-  if (snapshot.defaultDayWeights) state.defaultDayWeights = effectiveDayWeights(null, snapshot.defaultDayWeights);
   applyRestoredUiState(globalThis.window?.__weeklyTimeBudgetUiState || {});
   return true;
 }
@@ -163,12 +151,10 @@ async function performLoadData() {
     const result = await state.dataSource.loadTimeBudgetData(state.user.uid);
     state.weekly = result.weeklyBudgets;
     state.daily = result.dailyBudgets;
-    state.defaultDayWeights = effectiveDayWeights(null, result.defaultDayWeights || EQUAL_DAY_WEIGHTS);
     await ensureCurrentWeekSnapshot();
     await state.runtime.store.patchSnapshot(state.user.uid, {
       weeklyBudgets: state.weekly,
       dailyBudgets: state.daily,
-      defaultDayWeights: state.defaultDayWeights,
       updatedAt: Date.now(),
     });
   } catch (error) {
@@ -258,7 +244,6 @@ function renderDashboard() {
       dailySummary: summarizeDailyCategories({
         categories: periodCategories({ start: date, end: date, weekDocument: week, dailyDocument }),
         entries: state.entries, date, weekDocument: week, dailyDocument,
-        defaultDayWeights: state.defaultDayWeights,
       }),
     })}</div>`;
   }
@@ -323,7 +308,6 @@ function renderBudget() {
     categories: activeCategories(state.budget.today),
     weekDocument: normalizeWeek(currentWeekStart()),
     dailyDocument: dailyFor(state.budget.today),
-    defaultDayWeights: state.defaultDayWeights,
     emptyHtml: document.querySelector('#empty-template')?.innerHTML || '',
   })}</div>`;
   bindTimeBudgetControls({
@@ -360,7 +344,7 @@ async function saveDaily(inputs) {
   alert('오늘 시간 예산을 저장했습니다.');
 }
 
-async function saveWeekly({ budgetInputs, dayWeightInputs }) {
+async function saveWeekly({ budgetInputs }) {
   const weekStart = currentWeekStart();
   const existing = normalizeWeek(weekStart);
   const currentCategories = activeCategories(today());
@@ -370,7 +354,7 @@ async function saveWeekly({ budgetInputs, dayWeightInputs }) {
   );
   const preservedExplicitBudgetIds = (existing.explicitBudgetIds || [])
     .filter((categoryId) => !activeIds.has(categoryId));
-  const snapshot = buildWeeklyBudgetSnapshot({ weekStart, categories: currentCategories, budgetInputs, dayWeightInputs });
+  const snapshot = buildWeeklyBudgetSnapshot({ weekStart, categories: currentCategories, budgetInputs });
   snapshot.budgets = { ...preservedBudgets, ...snapshot.budgets };
   snapshot.explicitBudgetIds = [...new Set([...preservedExplicitBudgetIds, ...snapshot.explicitBudgetIds])];
   try { await state.dataSource.saveWeeklyBudget(state.user.uid, snapshot); }
@@ -380,7 +364,7 @@ async function saveWeekly({ budgetInputs, dayWeightInputs }) {
   }
   await loadData(); renderBudget(); renderDashboard();
   document.dispatchEvent(new CustomEvent('weekly-time-budget:data-changed'));
-  alert('이번 주 시간 예산과 요일 비율을 저장했습니다.');
+  alert('이번 주 시간 예산을 저장했습니다.');
 }
 
 function updateHeader(view) {
@@ -416,7 +400,6 @@ document.addEventListener('weekly-time-budget:infrastructure-state', async (even
   if (!state.user) {
     state.weekly = [];
     state.daily = [];
-    state.defaultDayWeights = { ...EQUAL_DAY_WEIGHTS };
     state.cacheLoaded = false;
     loadingPromise = null;
     reloadRequested = false;

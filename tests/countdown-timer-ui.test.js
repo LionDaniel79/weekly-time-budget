@@ -35,7 +35,7 @@ test('카운트다운은 오늘 예산과 기록 기준값을 불러온다', asy
   assert.ok(source.includes('refreshTimerData'));
   assert.ok(source.includes('weeklyBudgets'));
   assert.ok(source.includes('dailyBudgets'));
-  assert.ok(source.includes('defaultDayWeights'));
+  assert.doesNotMatch(source, /defaultDayWeights|dayWeights|settings.*timeBudget/);
 });
 
 test('카운트다운은 저장, 카운트업은 종료하고 저장 문구를 사용한다', async () => {
