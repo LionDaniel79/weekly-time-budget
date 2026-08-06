@@ -14,10 +14,10 @@ test('1단계: 앱 셸이 모든 메뉴 전환을 capture 단계에서 소유한
 
 test('2단계: PWA는 세대별 셸과 navigation network-first를 사용한다', async () => {
   const [worker, html] = await Promise.all([read('service-worker.js'), read('index.html')]);
-  assert.match(worker, /APP_BUILD = '2026\.08\.07-previous-results-v22'/);
+  assert.match(worker, /APP_BUILD = '2026\.08\.07-previous-results-v23'/);
   assert.match(worker, /navigationNetworkFirst/);
   assert.match(worker, /cache: 'no-store'/);
-  assert.match(html, /data-app-build="2026\.08\.07-previous-results-v22"/);
+  assert.match(html, /data-app-build="2026\.08\.07-previous-results-v23"/);
 });
 
 test('3단계: 보관·복원 UI는 category feature와 app data source가 소유한다', async () => {
