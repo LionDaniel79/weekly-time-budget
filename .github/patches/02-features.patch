@@ -1,0 +1,228 @@
+diff --git a/src/persistent-timer-ui.js b/src/persistent-timer-ui.js
+index 3bd37b6..e521f7d 100644
+--- a/src/persistent-timer-ui.js
++++ b/src/persistent-timer-ui.js
+@@ -2,8 +2,6 @@ import { firebaseConfig } from '../firebase-config.js';
+ import { getWeekRange } from './domain.js';
+ import { createPersistentTimerController, localDateKey } from './persistent-timer.js';
+ import {
+-  EQUAL_DAY_WEIGHTS,
+-  effectiveDayWeights,
+   resolveCountdownBudgetBaseline,
+ } from './time-budget-domain.js';
+ import { formatSignedTimerMilliseconds } from './countdown-timer-domain.js';
+@@ -27,7 +25,6 @@ const state = {
+   entries: [],
+   weekly: [],
+   daily: [],
+-  defaultDayWeights: { ...EQUAL_DAY_WEIGHTS },
+   selectedMode: 'countdown',
+   selectedCategoryId: '',
+   previewBaseline: null,
+@@ -81,7 +78,6 @@ function countdownBaselineFor(categoryId, date = localDateKey(new Date())) {
+     entries: state.entries,
+     weekDocument: currentWeekDocument(date),
+     dailyDocument: currentDailyDocument(date),
+-    defaultDayWeights: state.defaultDayWeights,
+   });
+ }
+ 
+@@ -101,9 +97,6 @@ async function restoreCachedTimerData(user = state.user) {
+   if (Array.isArray(cached.archivedCategories)) state.archived = cached.archivedCategories;
+   if (Array.isArray(cached.weeklyBudgets)) state.weekly = cached.weeklyBudgets;
+   if (Array.isArray(cached.dailyBudgets)) state.daily = cached.dailyBudgets;
+-  if (cached.defaultDayWeights) {
+-    state.defaultDayWeights = effectiveDayWeights(null, cached.defaultDayWeights);
+-  }
+   state.entries = await state.runtime.mergedEntries(Array.isArray(cached.entries) ? cached.entries : []);
+   state.budgetReady = true;
+   updatePreviewBaseline();
+@@ -119,13 +112,12 @@ async function refreshTimerData() {
+     const hadCache = await restoreCachedTimerData(user) || state.budgetReady;
+     const root = ['users', user.uid];
+     try {
+-      const [categories, archived, entries, weekly, daily, settings] = await Promise.all([
++      const [categories, archived, entries, weekly, daily] = await Promise.all([
+         store.getDocs(store.query(store.collection(db, ...root, 'categories'), store.orderBy('order'))),
+         store.getDocs(store.collection(db, ...root, 'archivedCategories')),
+         store.getDocs(store.query(store.collection(db, ...root, 'entries'), store.orderBy('date', 'desc'))),
+         store.getDocs(store.collection(db, ...root, 'weeklyBudgets')),
+         store.getDocs(store.collection(db, ...root, 'dailyBudgets')),
+-        store.getDoc(store.doc(db, ...root, 'settings', 'timeBudget')),
+       ]);
+       if (state.user?.uid !== user.uid) return;
+       state.categories = categories.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+@@ -134,10 +126,6 @@ async function refreshTimerData() {
+       state.entries = await state.runtime.mergedEntries(remoteEntries);
+       state.weekly = weekly.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+       state.daily = daily.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+-      state.defaultDayWeights = effectiveDayWeights(
+-        null,
+-        settings.exists() ? settings.data().defaultDayWeights : EQUAL_DAY_WEIGHTS,
+-      );
+       state.budgetReady = true;
+       await state.runtime.store.patchSnapshot(user.uid, {
+         categories: state.categories,
+@@ -145,7 +133,6 @@ async function refreshTimerData() {
+         entries: remoteEntries,
+         weeklyBudgets: state.weekly,
+         dailyBudgets: state.daily,
+-        defaultDayWeights: state.defaultDayWeights,
+         updatedAt: Date.now(),
+       });
+     } catch (error) {
+@@ -659,7 +646,6 @@ authModule.onAuthStateChanged(auth, async (user) => {
+     state.entries = [];
+     state.weekly = [];
+     state.daily = [];
+-    state.defaultDayWeights = { ...EQUAL_DAY_WEIGHTS };
+     state.selectedMode = 'countdown';
+     state.selectedCategoryId = '';
+     state.previewBaseline = null;
+diff --git a/src/time-budget-feature.js b/src/time-budget-feature.js
+index 56d6495..7eed091 100644
+--- a/src/time-budget-feature.js
++++ b/src/time-budget-feature.js
+@@ -1,8 +1,6 @@
+ import { getWeekRange, summarizeWeeklyBudgetPeriod, toDateKey } from './domain.js';
+ import {
+-  EQUAL_DAY_WEIGHTS,
+   buildWeeklyBudgetSnapshot,
+-  effectiveDayWeights,
+   parseOptionalHours,
+   previousRecordedDate,
+   nextRecordedDateOrToday,
+@@ -33,7 +31,6 @@ const state = {
+   runtime: null,
+   dataSource: null,
+   categories: [], archived: [], entries: [], remoteEntries: [], weekly: [], daily: [],
+-  defaultDayWeights: { ...EQUAL_DAY_WEIGHTS },
+   dashboard: createDashboardUiState(today(), currentWeekStart()),
+   budget: createTimeBudgetUiState(today()),
+   loading: false,
+@@ -93,10 +90,6 @@ function normalizeWeek(weekStart) {
+     explicitBudgetIds: Array.isArray(source?.explicitBudgetIds)
+       ? [...source.explicitBudgetIds]
+       : Object.keys(source?.budgets || {}),
+-    dayWeights: effectiveDayWeights(
+-      source,
+-      source ? EQUAL_DAY_WEIGHTS : (weekStart === currentWeekStart() ? state.defaultDayWeights : EQUAL_DAY_WEIGHTS),
+-    ),
+   };
+ }
+ 
+@@ -133,11 +126,7 @@ async function ensureCurrentWeekSnapshot() {
+     ? [...source.explicitBudgetIds]
+     : Object.keys(source?.budgets || {});
+   if (source && !Array.isArray(source.explicitBudgetIds)) changed = true;
+-  const dayWeights = source?.dayWeights
+-    ? effectiveDayWeights(source, EQUAL_DAY_WEIGHTS)
+-    : (source ? { ...EQUAL_DAY_WEIGHTS } : { ...state.defaultDayWeights });
+-  if (!source?.dayWeights) changed = true;
+-  const snapshot = { id: source?.id || weekStart, weekStart, budgets, explicitBudgetIds, dayWeights };
++  const snapshot = { id: source?.id || weekStart, weekStart, budgets, explicitBudgetIds };
+   if (changed) await state.dataSource.ensureCurrentWeekBudget(state.user.uid, snapshot);
+   const index = state.weekly.findIndex((week) => (week.weekStart || week.id) === weekStart);
+   if (index >= 0) state.weekly[index] = snapshot;
+@@ -151,7 +140,6 @@ async function applyCachedData() {
+   if (!snapshot) return false;
+   if (Array.isArray(snapshot.weeklyBudgets)) state.weekly = snapshot.weeklyBudgets;
+   if (Array.isArray(snapshot.dailyBudgets)) state.daily = snapshot.dailyBudgets;
+-  if (snapshot.defaultDayWeights) state.defaultDayWeights = effectiveDayWeights(null, snapshot.defaultDayWeights);
+   applyRestoredUiState(globalThis.window?.__weeklyTimeBudgetUiState || {});
+   return true;
+ }
+@@ -163,12 +151,10 @@ async function performLoadData() {
+     const result = await state.dataSource.loadTimeBudgetData(state.user.uid);
+     state.weekly = result.weeklyBudgets;
+     state.daily = result.dailyBudgets;
+-    state.defaultDayWeights = effectiveDayWeights(null, result.defaultDayWeights || EQUAL_DAY_WEIGHTS);
+     await ensureCurrentWeekSnapshot();
+     await state.runtime.store.patchSnapshot(state.user.uid, {
+       weeklyBudgets: state.weekly,
+       dailyBudgets: state.daily,
+-      defaultDayWeights: state.defaultDayWeights,
+       updatedAt: Date.now(),
+     });
+   } catch (error) {
+@@ -258,8 +244,7 @@ function renderDashboard() {
+       dailySummary: summarizeDailyCategories({
+         categories: periodCategories({ start: date, end: date, weekDocument: week, dailyDocument }),
+         entries: state.entries, date, weekDocument: week, dailyDocument,
+-        defaultDayWeights: state.defaultDayWeights,
+-      }),
++      }),
+     })}</div>`;
+   }
+   bindDashboardControls({
+@@ -323,7 +308,6 @@ function renderBudget() {
+     categories: activeCategories(state.budget.today),
+     weekDocument: normalizeWeek(currentWeekStart()),
+     dailyDocument: dailyFor(state.budget.today),
+-    defaultDayWeights: state.defaultDayWeights,
+     emptyHtml: document.querySelector('#empty-template')?.innerHTML || '',
+   })}</div>`;
+   bindTimeBudgetControls({
+@@ -360,7 +344,7 @@ async function saveDaily(inputs) {
+   alert('오늘 시간 예산을 저장했습니다.');
+ }
+ 
+-async function saveWeekly({ budgetInputs, dayWeightInputs }) {
++async function saveWeekly({ budgetInputs }) {
+   const weekStart = currentWeekStart();
+   const existing = normalizeWeek(weekStart);
+   const currentCategories = activeCategories(today());
+@@ -370,7 +354,7 @@ async function saveWeekly({ budgetInputs, dayWeightInputs }) {
+   );
+   const preservedExplicitBudgetIds = (existing.explicitBudgetIds || [])
+     .filter((categoryId) => !activeIds.has(categoryId));
+-  const snapshot = buildWeeklyBudgetSnapshot({ weekStart, categories: currentCategories, budgetInputs, dayWeightInputs });
++  const snapshot = buildWeeklyBudgetSnapshot({ weekStart, categories: currentCategories, budgetInputs });
+   snapshot.budgets = { ...preservedBudgets, ...snapshot.budgets };
+   snapshot.explicitBudgetIds = [...new Set([...preservedExplicitBudgetIds, ...snapshot.explicitBudgetIds])];
+   try { await state.dataSource.saveWeeklyBudget(state.user.uid, snapshot); }
+@@ -380,7 +364,7 @@ async function saveWeekly({ budgetInputs, dayWeightInputs }) {
+   }
+   await loadData(); renderBudget(); renderDashboard();
+   document.dispatchEvent(new CustomEvent('weekly-time-budget:data-changed'));
+-  alert('이번 주 시간 예산과 요일 비율을 저장했습니다.');
++  alert('이번 주 시간 예산을 저장했습니다.');
+ }
+ 
+ function updateHeader(view) {
+@@ -416,7 +400,6 @@ document.addEventListener('weekly-time-budget:infrastructure-state', async (even
+   if (!state.user) {
+     state.weekly = [];
+     state.daily = [];
+-    state.defaultDayWeights = { ...EQUAL_DAY_WEIGHTS };
+     state.cacheLoaded = false;
+     loadingPromise = null;
+     reloadRequested = false;
+diff --git a/src/time-budget-ui.js b/src/time-budget-ui.js
+index 116143e..65bb824 100644
+--- a/src/time-budget-ui.js
++++ b/src/time-budget-ui.js
+@@ -88,13 +88,12 @@ function renderTodayBudget(model) {
+       date: model.today,
+       weekDocument: model.weekDocument,
+       dailyDocument: null,
+-      defaultDayWeights: model.defaultDayWeights,
+     });
+     const direct = hasOwn(overrides, category.id);
+     return `<label class="time-budget-category-row">
+       <span class="time-budget-category-copy">
+         <strong>${escapeHtml(categoryDisplayName(category))}</strong>
+-        <small>${direct ? '직접 설정' : '요일 비율 적용'} · 자동 ${formatMinutes(automatic.minutes)}</small>
++        <small>${direct ? '직접 설정' : '주간 예산 균등 배분'} · 자동 ${formatMinutes(automatic.minutes)}</small>
+       </span>
+       <span class="hours-input"><input type="number" name="${escapeHtml(category.id)}" min="0" step="0.5" inputmode="decimal" value="${direct ? hoursValue(overrides[category.id]) : ''}" placeholder="자동 ${hoursValue(automatic.minutes)}"><span>시간</span></span>
+     </label>`;
+@@ -173,7 +172,7 @@ function renderSummaryCards(summary, budgetLabel) {
+ 
+ function renderCategorySummary(summary) {
+   const items = summary.categorySummaries || [];
+-  return `<div class="card dashboard-category-card"><div class="section-title"><h2>대분류별 달성률</h2><span class="badge">${items.length}개 분야</span></div>${items.length ? items.map((item) => `<div class="dashboard-category-row"><div><strong>${escapeHtml(item.name)}</strong>${item.budgetSource ? `<small>${item.budgetSource === 'direct' ? '직접 설정' : '요일 비율 적용'}</small>` : ''}${categoryProgressHtml(item)}<small class="goal-detail">${categoryGoalDetail(item)}</small></div><span>${formatMinutes(item.actualMinutes)} / ${formatMinutes(item.budgetMinutes)}</span><strong class="dashboard-achievement-text">${categoryAchievementText(item)}</strong></div>`).join('') : '<div class="empty-state"><p>표시할 대분류가 없습니다.</p></div>'}</div>`;
++  return `<div class="card dashboard-category-card"><div class="section-title"><h2>대분류별 달성률</h2><span class="badge">${items.length}개 분야</span></div>${items.length ? items.map((item) => `<div class="dashboard-category-row"><div><strong>${escapeHtml(item.name)}</strong>${item.budgetSource ? `<small>${item.budgetSource === 'direct' ? '직접 설정' : '주간 예산 균등 배분'}</small>` : ''}${categoryProgressHtml(item)}<small class="goal-detail">${categoryGoalDetail(item)}</small></div><span>${formatMinutes(item.actualMinutes)} / ${formatMinutes(item.budgetMinutes)}</span><strong class="dashboard-achievement-text">${categoryAchievementText(item)}</strong></div>`).join('') : '<div class="empty-state"><p>표시할 대분류가 없습니다.</p></div>'}</div>`;
+ }
+ 
+ function renderCalendar(model) {
