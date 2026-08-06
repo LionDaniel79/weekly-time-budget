@@ -42,12 +42,21 @@ test('주별 통계는 기록 유무와 관계없이 한 주씩 앞뒤로 이동
 });
 
 test('대분류 관리와 저장 흐름에서 기본 주간 예산을 제거한다', async () => {
-  const [categoryFeature, app] = await Promise.all([
+  const [categoryFeature, bulkEditor, app] = await Promise.all([
     read('src/category-feature.js'),
+    read('src/category-bulk-editor.js'),
     read('src/app.js'),
   ]);
   assert.doesNotMatch(categoryFeature, /기본 주간 예산|name="hours"|defaultBudgetMinutes/);
+  assert.doesNotMatch(bulkEditor, /name="hours"|defaultBudgetMinutes|기본 예산/);
   const saveStart = app.indexOf('async function saveCategory');
   const saveEnd = app.indexOf('async function archiveCategory', saveStart);
   assert.doesNotMatch(app.slice(saveStart, saveEnd), /defaultBudgetMinutes|budgetMinutes/);
+});
+
+test('기존 자동 생성 주간 문서는 사용자 수정이 없으면 이전 결과 방식으로 한 번 마이그레이션한다', async () => {
+  const feature = await read('src/time-budget-feature.js');
+  assert.match(feature, /initializedFromPreviousResults/);
+  assert.match(feature, /explicitBudgetIds\.length === 0/);
+  assert.match(feature, /shouldInitializeFromPreviousResults/);
 });
