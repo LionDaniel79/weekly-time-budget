@@ -45,10 +45,12 @@ jobs:
 
       - name: Verify deployed build contents
         run: |
-          grep -q '2026.08.07-previous-results-v22' _site/index.html
-          grep -q '2026.08.07-previous-results-v22' _site/service-worker.js
+          grep -q '2026.08.07-previous-results-v23' _site/index.html
+          grep -q '2026.08.07-previous-results-v23' _site/service-worker.js
           grep -q '지난주 같은 요일의 실제 기록을 기본으로 불러옵니다' _site/src/time-budget-ui.js
+          grep -q 'defaultSourceVersion' _site/src/previous-results-budget-migration.js
           ! grep -q '기본 주간 예산(시간)' _site/src/category-feature.js
+          ! grep -q 'category-bulk-editor.js' _site/index.html
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
