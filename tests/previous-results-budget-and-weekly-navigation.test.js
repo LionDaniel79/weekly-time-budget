@@ -34,6 +34,14 @@ test('이번 주 기본값은 지난주 실제 합계를 30분 단위로 올림�
   }), { bible: 240, sermon: 240, prayer: 0 });
 });
 
+test('시간 예산 화면은 자동 기본값을 빈칸이나 placeholder가 아니라 실제 입력값으로 표시한다', async () => {
+  const ui = await read('src/time-budget-ui.js');
+  assert.match(ui, /value="\$\{hoursValue\(value\)\}"/);
+  assert.match(ui, /지난주 같은 요일의 실제 기록을 기본으로 불러옵니다/);
+  assert.match(ui, /지난주 월요일~주일 실제 기록을 0\.5시간 단위로 올림/);
+  assert.doesNotMatch(ui, /placeholder="자동|placeholder="기본/);
+});
+
 test('주별 통계는 기록 유무와 관계없이 한 주씩 앞뒤로 이동하고 현재 주를 넘지 않는다', () => {
   assert.equal(adjacentWeekStart('2026-07-20', 'next', '2026-08-03'), '2026-07-27');
   assert.equal(adjacentWeekStart('2026-07-27', 'next', '2026-08-03'), '2026-08-03');
