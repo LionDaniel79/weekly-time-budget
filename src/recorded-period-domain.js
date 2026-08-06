@@ -48,6 +48,15 @@ export function nextRecordedPeriodOrCurrent(periods = [], selected, current) {
   return periods.find((item) => item > selected && item <= current) || current;
 }
 
+export function adjacentWeekStart(selected, direction, current) {
+  if (!isValidDateKey(selected) || !isValidDateKey(current)) return null;
+  const date = new Date(`${selected}T12:00:00`);
+  date.setDate(date.getDate() + (direction === 'previous' ? -7 : 7));
+  const target = getWeekRange(date).start;
+  if (direction !== 'previous' && target > current) return null;
+  return target;
+}
+
 export function coerceRecordedPeriodSelection({ selected, current, recordedPeriods = [] }) {
   if (!selected || selected > current) return current;
   if (selected === current || recordedPeriods.includes(selected)) return selected;
@@ -56,23 +65,14 @@ export function coerceRecordedPeriodSelection({ selected, current, recordedPerio
     || current;
 }
 
-export function monthOptionStates({
-  recordedMonths = [],
-  year,
-  currentYear,
-  currentMonth,
-}) {
+export function monthOptionStates({ recordedMonths = [], year, currentYear, currentMonth }) {
   const recorded = new Set(recordedMonths);
   return Array.from({ length: 12 }, (_, index) => {
     const month = index + 1;
     const key = `${year}-${String(month).padStart(2, '0')}`;
     const current = year === currentYear && month === currentMonth;
     const future = year > currentYear || (year === currentYear && month > currentMonth);
-    return {
-      month,
-      enabled: !future && (current || recorded.has(key)),
-      current,
-    };
+    return { month, enabled: !future && (current || recorded.has(key)), current };
   });
 }
 
@@ -82,12 +82,7 @@ export function recordedYearOptions(recordedYears = [], currentYear) {
     .sort((left, right) => right - left);
 }
 
-export function defaultMonthForYear({
-  year,
-  currentYear,
-  currentMonth,
-  recordedMonths = [],
-}) {
+export function defaultMonthForYear({ year, currentYear, currentMonth, recordedMonths = [] }) {
   if (year === currentYear) return currentMonth;
   if (year > currentYear) return null;
   const months = recordedMonths

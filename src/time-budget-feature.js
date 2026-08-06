@@ -1,7 +1,9 @@
 import { getWeekRange, summarizeWeeklyBudgetPeriod, toDateKey } from './domain.js';
 import {
+  buildPreviousWeekBudgetDefaults,
   buildWeeklyBudgetSnapshot,
-  parseOptionalHours,
+  parseOptionalDailyHours,
+  previousSameWeekdayMinutes,
   previousRecordedDate,
   nextRecordedDateOrToday,
   recordedDateKeys,
@@ -41,7 +43,6 @@ let loadingPromise = null;
 let reloadRequested = false;
 
 const activeCategories = (date = today()) => filterCategoriesActiveOnDate(state.categories, date);
-const defaultBudget = (category) => Number(category.defaultBudgetMinutes ?? category.budgetMinutes ?? 0) || 0;
 
 function saveFeatureUiState(partial = {}) {
   document.dispatchEvent(new CustomEvent('weekly-time-budget:save-ui-state', { detail: partial }));
@@ -76,13 +77,16 @@ function allKnownCategories() {
 }
 
 const findWeekDocument = (weekStart) => state.weekly.find((week) => (week.weekStart || week.id) === weekStart) || null;
+const weeklyDefaults = (weekStart) => buildPreviousWeekBudgetDefaults({
+  categories: activeCategories(weekStart),
+  entries: state.entries,
+  weekStart,
+});
 
 function normalizeWeek(weekStart) {
   const source = findWeekDocument(weekStart);
-  const budgets = { ...(source?.budgets || {}) };
-  state.categories.forEach((category) => {
-    if (budgets[category.id] === undefined) budgets[category.id] = defaultBudget(category);
-  });
+  const defaults = weekStart === currentWeekStart() ? weeklyDefaults(weekStart) : {};
+  const budgets = { ...defaults, ...(source?.budgets || {}) };
   return {
     id: source?.id || weekStart,
     weekStart,
@@ -96,6 +100,13 @@ function normalizeWeek(weekStart) {
 const dailyFor = (date) => state.daily.find((item) => (item.date || item.id) === date) || null;
 const weekRange = (key) => getWeekRange(new Date(`${key}T12:00:00`));
 const weekLabel = (key) => { const range = weekRange(key); return `${range.start} — ${range.end}`; };
+
+function dailyDefaults(date) {
+  return Object.fromEntries(activeCategories(date).map((category) => [
+    category.id,
+    previousSameWeekdayMinutes(state.entries, category.id, date),
+  ]));
+}
 
 function periodCategories({ start, end, weekDocument, dailyDocument = null }) {
   const activeIds = new Set(state.categories.map((category) => category.id));
@@ -112,22 +123,29 @@ function periodCategories({ start, end, weekDocument, dailyDocument = null }) {
     .map((category) => activeIds.has(category.id) ? category : { ...category, defaultBudgetMinutes: 0, budgetMinutes: 0 });
 }
 
+function shouldInitializeFromPreviousResults(source) {
+  if (!source) return true;
+  if (source.initializedFromPreviousResults) return false;
+  const explicitBudgetIds = Array.isArray(source.explicitBudgetIds)
+    ? source.explicitBudgetIds
+    : Object.keys(source.budgets || {});
+  return explicitBudgetIds.length === 0;
+}
+
 async function ensureCurrentWeekSnapshot() {
   const weekStart = currentWeekStart();
   const source = findWeekDocument(weekStart);
-  const budgets = { ...(source?.budgets || {}) };
-  let changed = !source;
-  for (const category of activeCategories(today())) {
-    if (budgets[category.id] !== undefined) continue;
-    budgets[category.id] = defaultBudget(category);
-    changed = true;
-  }
-  const explicitBudgetIds = Array.isArray(source?.explicitBudgetIds)
-    ? [...source.explicitBudgetIds]
-    : Object.keys(source?.budgets || {});
-  if (source && !Array.isArray(source.explicitBudgetIds)) changed = true;
-  const snapshot = { id: source?.id || weekStart, weekStart, budgets, explicitBudgetIds };
-  if (changed) await state.dataSource.ensureCurrentWeekBudget(state.user.uid, snapshot);
+  if (!shouldInitializeFromPreviousResults(source)) return;
+  const categories = activeCategories(today());
+  const budgets = buildPreviousWeekBudgetDefaults({ categories, entries: state.entries, weekStart });
+  const snapshot = {
+    id: source?.id || weekStart,
+    weekStart,
+    budgets,
+    explicitBudgetIds: [],
+    initializedFromPreviousResults: true,
+  };
+  await state.dataSource.ensureCurrentWeekBudget(state.user.uid, snapshot);
   const index = state.weekly.findIndex((week) => (week.weekStart || week.id) === weekStart);
   if (index >= 0) state.weekly[index] = snapshot;
   else state.weekly.push(snapshot);
@@ -302,12 +320,15 @@ function moveCalendar(direction) {
 function renderBudget() {
   const root = document.querySelector('#budget-view');
   if (!root || !state.user) return;
+  const weekStart = currentWeekStart();
   root.innerHTML = `<div data-feature-ui="budget">${renderTimeBudgetHtml({
     mode: state.budget.mode,
     today: state.budget.today,
     categories: activeCategories(state.budget.today),
-    weekDocument: normalizeWeek(currentWeekStart()),
+    weekDocument: normalizeWeek(weekStart),
+    weeklyDefaults: weeklyDefaults(weekStart),
     dailyDocument: dailyFor(state.budget.today),
+    dailyDefaults: dailyDefaults(state.budget.today),
     emptyHtml: document.querySelector('#empty-template')?.innerHTML || '',
   })}</div>`;
   bindTimeBudgetControls({
@@ -331,7 +352,7 @@ async function saveDaily(inputs) {
   );
   const overrides = { ...preservedOverrides };
   for (const category of currentCategories) {
-    const parsed = parseOptionalHours(inputs[category.id]);
+    const parsed = parseOptionalDailyHours(inputs[category.id]);
     if (parsed.explicit) overrides[category.id] = parsed.minutes;
   }
   try { await state.dataSource.saveDailyBudget(state.user.uid, date, overrides); }
@@ -354,9 +375,15 @@ async function saveWeekly({ budgetInputs }) {
   );
   const preservedExplicitBudgetIds = (existing.explicitBudgetIds || [])
     .filter((categoryId) => !activeIds.has(categoryId));
-  const snapshot = buildWeeklyBudgetSnapshot({ weekStart, categories: currentCategories, budgetInputs });
+  const snapshot = buildWeeklyBudgetSnapshot({
+    weekStart,
+    categories: currentCategories,
+    budgetInputs,
+    defaultBudgets: weeklyDefaults(weekStart),
+  });
   snapshot.budgets = { ...preservedBudgets, ...snapshot.budgets };
   snapshot.explicitBudgetIds = [...new Set([...preservedExplicitBudgetIds, ...snapshot.explicitBudgetIds])];
+  snapshot.initializedFromPreviousResults = true;
   try { await state.dataSource.saveWeeklyBudget(state.user.uid, snapshot); }
   catch (error) {
     showToast({ type: 'error', title: '이번 주 시간 예산을 저장하지 못했습니다.', message: '예산 변경은 인터넷 연결 후 다시 시도하세요.' });
@@ -422,6 +449,7 @@ document.addEventListener('weekly-time-budget:entries-changed', async (event) =>
   if (Array.isArray(event.detail?.entries)) state.entries = event.detail.entries;
   else if (state.runtime) state.entries = await state.runtime.mergedEntries(state.remoteEntries);
   if (state.activeView === 'dashboard') renderDashboard();
+  if (state.activeView === 'budget') renderBudget();
 });
 
 document.addEventListener('weekly-time-budget:data-changed', async () => {

@@ -1,6 +1,5 @@
 import {
   calendarMonthCells,
-  explicitBudgetIdSet,
   resolveDailyBudget,
   resolveWeeklyBudgetMinutes,
 } from './time-budget-domain.js';
@@ -13,8 +12,8 @@ const escapeHtml = (value = '') => String(value).replace(/[&<>'"]/g, (char) => (
 const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object || {}, key);
 
 const hoursValue = (minutes) => {
-  const value = Number(minutes || 0) / 60;
-  return Number.isInteger(value) ? String(value) : String(Math.round(value * 10) / 10);
+  const value = Math.max(0, Number(minutes) || 0) / 60;
+  return Number.isInteger(value) ? String(value) : String(Math.round(value * 100) / 100);
 };
 
 const formatMinutes = (minutes) => {
@@ -82,41 +81,37 @@ function renderBudgetTabs(mode) {
 
 function renderTodayBudget(model) {
   const overrides = model.dailyDocument?.overrides || {};
+  const defaults = model.dailyDefaults || {};
   const rows = model.categories.map((category) => {
-    const automatic = resolveDailyBudget({
-      category,
-      date: model.today,
-      weekDocument: model.weekDocument,
-      dailyDocument: null,
-    });
     const direct = hasOwn(overrides, category.id);
+    const value = direct ? overrides[category.id] : (defaults[category.id] || 0);
     return `<label class="time-budget-category-row">
       <span class="time-budget-category-copy">
         <strong>${escapeHtml(categoryDisplayName(category))}</strong>
-        <small>${direct ? '직접 설정' : '주간 예산 균등 배분'} · 자동 ${formatMinutes(automatic.minutes)}</small>
+        <small>${direct ? '직접 저장한 예산' : '지난주 같은 요일 실제 기록'} · ${formatMinutes(value)}</small>
       </span>
-      <span class="hours-input"><input type="number" name="${escapeHtml(category.id)}" min="0" step="0.5" inputmode="decimal" value="${direct ? hoursValue(overrides[category.id]) : ''}" placeholder="자동 ${hoursValue(automatic.minutes)}"><span>시간</span></span>
+      <span class="hours-input"><input type="number" name="${escapeHtml(category.id)}" min="0" step="any" inputmode="decimal" value="${hoursValue(value)}"><span>시간</span></span>
     </label>`;
   }).join('');
   return `<form id="daily-budget-form" class="time-budget-form" novalidate>
-    <div class="section-title"><div><h2>오늘 시간 예산</h2><p class="muted">${escapeHtml(model.today)} · 필요한 대분류만 직접 설정하세요. 빈칸은 자동 예산, 0은 명시적 0시간입니다.</p></div></div>
+    <div class="section-title"><div><h2>오늘 시간 예산</h2><p class="muted">${escapeHtml(model.today)} · 지난주 같은 요일의 실제 기록을 기본으로 불러옵니다. 자유롭게 수정할 수 있습니다.</p></div></div>
     <div class="time-budget-category-list">${rows || model.emptyHtml || ''}</div>
     <div class="bulk-save-actions"><button class="primary-button" type="submit">저장</button></div>
   </form>`;
 }
 
 function renderWeekBudget(model) {
-  const explicitIds = explicitBudgetIdSet(model.weekDocument);
+  const defaults = model.weeklyDefaults || {};
   const rows = model.categories.map((category) => {
-    const effective = resolveWeeklyBudgetMinutes(category, model.weekDocument);
-    const explicit = explicitIds.has(category.id);
+    const saved = model.weekDocument?.budgets?.[category.id];
+    const value = saved === undefined ? (defaults[category.id] || 0) : resolveWeeklyBudgetMinutes(category, model.weekDocument);
     return `<label class="time-budget-category-row">
-      <span class="time-budget-category-copy"><strong>${escapeHtml(categoryDisplayName(category))}</strong><small>기본 ${formatMinutes(category.defaultBudgetMinutes ?? category.budgetMinutes ?? 0)} · 적용 ${formatMinutes(effective)}</small></span>
-      <span class="hours-input"><input type="number" name="${escapeHtml(category.id)}" min="0" step="0.5" inputmode="decimal" value="${explicit ? hoursValue(model.weekDocument?.budgets?.[category.id]) : ''}" placeholder="기본 ${hoursValue(category.defaultBudgetMinutes ?? category.budgetMinutes ?? 0)}"><span>시간</span></span>
+      <span class="time-budget-category-copy"><strong>${escapeHtml(categoryDisplayName(category))}</strong><small>${saved === undefined ? '지난주 실제 기록 · 30분 단위 올림' : '이번 주 저장 예산'} · ${formatMinutes(value)}</small></span>
+      <span class="hours-input"><input type="number" name="${escapeHtml(category.id)}" min="0" step="0.5" inputmode="decimal" value="${hoursValue(value)}"><span>시간</span></span>
     </label>`;
   }).join('');
   return `<form id="weekly-budget-form" class="time-budget-form" novalidate>
-    <section><div class="section-title"><div><h2>이번 주 전체 예산</h2><p class="muted">빈칸은 기본 주간 예산, 0은 이번 주 명시적 0시간입니다.</p></div></div><div class="time-budget-category-list">${rows || model.emptyHtml || ''}</div></section>
+    <section><div class="section-title"><div><h2>이번 주 전체 예산</h2><p class="muted">지난주 월요일~주일 실제 기록을 0.5시간 단위로 올림해 기본 입력합니다. 자유롭게 수정할 수 있습니다.</p></div></div><div class="time-budget-category-list">${rows || model.emptyHtml || ''}</div></section>
     <div class="bulk-save-actions"><button class="primary-button" type="submit">저장</button></div>
   </form>`;
 }
@@ -172,7 +167,7 @@ function renderSummaryCards(summary, budgetLabel) {
 
 function renderCategorySummary(summary) {
   const items = summary.categorySummaries || [];
-  return `<div class="card dashboard-category-card"><div class="section-title"><h2>대분류별 달성률</h2><span class="badge">${items.length}개 분야</span></div>${items.length ? items.map((item) => `<div class="dashboard-category-row"><div><strong>${escapeHtml(item.name)}</strong>${item.budgetSource ? `<small>${item.budgetSource === 'direct' ? '직접 설정' : '주간 예산 균등 배분'}</small>` : ''}${categoryProgressHtml(item)}<small class="goal-detail">${categoryGoalDetail(item)}</small></div><span>${formatMinutes(item.actualMinutes)} / ${formatMinutes(item.budgetMinutes)}</span><strong class="dashboard-achievement-text">${categoryAchievementText(item)}</strong></div>`).join('') : '<div class="empty-state"><p>표시할 대분류가 없습니다.</p></div>'}</div>`;
+  return `<div class="card dashboard-category-card"><div class="section-title"><h2>대분류별 달성률</h2><span class="badge">${items.length}개 분야</span></div>${items.length ? items.map((item) => `<div class="dashboard-category-row"><div><strong>${escapeHtml(item.name)}</strong>${item.budgetSource ? `<small>${item.budgetSource === 'direct' ? '직접 설정' : '이번 주 예산 균등 배분'}</small>` : ''}${categoryProgressHtml(item)}<small class="goal-detail">${categoryGoalDetail(item)}</small></div><span>${formatMinutes(item.actualMinutes)} / ${formatMinutes(item.budgetMinutes)}</span><strong class="dashboard-achievement-text">${categoryAchievementText(item)}</strong></div>`).join('') : '<div class="empty-state"><p>표시할 대분류가 없습니다.</p></div>'}</div>`;
 }
 
 function renderCalendar(model) {

@@ -28,21 +28,19 @@ test('빈칸과 0을 구분하고 0.5시간 단위를 검사한다', () => {
   assert.throws(() => parseOptionalHours('-0.5'), /0 이상/);
 });
 
-test('주간 스냅숏은 기본값과 명시적 0을 함께 보존한다', () => {
+test('주간 스냅숏은 이전 결과 기본값과 명시적 0을 함께 보존한다', () => {
   const snapshot = buildWeeklyBudgetSnapshot({
     weekStart: '2026-07-20',
-    categories: [
-      { id: 'reading', defaultBudgetMinutes: 420 },
-      { id: 'thesis', defaultBudgetMinutes: 900 },
-    ],
+    categories: [{ id: 'reading' }, { id: 'thesis' }],
     budgetInputs: { reading: '', thesis: '0' },
+    defaultBudgets: { reading: 420, thesis: 900 },
   });
   assert.deepEqual(snapshot.budgets, { reading: 420, thesis: 0 });
   assert.deepEqual(snapshot.explicitBudgetIds, ['thesis']);
 });
 
 test('오늘 직접 예산은 자동 예산보다 우선하며 0도 유효하다', () => {
-  const category = { id: 'reading', defaultBudgetMinutes: 700 };
+  const category = { id: 'reading' };
   const weekDocument = { budgets: { reading: 700 } };
   assert.deepEqual(resolveDailyBudget({ category, date: '2026-07-20', weekDocument, dailyDocument: null }), { minutes: 100, source: 'equal' });
   assert.deepEqual(resolveDailyBudget({ category, date: '2026-07-20', weekDocument, dailyDocument: { overrides: { reading: 0 } } }), { minutes: 0, source: 'direct' });
@@ -50,7 +48,7 @@ test('오늘 직접 예산은 자동 예산보다 우선하며 0도 유효하다
 
 test('카운트다운 기준값은 직접 일간 예산과 오늘 기록만 사용한다', () => {
   const result = resolveCountdownBudgetBaseline({
-    category: { id: 'reading', defaultBudgetMinutes: 300 },
+    category: { id: 'reading' },
     date: '2026-07-28',
     entries: [
       { categoryId: 'reading', date: '2026-07-28', durationMinutes: 30 },
@@ -69,7 +67,7 @@ test('카운트다운 기준값은 직접 일간 예산과 오늘 기록만 사�
 
 test('카운트다운 기준값은 주간 배분과 동기화 대기 기록을 반영한다', () => {
   const result = resolveCountdownBudgetBaseline({
-    category: { id: 'reading', defaultBudgetMinutes: 70 },
+    category: { id: 'reading' },
     date: '2026-07-27',
     entries: [{ categoryId: 'reading', date: '2026-07-27', durationMinutes: 25, syncStatus: 'pending' }],
     weekDocument: { budgets: { reading: 140 } },
@@ -83,7 +81,7 @@ test('카운트다운 기준값은 주간 배분과 동기화 대기 기록을 �
 
 test('카운트다운 기준값은 예산 초과를 음수로 보존한다', () => {
   const result = resolveCountdownBudgetBaseline({
-    category: { id: 'reading', defaultBudgetMinutes: 120 },
+    category: { id: 'reading' },
     date: '2026-07-28',
     entries: [{ categoryId: 'reading', date: '2026-07-28', durationMinutes: 145 }],
     weekDocument: null,
@@ -118,7 +116,7 @@ test('달력은 기록이 있는 과거와 오늘 날짜만 활성화한다', ()
 
 test('일간 요약은 직접·자동 예산과 실제 기록을 계산한다', () => {
   const result = summarizeDailyCategories({
-    categories: [{ id: 'reading', name: '독서', defaultBudgetMinutes: 700 }],
+    categories: [{ id: 'reading', name: '독서' }],
     entries: [{ categoryId: 'reading', date: '2026-07-20', durationMinutes: 60 }],
     date: '2026-07-20',
     weekDocument: { budgets: { reading: 700 } },
@@ -143,13 +141,12 @@ test('활성·보관 대분류에 없는 고아 예산 참조를 제거한다', 
   assert.deepEqual(cleaned, { reading: 420, thesis: 30 });
 });
 
-
 test('일간 요약은 절제 목표와 전체 목표 준수를 계산한다', () => {
   const result = summarizeDailyCategories({
     categories: [
-      { id: 'prayer', name: '기도', defaultBudgetMinutes: 1260 },
-      { id: 'reading', name: '독서', defaultBudgetMinutes: 420 },
-      { id: 'phone', name: '스마트폰', goalType: 'restraint', defaultBudgetMinutes: 1260 },
+      { id: 'prayer', name: '기도' },
+      { id: 'reading', name: '독서' },
+      { id: 'phone', name: '스마트폰', goalType: 'restraint' },
     ],
     entries: [
       { categoryId: 'prayer', date: '2026-07-27', durationMinutes: 180 },
@@ -157,12 +154,8 @@ test('일간 요약은 절제 목표와 전체 목표 준수를 계산한다', (
       { categoryId: 'phone', date: '2026-07-27', durationMinutes: 240, goalType: 'restraint' },
     ],
     date: '2026-07-27',
-    weekDocument: {
-      budgets: { prayer: 1260, reading: 420, phone: 1260 },
-    },
-    dailyDocument: {
-      overrides: { prayer: 180, reading: 60, phone: 180 },
-    },
+    weekDocument: { budgets: { prayer: 1260, reading: 420, phone: 1260 } },
+    dailyDocument: { overrides: { prayer: 180, reading: 60, phone: 180 } },
   });
   const phone = result.categorySummaries.find((item) => item.id === 'phone');
   assert.equal(phone.name, '스마트폰 (절제)');

@@ -1,7 +1,7 @@
 import { cacheModuleGraph } from './src/service-worker-cache.js';
 
-// Refresh installed clients after removing the weekday allocation editor.
-const APP_BUILD = '2026.08.06-equal-budget-v21';
+// Refresh installed clients after previous-result budget defaults and weekly statistics navigation changes.
+const APP_BUILD = '2026.08.07-previous-results-v22';
 const SHELL_CACHE = `weekly-time-budget-shell-${APP_BUILD}`;
 // Migration marker for older installed clients and legacy contract tests:
 // const SHELL_CACHE = 'weekly-time-budget-shell-v16';
