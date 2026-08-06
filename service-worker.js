@@ -1,9 +1,7 @@
 import { cacheModuleGraph } from './src/service-worker-cache.js';
 
-// Refresh installed clients after forcing the previous-result budget migration.
-const APP_BUILD = '2026.08.07-previous-results-v23';
+const APP_BUILD = '2026.08.07-runtime-reset-v24';
 const SHELL_CACHE = `weekly-time-budget-shell-${APP_BUILD}`;
-// Migration marker for older installed clients and legacy contract tests:
 // const SHELL_CACHE = 'weekly-time-budget-shell-v16';
 const RUNTIME_CACHE = 'weekly-time-budget-firebase-v2';
 const APP_CACHE_PREFIX = 'weekly-time-budget-';
@@ -46,13 +44,15 @@ async function firebaseCacheFirst(request) {
   return response;
 }
 
-async function shellCacheFirst(request) {
+async function sameOriginNetworkFirst(request) {
   const shell = await caches.open(SHELL_CACHE);
-  const cached = await shell.match(request);
-  if (cached) return cached;
-  const response = await fetch(request, { cache: 'no-store' });
-  if (response.ok) await shell.put(request, response.clone());
-  return response;
+  try {
+    const response = await fetch(request, { cache: 'no-store' });
+    if (response.ok) await shell.put(request, response.clone());
+    return response;
+  } catch {
+    return (await shell.match(request)) || Response.error();
+  }
 }
 
 async function navigationNetworkFirst(request) {
@@ -98,5 +98,5 @@ self.addEventListener('fetch', (event) => {
   if (isSensitiveApi(url)) return;
   if (request.mode === 'navigate') return event.respondWith(navigationNetworkFirst(request));
   if (isFirebaseModule(url)) return event.respondWith(firebaseCacheFirst(request));
-  if (url.origin === self.location.origin) event.respondWith(shellCacheFirst(request));
+  if (url.origin === self.location.origin) event.respondWith(sameOriginNetworkFirst(request));
 });
