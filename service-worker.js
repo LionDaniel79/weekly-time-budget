@@ -1,7 +1,7 @@
 import { cacheModuleGraph } from './src/service-worker-cache.js';
 
-// Refresh installed clients after previous-result budget defaults and weekly statistics navigation changes.
-const APP_BUILD = '2026.08.07-previous-results-v22';
+// Refresh installed clients after forcing the previous-result budget migration.
+const APP_BUILD = '2026.08.07-previous-results-v23';
 const SHELL_CACHE = `weekly-time-budget-shell-${APP_BUILD}`;
 // Migration marker for older installed clients and legacy contract tests:
 // const SHELL_CACHE = 'weekly-time-budget-shell-v16';
@@ -15,7 +15,7 @@ const SHELL_URLS = [
   './src/category-effective-date.js', './src/goal-domain.js', './src/domain.js', './src/manual-entry.js',
   './src/app.js', './src/app-bootstrap.js', './src/app-data-source.js', './src/app-entry-service.js', './src/app-session-state.js',
   './src/view-change-events.js', './src/auth-login-guard.js', './src/category-selection-memory.js',
-  './src/category-bulk-editor.js', './src/category-delete-guard.js', './src/orphan-local-timer-cleanup.js',
+  './src/category-delete-guard.js', './src/orphan-local-timer-cleanup.js', './src/previous-results-budget-migration.js',
   './src/local-timer-removal-reload.js', './src/countdown-timer-domain.js', './src/time-budget-domain.js',
   './src/time-budget-ui.js', './src/time-budget-feature.js', './src/record-feature.js', './src/history-feature.js',
   './src/app-shell.js', './src/auth-feature.js', './src/category-feature.js', './src/recorded-period-domain.js',
@@ -50,7 +50,7 @@ async function shellCacheFirst(request) {
   const shell = await caches.open(SHELL_CACHE);
   const cached = await shell.match(request);
   if (cached) return cached;
-  const response = await fetch(request);
+  const response = await fetch(request, { cache: 'no-store' });
   if (response.ok) await shell.put(request, response.clone());
   return response;
 }
