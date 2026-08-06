@@ -12,12 +12,18 @@ test('1단계: 앱 셸이 모든 메뉴 전환을 capture 단계에서 소유한
   assert.doesNotMatch(shell, /button\.onclick\s*=/);
 });
 
-test('2단계: PWA는 세대별 셸과 navigation network-first를 사용한다', async () => {
-  const [worker, html] = await Promise.all([read('service-worker.js'), read('index.html')]);
-  assert.match(worker, /APP_BUILD = '2026\.08\.07-previous-results-v23'/);
+test('2단계: PWA는 최신 세대와 일회성 캐시 초기화를 사용한다', async () => {
+  const [worker, html, registration] = await Promise.all([
+    read('service-worker.js'), read('index.html'), read('src/service-worker-registration.js'),
+  ]);
+  assert.match(worker, /APP_BUILD = '2026\.08\.07-runtime-reset-v24'/);
   assert.match(worker, /navigationNetworkFirst/);
-  assert.match(worker, /cache: 'no-store'/);
-  assert.match(html, /data-app-build="2026\.08\.07-previous-results-v23"/);
+  assert.match(worker, /sameOriginNetworkFirst/);
+  assert.match(html, /data-app-build="2026\.08\.07-runtime-reset-v24"/);
+  assert.match(html, /앱 버전 v24/);
+  assert.match(registration, /getRegistrations/);
+  assert.match(registration, /caches\.keys/);
+  assert.match(registration, /updateViaCache: 'none'/);
 });
 
 test('3단계: 보관·복원 UI는 category feature와 app data source가 소유한다', async () => {
@@ -25,6 +31,8 @@ test('3단계: 보관·복원 UI는 category feature와 app data source가 소�
     read('index.html'), read('src/category-feature.js'), read('src/app-data-source.js'),
   ]);
   assert.doesNotMatch(html, /category-ui-patch\.js/);
+  assert.doesNotMatch(html, /category-bulk-editor\.js/);
+  assert.doesNotMatch(category, /name="hours"|기본 주간 예산/);
   assert.match(category, /onArchive/);
   assert.match(category, /onRestore/);
   assert.match(dataSource, /archiveCategory/);
