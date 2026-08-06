@@ -60,25 +60,13 @@ async function applyAllCategories(button) {
   for (let index = 0; index < rows.length; index += 1) {
     const row = rows[index];
     const nameInput = row.querySelector('[name="name"]');
-    const hoursInput = row.querySelector('[name="hours"]');
     const name = nameInput?.value.trim() || '';
-    const hours = Number(hoursInput?.value);
     if (!name) {
       alert('대분류 이름을 입력하세요.');
       nameInput?.focus();
       return;
     }
-    if (!Number.isFinite(hours) || hours < 0) {
-      alert(`${name}의 기본 예산 시간을 확인하세요.`);
-      hoursInput?.focus();
-      return;
-    }
-    updates.push({
-      id: row.dataset.id,
-      name,
-      defaultBudgetMinutes: hours * 60,
-      order: index + 1,
-    });
+    updates.push({ id: row.dataset.id, name, order: index + 1 });
   }
 
   applying = true;
@@ -90,17 +78,13 @@ async function applyAllCategories(button) {
     updates.forEach((update) => {
       batch.set(
         storeModule.doc(db, 'users', user.uid, 'categories', update.id),
-        {
-          name: update.name,
-          defaultBudgetMinutes: update.defaultBudgetMinutes,
-          order: update.order,
-        },
+        { name: update.name, order: update.order },
         { merge: true },
       );
     });
     await batch.commit();
     sessionStorage.setItem(RETURN_VIEW_KEY, 'true');
-    alert('대분류 이름, 기본 예산, 순서를 일괄 적용했습니다.');
+    alert('대분류 이름과 순서를 저장했습니다.');
     location.reload();
   } catch (error) {
     console.error(error);
