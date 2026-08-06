@@ -20,18 +20,14 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
-
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
-
       - name: Install dependencies
         run: npm install
-
       - name: Run Node tests
         run: npm test
-
       - name: Prepare Pages artifact
         env:
           FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY || vars.FIREBASE_API_KEY }}
@@ -42,19 +38,17 @@ jobs:
           FIREBASE_APP_ID: ${{ secrets.FIREBASE_APP_ID || vars.FIREBASE_APP_ID }}
           FIREBASE_MEASUREMENT_ID: ${{ secrets.FIREBASE_MEASUREMENT_ID || vars.FIREBASE_MEASUREMENT_ID }}
         run: npm run prepare:pages
-
       - name: Verify deployed build contents
         run: |
-          grep -q '2026.08.07-previous-results-v23' _site/index.html
-          grep -q '2026.08.07-previous-results-v23' _site/service-worker.js
+          grep -q '2026.08.07-runtime-reset-v24' _site/index.html
+          grep -q '2026.08.07-runtime-reset-v24' _site/service-worker.js
+          grep -q '앱 버전 v24' _site/index.html
+          grep -q 'previous-results-v3' _site/src/previous-results-budget-migration.js
           grep -q '지난주 같은 요일의 실제 기록을 기본으로 불러옵니다' _site/src/time-budget-ui.js
-          grep -q 'defaultSourceVersion' _site/src/previous-results-budget-migration.js
           ! grep -q '기본 주간 예산(시간)' _site/src/category-feature.js
           ! grep -q 'category-bulk-editor.js' _site/index.html
-
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
-
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
