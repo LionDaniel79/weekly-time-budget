@@ -1,0 +1,74 @@
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index f37c62c..844dcd7 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -13,16 +13,6 @@ jobs:
+     runs-on: ubuntu-latest
+     steps:
+       - uses: actions/checkout@v4
+-      - name: Upload branch source
+-        uses: actions/upload-artifact@v4
+-        with:
+-          name: branch-source
+-          path: |
+-            .
+-            !node_modules
+-            !_site
+-          include-hidden-files: true
+-          retention-days: 1
+       - uses: actions/setup-node@v4
+         with:
+           node-version: 22
+diff --git a/index.html b/index.html
+index 71921b8..61663f4 100644
+--- a/index.html
++++ b/index.html
+@@ -1,5 +1,5 @@
+ <!doctype html>
+-<html lang="ko" data-app-build="2026.08.04-infrastructure-v19">
++<html lang="ko" data-app-build="2026.08.06-equal-budget-v20">
+ <head>
+   <meta charset="UTF-8" />
+   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+diff --git a/service-worker.js b/service-worker.js
+index 1e392f1..df45801 100644
+--- a/service-worker.js
++++ b/service-worker.js
+@@ -1,7 +1,7 @@
+ import { cacheModuleGraph } from './src/service-worker-cache.js';
+ 
+ // Refresh installed clients after removing the weekday allocation editor.
+-const APP_BUILD = '2026.08.04-infrastructure-v19';
++const APP_BUILD = '2026.08.06-equal-budget-v20';
+ const SHELL_CACHE = `weekly-time-budget-shell-${APP_BUILD}`;
+ // Migration marker for older installed clients and legacy contract tests:
+ // const SHELL_CACHE = 'weekly-time-budget-shell-v16';
+diff --git a/styles.css b/styles.css
+index ff27869..630227f 100644
+--- a/styles.css
++++ b/styles.css
+@@ -94,16 +94,10 @@ h1,h2,h3,p { margin-top: 0; }
+ .time-budget-category-copy { min-width: 0; }
+ .time-budget-category-copy strong,.time-budget-category-copy small { display: block; overflow-wrap: anywhere; }
+ .time-budget-category-copy small { margin-top: 4px; color: #75827d; }
+-.day-weight-section { padding-top: 20px; border-top: 1px solid #e5e6df; }
+-.day-weight-grid { display: grid; grid-template-columns: repeat(7,minmax(0,1fr)); gap: 9px; }
+-.day-weight-grid label { display: grid; gap: 6px; min-width: 0; text-align: center; font-weight: 800; }
+-.day-weight-grid input { min-width: 0; text-align: center; padding-inline: 6px; }
+-.day-weight-preview { margin: 12px 0 0; padding: 11px 13px; border-radius: 12px; background: #f0f3ef; color: #5f6d67; font-size: .88rem; overflow-wrap: anywhere; }
+ 
+ @media(max-width:900px) {
+   .daily-dashboard-layout { grid-template-columns: 1fr; }
+   .record-calendar { max-width: 100%; }
+-  .day-weight-grid { grid-template-columns: repeat(4,minmax(0,1fr)); }
+ }
+ @media(max-width:800px) {
+   .app-shell { display: block; }
+@@ -136,7 +130,6 @@ h1,h2,h3,p { margin-top: 0; }
+   .dashboard-category-row>strong { grid-column: 2; grid-row: 1; }
+   .dashboard-category-row>span { grid-column: 1/-1; }
+   .time-budget-category-row { grid-template-columns: 1fr; }
+-  .day-weight-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+   .record-calendar { padding: 13px; }
+   .record-calendar-grid button,.record-calendar-grid>span { min-height: 38px; }
+   .actions>* { flex: 1 1 100%; }
