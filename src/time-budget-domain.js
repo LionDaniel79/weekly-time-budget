@@ -15,6 +15,29 @@ import {
 import { isCategoryActiveOnDate } from './category-effective-date.js';
 
 const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object || {}, key);
+const pad = (value) => String(value).padStart(2, '0');
+
+function shiftedDateKey(dateKey, days) {
+  const date = new Date(`${dateKey}T12:00:00`);
+  date.setDate(date.getDate() + days);
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+function isUsableEntry(entry) {
+  return Number(entry?.durationMinutes) > 0
+    && entry?.deleted !== true
+    && entry?.isDeleted !== true
+    && entry?.syncStatus !== 'deleted';
+}
+
+function categoryMinutesInRange(entries, categoryId, start, end) {
+  return (entries || [])
+    .filter((entry) => entry?.categoryId === categoryId
+      && entry.date >= start
+      && entry.date <= end
+      && isUsableEntry(entry))
+    .reduce((sum, entry) => sum + Math.max(0, Number(entry.durationMinutes) || 0), 0);
+}
 
 export function removeUnknownCategoryReferences(values = {}, knownCategoryIds = new Set()) {
   const known = knownCategoryIds instanceof Set ? knownCategoryIds : new Set(knownCategoryIds || []);
@@ -23,17 +46,47 @@ export function removeUnknownCategoryReferences(values = {}, knownCategoryIds = 
   );
 }
 
-
 export function parseOptionalHours(value) {
   if (value === '' || value === null || value === undefined) {
     return { explicit: false, minutes: null };
   }
   const hours = Number(value);
   if (!Number.isFinite(hours) || hours < 0) throw new Error('예산은 0 이상이어야 합니다.');
-  if (!Number.isInteger(hours * 2)) throw new Error('예산은 0.5시간 단위로 입력하세요.');
+  if (!Number.isInteger(hours * 2)) throw new Error('이번 주 예산은 0.5시간 단위로 입력하세요.');
   return { explicit: true, minutes: Math.round(hours * 60) };
 }
 
+export function parseOptionalDailyHours(value) {
+  if (value === '' || value === null || value === undefined) {
+    return { explicit: false, minutes: null };
+  }
+  const hours = Number(value);
+  if (!Number.isFinite(hours) || hours < 0) throw new Error('예산은 0 이상이어야 합니다.');
+  return { explicit: true, minutes: Math.round(hours * 60) };
+}
+
+export function previousSameWeekdayMinutes(entries, categoryId, date) {
+  const previousDate = shiftedDateKey(date, -7);
+  return categoryMinutesInRange(entries, categoryId, previousDate, previousDate);
+}
+
+export function roundUpToHalfHourMinutes(minutes) {
+  const value = Math.max(0, Number(minutes) || 0);
+  return value ? Math.ceil(value / 30) * 30 : 0;
+}
+
+export function roundedPreviousWeekBudgetMinutes(entries, categoryId, weekStart) {
+  const previousStart = shiftedDateKey(weekStart, -7);
+  const previousEnd = shiftedDateKey(weekStart, -1);
+  return roundUpToHalfHourMinutes(categoryMinutesInRange(entries, categoryId, previousStart, previousEnd));
+}
+
+export function buildPreviousWeekBudgetDefaults({ categories = [], entries = [], weekStart }) {
+  return Object.fromEntries(categories.map((category) => [
+    category.id,
+    roundedPreviousWeekBudgetMinutes(entries, category.id, weekStart),
+  ]));
+}
 
 export function explicitBudgetIdSet(weekDocument = {}) {
   if (Array.isArray(weekDocument.explicitBudgetIds)) return new Set(weekDocument.explicitBudgetIds);
@@ -43,13 +96,14 @@ export function explicitBudgetIdSet(weekDocument = {}) {
 export function resolveWeeklyBudgetMinutes(category, weekDocument) {
   const value = weekDocument?.budgets?.[category.id];
   if (value !== undefined) return Math.max(0, Math.round(Number(value) || 0));
-  return Math.max(0, Math.round(Number(category.defaultBudgetMinutes ?? category.budgetMinutes ?? 0) || 0));
+  return 0;
 }
 
 export function buildWeeklyBudgetSnapshot({
   weekStart,
   categories,
   budgetInputs = {},
+  defaultBudgets = {},
 }) {
   const budgets = {};
   const explicitBudgetIds = [];
@@ -59,17 +113,10 @@ export function buildWeeklyBudgetSnapshot({
       budgets[category.id] = parsed.minutes;
       explicitBudgetIds.push(category.id);
     } else {
-      budgets[category.id] = Math.max(
-        0,
-        Math.round(Number(category.defaultBudgetMinutes ?? category.budgetMinutes ?? 0) || 0),
-      );
+      budgets[category.id] = Math.max(0, Math.round(Number(defaultBudgets[category.id]) || 0));
     }
   }
-  return {
-    weekStart,
-    budgets,
-    explicitBudgetIds,
-  };
+  return { weekStart, budgets, explicitBudgetIds };
 }
 
 function weekdayIndex(dateKey) {
@@ -84,12 +131,7 @@ export function equalDailyBudgetMinutes(totalMinutes, dateKey) {
   return base + (weekdayIndex(dateKey) < remainder ? 1 : 0);
 }
 
-export function resolveDailyBudget({
-  category,
-  date,
-  weekDocument,
-  dailyDocument,
-}) {
+export function resolveDailyBudget({ category, date, weekDocument, dailyDocument }) {
   if (!isCategoryActiveOnDate(category, date)) return { minutes: 0, source: 'inactive' };
   const overrides = dailyDocument?.overrides || {};
   if (hasOwn(overrides, category.id)) {
@@ -110,12 +152,7 @@ export function resolveCountdownBudgetBaseline({
   dailyDocument,
 }) {
   if (!isCategoryActiveOnDate(category, date)) return null;
-  const budget = resolveDailyBudget({
-    category,
-    date,
-    weekDocument,
-    dailyDocument,
-  });
+  const budget = resolveDailyBudget({ category, date, weekDocument, dailyDocument });
   const recordedMinutes = entries
     .filter((entry) => entry.date === date && entry.categoryId === category.id)
     .reduce((sum, entry) => sum + Math.max(0, Number(entry.durationMinutes) || 0), 0);
@@ -151,13 +188,7 @@ export function calendarMonthCells(year, month, recordedDates, today) {
   return cells;
 }
 
-export function summarizeDailyCategories({
-  categories,
-  entries,
-  date,
-  weekDocument,
-  dailyDocument,
-}) {
+export function summarizeDailyCategories({ categories, entries, date, weekDocument, dailyDocument }) {
   const activeCategories = categories.filter((category) => isCategoryActiveOnDate(category, date));
   const categoryById = new Map(activeCategories.map((category) => [category.id, category]));
   const relevant = entries.filter((entry) => (
@@ -166,12 +197,7 @@ export function summarizeDailyCategories({
     && isCategoryActiveOnDate(categoryById.get(entry.categoryId), entry.date)
   ));
   const categorySummaries = activeCategories.map((category) => {
-    const budget = resolveDailyBudget({
-      category,
-      date,
-      weekDocument,
-      dailyDocument,
-    });
+    const budget = resolveDailyBudget({ category, date, weekDocument, dailyDocument });
     const actualMinutes = relevant
       .filter((entry) => entry.categoryId === category.id)
       .reduce((sum, entry) => sum + Math.max(0, Number(entry.durationMinutes) || 0), 0);
@@ -190,11 +216,7 @@ export function summarizeDailyCategories({
       budgetSource: budget.source,
       ...achievement,
       contributionScore: calculateGoalContribution(achievement),
-      progress: calculateGoalProgress({
-        goalType,
-        budgetMinutes: budget.minutes,
-        actualMinutes,
-      }),
+      progress: calculateGoalProgress({ goalType, budgetMinutes: budget.minutes, actualMinutes }),
     };
   });
   const totalBudgetMinutes = categorySummaries.reduce((sum, item) => sum + item.budgetMinutes, 0);
