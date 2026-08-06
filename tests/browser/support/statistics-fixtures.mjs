@@ -52,8 +52,7 @@ export function restraintFixture() {
       archivedCategories: [category('archived', '보관 운동', { archivedAt: '2026-08-01' })],
       weeklyBudgets: [{
         id: '2026-07-27', weekStart: '2026-07-27',
-        budgets: { reading: 60, phone: 180, archived: 0 },
-        dayWeights: { mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, sat: 1, sun: 0 },
+        budgets: { reading: 420, phone: 1260, archived: 0 },
       }],
     },
     restored: { mode: 'monthly', year: 2026, month: 8 },
