@@ -117,13 +117,12 @@ async function loadData() {
   finally { loadingPromise = null; }
 }
 
-async function saveCategory({ id, name, defaultBudgetMinutes: budget, goalType }) {
+async function saveCategory({ id, name, goalType }) {
   const trimmedName = String(name || '').trim();
   if (!trimmedName) throw new Error('대분류 이름을 입력하세요.');
   const existing = state.categories.find((category) => category.id === id);
   const basePayload = {
     name: trimmedName,
-    defaultBudgetMinutes: Number(budget) || 0,
     order: existing?.order || state.categories.length + 1,
   };
   await dataSource.saveCategory(state.user.uid, {
