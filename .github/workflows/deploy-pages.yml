@@ -39,17 +39,20 @@ jobs:
           node --check service-worker.js
 
       - name: Run runtime stability regression tests
-        run: node --test tests/runtime-navigation-statistics-stability.test.js
+        run: |
+          node --test tests/runtime-navigation-statistics-stability.test.js
+          node --test tests/runtime-render-loop-stability.test.js
 
       - name: Verify release source contracts
         run: |
-          grep -q '2026.08.07-stability-v25' index.html
-          grep -q '2026.08.07-stability-v25' service-worker.js
-          grep -q '앱 버전 v25' index.html
+          grep -q '2026.08.07-stability-v26' index.html
+          grep -q '2026.08.07-stability-v26' service-worker.js
+          grep -q '앱 버전 v26' index.html
           grep -q 'validWeekStart' src/statistics-state.js
           ! grep -q 'coerceRecordedPeriodSelection' src/statistics-state.js
           grep -q 'refreshQueued' src/statistics-bootstrap.js
           grep -q "closest?.('#mobile-menu')" src/app-shell.js
+          ! grep -q 'view-change-events.js' index.html
 
       - name: Prepare Pages artifact
         env:
@@ -64,12 +67,13 @@ jobs:
 
       - name: Verify deployed build contents
         run: |
-          grep -q '2026.08.07-stability-v25' _site/index.html
-          grep -q '2026.08.07-stability-v25' _site/service-worker.js
-          grep -q '앱 버전 v25' _site/index.html
+          grep -q '2026.08.07-stability-v26' _site/index.html
+          grep -q '2026.08.07-stability-v26' _site/service-worker.js
+          grep -q '앱 버전 v26' _site/index.html
           grep -q 'validWeekStart' _site/src/statistics-state.js
           grep -q 'refreshQueued' _site/src/statistics-bootstrap.js
           grep -q "closest?.('#mobile-menu')" _site/src/app-shell.js
+          ! grep -q 'view-change-events.js' _site/index.html
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
