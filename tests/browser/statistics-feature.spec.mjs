@@ -118,7 +118,7 @@ test('주별 통계의 이전·다음 버튼은 기록이 있는 인접 주로 �
 });
 
 test('바로 이전 주에 기록이 없으면 이전 주 버튼을 비활성화한다', async ({ page }) => {
-  await harness(page, 'restraint');
+  await harness(page, 'empty');
   await page.locator('button[data-statistics-mode="weekly"]').click();
   const previous = page.locator('button[data-statistics-week="previous"]');
   await expect(previous).toBeDisabled();
