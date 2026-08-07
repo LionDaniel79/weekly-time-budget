@@ -93,9 +93,8 @@ export function createStatisticsFeature({
     const signature = presentationSignature(state);
     if (!force && signature === lastRenderedSignature) return false;
 
-    let context;
     try {
-      context = contextFor(state);
+      contextFor(state);
     } catch (error) {
       showFailure(error.statisticsStage || '기록 기간 인덱스', error);
       return false;
@@ -106,10 +105,6 @@ export function createStatisticsFeature({
     try {
       diagnostics.aggregateRuns += 1;
       model = buildStatisticsViewModel(state, { now: now() });
-      if (model.mode === 'weekly') {
-        model.previousWeekStart = adjacentWeekStart(state.weekStart, 'previous', context.currentWeekStart);
-        model.nextWeekStart = adjacentWeekStart(state.weekStart, 'next', context.currentWeekStart);
-      }
     } catch (error) {
       showFailure('통계 집계', error);
       return false;
@@ -282,10 +277,12 @@ export function createStatisticsFeature({
     const weekButton = event.target.closest?.('[data-statistics-week]');
     if (weekButton && root.contains(weekButton)) {
       event.preventDefault();
+      if (weekButton.disabled || weekButton.getAttribute('aria-disabled') === 'true') return;
       const direction = weekButton.dataset.statisticsWeek === 'previous' ? 'previous' : 'next';
       const context = contextFor(state);
       const target = adjacentWeekStart(state.weekStart, direction, context.currentWeekStart);
       if (!target) return;
+      if (direction === 'previous' && !context.recordedWeekStarts.includes(target)) return;
       const next = applyStatisticsAction(state, {
         type: 'select-week',
         weekStart: target,
