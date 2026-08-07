@@ -59,6 +59,24 @@ export function restraintFixture() {
   };
 }
 
+export function weeklyNavigationFixture() {
+  return {
+    data: {
+      entries: [
+        { id: 'previous-reading', date: '2026-07-25', categoryId: 'reading', durationMinutes: 45 },
+        { id: 'current-reading', date: '2026-08-01', categoryId: 'reading', durationMinutes: 60 },
+      ],
+      activeCategories: [category('reading', '독서', { defaultBudgetMinutes: 60 })],
+      archivedCategories: [],
+      weeklyBudgets: [
+        { id: '2026-07-20', weekStart: '2026-07-20', budgets: { reading: 180 } },
+        { id: '2026-07-27', weekStart: '2026-07-27', budgets: { reading: 210 } },
+      ],
+    },
+    restored: { mode: 'weekly', weekStart: '2026-07-27', year: 2026, month: 8 },
+  };
+}
+
 export function invalidMonthFixture() {
   return {
     data: {
@@ -97,6 +115,14 @@ export function largeStatisticsFixture({ years = 5, entriesPerDay = 20 } = {}) {
 }
 
 export function fixtureByName(name) {
-  const fixtures = { empty: emptyStatisticsFixture, legacy: legacyCategoryFixture, effective: effectiveDateFixture, restraint: restraintFixture, invalid: invalidMonthFixture, large: largeStatisticsFixture };
+  const fixtures = {
+    empty: emptyStatisticsFixture,
+    legacy: legacyCategoryFixture,
+    effective: effectiveDateFixture,
+    restraint: restraintFixture,
+    'weekly-navigation': weeklyNavigationFixture,
+    invalid: invalidMonthFixture,
+    large: largeStatisticsFixture,
+  };
   return (fixtures[name] || restraintFixture)();
 }
