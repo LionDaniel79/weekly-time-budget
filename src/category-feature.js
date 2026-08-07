@@ -1,6 +1,6 @@
 import { categoryDisplayName, normalizeGoalType } from './goal-domain.js';
 
-const escapeHtml = (value = '') => String(value).replace(/[&<>'\"]/g, (char) => ({
+const escapeHtml = (value = '') => String(value).replace(/[&<>'"]/g, (char) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;',
 }[char]));
 
