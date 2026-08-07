@@ -182,7 +182,7 @@ export function createStatisticsFeature({
     const changed = presentationSignature(state) !== before;
     if (!changed) return false;
     if (modeChanged) diagnostics.modeChanges += 1;
-    render();
+    render({ force: true });
     if (save) await persist();
     return true;
   }
@@ -273,7 +273,7 @@ export function createStatisticsFeature({
   }
 
   async function onClick(event) {
-    const modeButton = event.target.closest?.('[data-statistics-mode]');
+    const modeButton = event.target.closest?.('button[data-statistics-mode]');
     if (modeButton && root.contains(modeButton)) {
       event.preventDefault();
       await selectMode(modeButton.dataset.statisticsMode);
@@ -282,11 +282,14 @@ export function createStatisticsFeature({
     const weekButton = event.target.closest?.('[data-statistics-week]');
     if (weekButton && root.contains(weekButton)) {
       event.preventDefault();
-      const target = weekButton.dataset.statisticsWeek === 'previous'
-        ? lastModel?.previousWeekStart
-        : lastModel?.nextWeekStart;
+      const direction = weekButton.dataset.statisticsWeek === 'previous' ? 'previous' : 'next';
+      const context = contextFor(state);
+      const target = adjacentWeekStart(state.weekStart, direction, context.currentWeekStart);
       if (!target) return;
-      const next = { ...state, weekStart: target, warning: '', renderError: null };
+      const next = applyStatisticsAction(state, {
+        type: 'select-week',
+        weekStart: target,
+      }, context).state;
       await transition(next);
       return;
     }

@@ -105,6 +105,19 @@ test('주간과 월간을 20회 전환해도 모든 통계 모드와 화면이 �
   expect(errors).toEqual([]);
 });
 
+test('주별 통계의 이전·다음 버튼은 인접 주로 실제 이동한다', async ({ page }) => {
+  await harness(page, 'restraint');
+  await page.locator('button[data-statistics-mode="weekly"]').click();
+  const range = page.locator('.week-navigation .week-range');
+  const initial = await range.textContent();
+  await page.locator('button[data-statistics-week="previous"]').click();
+  await expect(range).not.toHaveText(initial || '');
+  const previous = await range.textContent();
+  await page.locator('button[data-statistics-week="next"]').click();
+  await expect(range).toHaveText(initial || '');
+  expect(previous).not.toBe(initial);
+});
+
 test('3만 건 이상 자료의 월간 통계는 2초 안에 표시하고 집계는 1초 안에 끝난다', async ({ page }) => {
   const started = Date.now();
   await harness(page, 'large');
