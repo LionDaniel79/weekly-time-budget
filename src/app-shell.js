@@ -17,8 +17,15 @@ function setSidebarOpen(open) {
   menu?.setAttribute('aria-expanded', String(Boolean(open)));
 }
 
-function switchView(name, { save = true } = {}) {
+function switchView(name, { save = true, force = false } = {}) {
   const safe = views.includes(name) ? name : 'dashboard';
+  const alreadyVisible = activeView === safe
+    && !document.querySelector(`#${safe}-view`)?.classList.contains('hidden');
+  if (alreadyVisible && !force) {
+    setSidebarOpen(false);
+    return false;
+  }
+
   views.forEach((view) => document.querySelector(`#${view}-view`)?.classList.toggle('hidden', view !== safe));
   document.querySelectorAll('.nav-button').forEach((button) => {
     const selected = button.dataset.view === safe;
@@ -37,22 +44,25 @@ function switchView(name, { save = true } = {}) {
   document.dispatchEvent(new CustomEvent('weekly-time-budget:view-changed', {
     detail: { view: safe },
   }));
+  return true;
 }
 
-// Capture navigation before legacy feature listeners. This guarantees that one
-// component owns every menu transition on touch and mouse devices.
 document.addEventListener('click', (event) => {
+  const menuButton = event.target.closest?.('#mobile-menu');
+  if (menuButton) {
+    event.preventDefault();
+    event.stopPropagation();
+    const sidebar = document.querySelector('.sidebar');
+    setSidebarOpen(!sidebar?.classList.contains('open'));
+    return;
+  }
+
   const button = event.target.closest?.('.nav-button[data-view]');
   if (!button) return;
   event.preventDefault();
-  event.stopImmediatePropagation();
+  event.stopPropagation();
   switchView(button.dataset.view);
 }, true);
-
-document.querySelector('#mobile-menu')?.addEventListener('click', () => {
-  const sidebar = document.querySelector('.sidebar');
-  setSidebarOpen(!sidebar?.classList.contains('open'));
-});
 
 document.addEventListener('weekly-time-budget:shell-state', (event) => {
   switchView(event.detail?.activeView || activeView, { save: false });
