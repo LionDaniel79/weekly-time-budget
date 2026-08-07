@@ -9,10 +9,10 @@ import {
   summarizeWeeklyBudgetPeriod,
 } from './domain.js';
 import {
+  adjacentWeekStart,
   buildRecordedPeriodIndex,
   monthOptionStates,
   nextRecordedPeriodOrCurrent,
-  previousRecordedPeriod,
   recordedYearOptions,
 } from './recorded-period-domain.js';
 
@@ -120,8 +120,11 @@ export function buildStatisticsViewModel(state, { now = new Date() } = {}) {
   const weekRange = state.mode === 'weekly'
     ? getWeekRange(new Date(`${state.weekStart}T12:00:00`))
     : null;
-  const previousWeekStart = state.mode === 'weekly'
-    ? previousRecordedPeriod(periods.weekStarts, state.weekStart)
+  const adjacentPreviousWeekStart = state.mode === 'weekly'
+    ? adjacentWeekStart(state.weekStart, 'previous', currentWeekStart)
+    : null;
+  const previousWeekStart = adjacentPreviousWeekStart && periods.weekStarts.includes(adjacentPreviousWeekStart)
+    ? adjacentPreviousWeekStart
     : null;
   const nextWeekStart = state.mode === 'weekly'
     ? nextRecordedPeriodOrCurrent(periods.weekStarts, state.weekStart, currentWeekStart)
