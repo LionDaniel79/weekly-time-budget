@@ -28,7 +28,7 @@ test('Pages 산출물에 기록 기간 도메인과 카운트다운 모듈이 �
   await access(path.join(outputDir, 'src', 'category-selection-memory.js'));
   await access(path.join(outputDir, 'src', 'statistics-bootstrap.js'));
   const serviceWorker = await readFile(path.join(outputDir, 'service-worker.js'), 'utf8');
-  assert.ok(serviceWorker.includes('weekly-time-budget-shell-v16'));
+  assert.ok(serviceWorker.includes("APP_BUILD = '2026.08.07-stability-v25'"));
   assert.ok(serviceWorker.includes('./src/recorded-period-domain.js'));
   assert.doesNotMatch(serviceWorker, /recorded-period-navigation/);
   assert.ok(serviceWorker.includes('./src/countdown-timer-domain.js'));
@@ -36,6 +36,6 @@ test('Pages 산출물에 기록 기간 도메인과 카운트다운 모듈이 �
   assert.ok(serviceWorker.includes('./src/mobile-compact.css'));
   assert.ok(serviceWorker.includes('./src/statistics-primary.css'));
   assert.ok(serviceWorker.includes('./src/category-selection-memory.js'));
-  assert.ok(serviceWorker.includes('./src/category-bulk-editor.js'));
+  assert.doesNotMatch(serviceWorker, /category-bulk-editor\.js/);
   assert.ok(serviceWorker.includes('./src/statistics-bootstrap.js'));
 });
