@@ -46,27 +46,34 @@ if (root) {
   });
 
   const statisticsVisible = () => !root.classList.contains('hidden');
+  let currentView = 'dashboard';
+  let refreshQueued = false;
 
   document.addEventListener('weekly-time-budget:view-changed', (event) => {
-    if (event.detail?.view === 'statistics') feature.enter();
+    const nextView = event.detail?.view || 'dashboard';
+    if (nextView === currentView) return;
+    currentView = nextView;
+    if (nextView === 'statistics') feature.enter();
     else feature.leave();
   });
 
   document.addEventListener('weekly-time-budget:ui-state-restored', (event) => {
     feature.restore(event.detail?.statistics || {});
-    if (event.detail?.activeView === 'statistics') feature.enter();
   });
 
   document.addEventListener('weekly-time-budget:data-changed', () => {
-    if (statisticsVisible()) feature.refresh();
+    if (!statisticsVisible() || refreshQueued) return;
+    refreshQueued = true;
+    queueMicrotask(async () => {
+      refreshQueued = false;
+      if (statisticsVisible()) await feature.refresh();
+    });
   });
 
   authModule.onAuthStateChanged(auth, (user) => {
-    if (!user) {
-      feature.leave();
-      root.innerHTML = '';
-      return;
-    }
-    if (statisticsVisible()) feature.enter();
+    if (user) return;
+    currentView = 'dashboard';
+    feature.leave();
+    root.innerHTML = '';
   });
 }
