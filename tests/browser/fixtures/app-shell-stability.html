@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="ko">
+<body>
+  <aside class="sidebar" id="app-navigation">
+    <button data-view="dashboard" class="nav-button active">대시보드</button>
+    <button data-view="budget" class="nav-button">시간 예산</button>
+  </aside>
+  <main>
+    <button id="mobile-menu" aria-expanded="false" aria-controls="app-navigation">메뉴</button>
+    <h1 id="page-title">대시보드</h1>
+    <p id="week-label"></p>
+    <section id="dashboard-view" class="view"></section>
+    <section id="record-view" class="view hidden"></section>
+    <section id="budget-view" class="view hidden"></section>
+    <section id="history-view" class="view hidden"></section>
+    <section id="statistics-view" class="view hidden"></section>
+    <section id="categories-view" class="view hidden"></section>
+  </main>
+  <script type="module" src="/src/app-shell.js"></script>
+</body>
+</html>
