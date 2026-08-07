@@ -143,8 +143,8 @@ test('운영 HTML은 아이폰 아이콘과 웹앱 manifest를 상대 경로로 
   const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
   assert.match(html, /rel="apple-touch-icon"/);
   assert.match(html, /sizes="180x180"/);
-  assert.match(html, /href="\.\/icons\/apple-touch-icon\.png"/);
-  assert.match(html, /rel="manifest" href="\.\/manifest\.webmanifest"/);
+  assert.match(html, /href="\.\/icons\/apple-touch-icon\.png(?:\?v=\d+)?"/);
+  assert.match(html, /rel="manifest" href="\.\/manifest\.webmanifest(?:\?v=\d+)?"/);
   assert.match(html, /name="apple-mobile-web-app-title" content="주간 시간 예산"/);
 });
 
