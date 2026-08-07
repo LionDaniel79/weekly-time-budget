@@ -1,10 +1,14 @@
 import { getWeekRange } from './domain.js';
-import {
-  coerceMonthlySelection,
-  coerceRecordedPeriodSelection,
-} from './recorded-period-domain.js';
+import { coerceMonthlySelection } from './recorded-period-domain.js';
 
 const MODES = new Set(['weekly', 'monthly', 'yearly', 'monthly-comparison', 'yearly-comparison']);
+const DATE_KEY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+function validWeekStart(value, currentWeekStart) {
+  const selected = String(value || '');
+  if (!DATE_KEY_PATTERN.test(selected) || selected > currentWeekStart) return currentWeekStart;
+  return getWeekRange(new Date(`${selected}T12:00:00`)).start;
+}
 
 export function createStatisticsState({ now = new Date(), restored = {} } = {}) {
   return {
@@ -36,12 +40,8 @@ export function applyStatisticsAction(state, action, context) {
     next = { ...state, mode: action.mode, warning: '', renderError: null };
   }
   if (action.type === 'select-week') {
-    const weekStart = coerceRecordedPeriodSelection({
-      selected: action.weekStart,
-      current: context.currentWeekStart,
-      recordedPeriods: context.recordedWeekStarts,
-    });
-    if (weekStart !== state.weekStart) next = { ...state, weekStart };
+    const weekStart = validWeekStart(action.weekStart, context.currentWeekStart);
+    if (weekStart !== state.weekStart) next = { ...state, weekStart, warning: '', renderError: null };
   }
   if (action.type === 'select-year') {
     const requested = Number(action.year);
