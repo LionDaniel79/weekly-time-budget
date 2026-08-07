@@ -10,7 +10,10 @@ test('통계 상태 복원은 메뉴를 다시 클릭하지 않고 feature에 �
   assert.doesNotMatch(bootstrap, /\.click\(\)|MutationObserver/);
 });
 
-test('통계가 보이는 복원 상태에서는 직접 enter하여 캐시를 불러온다', async () => {
+test('통계 복원은 enter를 중복 호출하지 않고 view-changed가 진입을 소유한다', async () => {
   const bootstrap = await read('src/statistics-bootstrap.js');
-  assert.match(bootstrap, /event\.detail\?\.activeView === 'statistics'[\s\S]*feature\.enter\(\)/);
+  const restoreListener = bootstrap.match(/weekly-time-budget:ui-state-restored[\s\S]*?\n\s*\}\);/)?.[0] || '';
+  assert.match(restoreListener, /feature\.restore/);
+  assert.doesNotMatch(restoreListener, /feature\.enter\(\)/);
+  assert.match(bootstrap, /weekly-time-budget:view-changed[\s\S]*nextView === 'statistics'[\s\S]*feature\.enter\(\)/);
 });
