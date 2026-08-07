@@ -239,12 +239,10 @@ export function summarizeWeeklyEffectiveCategories({
   entries = [],
   weekStart,
   weekDocument,
-  dailyDocuments = [],
 }) {
   const dates = Array.from({ length: 7 }, (_, index) => shiftedDateKey(weekStart, index));
   const start = dates[0];
   const end = dates[6];
-  const dailyByDate = new Map((dailyDocuments || []).map((item) => [item.date || item.id, item]));
   const categoryList = categories.filter((category) => dates.some((date) => isCategoryActiveOnDate(category, date)));
   const categoryById = new Map(categoryList.map((category) => [category.id, category]));
   const actualById = new Map();
@@ -269,7 +267,7 @@ export function summarizeWeeklyEffectiveCategories({
         category,
         date,
         weekDocument,
-        dailyDocument: dailyByDate.get(date) || null,
+        dailyDocument: null,
       });
       return sum + budget.minutes;
     }, 0);
