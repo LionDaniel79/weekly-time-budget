@@ -15,7 +15,7 @@ async function missing(path) {
 
 test('통계 화면은 새 bootstrap 하나만 로드한다', async () => {
   const html = await read('index.html');
-  assert.match(html, /src="\.\/src\/statistics-bootstrap\.js"/);
+  assert.match(html, /src="\.\/src\/statistics-bootstrap\.js(?:\?v=\d+)?"/);
   assert.doesNotMatch(html, /recorded-period-navigation|statistics-offline-rescue|statistics-ui|statistics-session-state|statistics-mobile-overflow/);
 });
 
