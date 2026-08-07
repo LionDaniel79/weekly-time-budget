@@ -14,6 +14,6 @@ test('기록 내역 화면은 독립 feature가 소유한다', async () => {
   await access(new URL('../src/history-feature.js', import.meta.url));
   assert.doesNotMatch(app, /function renderHistory\(/);
   assert.doesNotMatch(app, /#history-view/);
-  assert.match(html, /src="\.\/src\/history-feature\.js"/);
+  assert.match(html, /src="\.\/src\/history-feature\.js(?:\?v=\d+)?"/);
   assert.ok(worker.includes('./src/history-feature.js'));
 });
