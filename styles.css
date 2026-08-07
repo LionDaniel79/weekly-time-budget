@@ -54,6 +54,7 @@ h1,h2,h3,p { margin-top: 0; }
 .actions { display: flex; gap: 10px; flex-wrap: wrap; }
 .entry { display: grid; grid-template-columns: 110px minmax(0,1fr) auto; gap: 14px; align-items: start; padding: 15px 0; border-bottom: 1px solid #e5e6df; }
 .empty-state { text-align: center; padding: 48px 20px; }
+.category-management-layout { display: grid; grid-template-columns: minmax(0,1fr); gap: 18px; }
 .category-list { display: grid; gap: 10px; }
 .category-item { display: grid; grid-template-columns: minmax(0,1fr) 110px auto; gap: 10px; align-items: center; }
 .muted { color: #75827d; }
