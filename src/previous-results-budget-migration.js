@@ -4,6 +4,7 @@ import { buildPreviousWeekBudgetDefaults, previousSameWeekdayMinutes } from './t
 
 const DEFAULT_SOURCE_VERSION = 'previous-results-v3';
 let runningFor = '';
+const completedRuns = new Set();
 
 async function migrateCurrentBudgets(detail = {}) {
   const user = detail.user;
@@ -14,10 +15,11 @@ async function migrateCurrentBudgets(detail = {}) {
 
   const today = toDateKey(new Date());
   const weekStart = getWeekRange(new Date(`${today}T12:00:00`)).start;
-  const runKey = `${user.uid}:${weekStart}:${entries.length}:${categories.length}`;
-  if (runningFor === runKey) return;
+  const runKey = `${user.uid}:${weekStart}:${today}`;
+  if (runningFor === runKey || completedRuns.has(runKey)) return;
   runningFor = runKey;
 
+  let changed = false;
   try {
     const data = await dataSource.loadTimeBudgetData(user.uid);
     const currentWeek = (data.weeklyBudgets || []).find((item) => (item.weekStart || item.id) === weekStart);
@@ -34,6 +36,7 @@ async function migrateCurrentBudgets(detail = {}) {
         userModified: false,
         defaultSourceVersion: DEFAULT_SOURCE_VERSION,
       });
+      changed = true;
     }
 
     const currentDay = (data.dailyBudgets || []).find((item) => (item.date || item.id) === today);
@@ -47,9 +50,11 @@ async function migrateCurrentBudgets(detail = {}) {
         userModified: false,
         defaultSourceVersion: DEFAULT_SOURCE_VERSION,
       });
+      changed = true;
     }
 
-    document.dispatchEvent(new CustomEvent('weekly-time-budget:data-changed'));
+    completedRuns.add(runKey);
+    if (changed) document.dispatchEvent(new CustomEvent('weekly-time-budget:data-changed'));
   } catch (error) {
     console.error('지난주 결과 기반 예산 마이그레이션 실패', error);
   } finally {
