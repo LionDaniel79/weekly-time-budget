@@ -4,11 +4,11 @@ import { access, readFile } from 'node:fs/promises';
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
-test('1단계: 앱 셸이 모든 메뉴 전환을 capture 단계에서 소유한다', async () => {
+test('1단계: 앱 셸이 모든 메뉴 전환을 delegated handler로 소유한다', async () => {
   const shell = await read('src/app-shell.js');
   assert.match(shell, /\.nav-button\[data-view\]/);
   assert.match(shell, /preventDefault/);
-  assert.doesNotMatch(shell, /stopImmediatePropagation/);
+  assert.doesNotMatch(shell, /stopImmediatePropagation|stopPropagation/);
   assert.match(shell, /weekly-time-budget:view-changed/);
   assert.doesNotMatch(shell, /button\.onclick\s*=/);
 });
@@ -17,11 +17,11 @@ test('2단계: PWA는 최신 세대와 일회성 캐시 초기화를 사용한�
   const [worker, html, registration] = await Promise.all([
     read('service-worker.js'), read('index.html'), read('src/service-worker-registration.js'),
   ]);
-  assert.match(worker, /APP_BUILD = '2026\.08\.07-stability-v25'/);
+  assert.match(worker, /APP_BUILD = '2026\.08\.07-stability-v26'/);
   assert.match(worker, /navigationNetworkFirst/);
   assert.match(worker, /sameOriginNetworkFirst/);
-  assert.match(html, /data-app-build="2026\.08\.07-stability-v25"/);
-  assert.match(html, /앱 버전 v25/);
+  assert.match(html, /data-app-build="2026\.08\.07-stability-v26"/);
+  assert.match(html, /앱 버전 v26/);
   assert.match(registration, /getRegistrations/);
   assert.match(registration, /caches\.keys/);
   assert.match(registration, /updateViaCache: 'none'/);
