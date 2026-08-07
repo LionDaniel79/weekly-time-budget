@@ -273,7 +273,7 @@ export function createStatisticsFeature({
   }
 
   async function onClick(event) {
-    const modeButton = event.target.closest?.('[data-statistics-mode]');
+    const modeButton = event.target.closest?.('button[data-statistics-mode]');
     if (modeButton && root.contains(modeButton)) {
       event.preventDefault();
       await selectMode(modeButton.dataset.statisticsMode);
