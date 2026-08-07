@@ -233,3 +233,95 @@ export function summarizeDailyCategories({ categories, entries, date, weekDocume
     categorySummaries,
   };
 }
+
+export function summarizeWeeklyEffectiveCategories({
+  categories = [],
+  entries = [],
+  weekStart,
+  weekDocument,
+  dailyDocuments = [],
+}) {
+  const dates = Array.from({ length: 7 }, (_, index) => shiftedDateKey(weekStart, index));
+  const start = dates[0];
+  const end = dates[6];
+  const dailyByDate = new Map((dailyDocuments || []).map((item) => [item.date || item.id, item]));
+  const categoryList = categories.filter((category) => dates.some((date) => isCategoryActiveOnDate(category, date)));
+  const categoryById = new Map(categoryList.map((category) => [category.id, category]));
+  const actualById = new Map();
+  const entryGoalTypeById = new Map();
+  const recordDays = new Set();
+
+  for (const entry of entries || []) {
+    if (!entry?.date || entry.date < start || entry.date > end || !isUsableEntry(entry)) continue;
+    const category = categoryById.get(entry.categoryId);
+    if (category && !isCategoryActiveOnDate(category, entry.date)) continue;
+    const minutes = Math.max(0, Number(entry.durationMinutes) || 0);
+    actualById.set(entry.categoryId, (actualById.get(entry.categoryId) || 0) + minutes);
+    if (!entryGoalTypeById.has(entry.categoryId) && entry.goalType !== undefined) {
+      entryGoalTypeById.set(entry.categoryId, normalizeGoalType(entry.goalType));
+    }
+    recordDays.add(entry.date);
+  }
+
+  const categorySummaries = categoryList.map((category) => {
+    const budgetMinutes = dates.reduce((sum, date) => {
+      const budget = resolveDailyBudget({
+        category,
+        date,
+        weekDocument,
+        dailyDocument: dailyByDate.get(date) || null,
+      });
+      return sum + budget.minutes;
+    }, 0);
+    const actualMinutes = Math.round(actualById.get(category.id) || 0);
+    const goalType = normalizeGoalType(category.goalType);
+    const achievement = calculateGoalAchievement({ goalType, budgetMinutes, actualMinutes });
+    return {
+      id: category.id,
+      name: categoryDisplayName(category),
+      goalType,
+      budgetMinutes,
+      actualMinutes,
+      ...achievement,
+      contributionScore: calculateGoalContribution(achievement),
+      progress: calculateGoalProgress({ goalType, budgetMinutes, actualMinutes }),
+    };
+  });
+
+  actualById.forEach((actualMinutes, categoryId) => {
+    if (categoryById.has(categoryId)) return;
+    const goalType = normalizeGoalType(entryGoalTypeById.get(categoryId));
+    const roundedActual = Math.round(actualMinutes);
+    const achievement = calculateGoalAchievement({ goalType, budgetMinutes: 0, actualMinutes: roundedActual });
+    categorySummaries.push({
+      id: categoryId,
+      name: categoryDisplayName({ name: '삭제된 대분류', goalType }),
+      goalType,
+      budgetMinutes: 0,
+      actualMinutes: roundedActual,
+      ...achievement,
+      contributionScore: calculateGoalContribution(achievement),
+      progress: calculateGoalProgress({ goalType, budgetMinutes: 0, actualMinutes: roundedActual }),
+    });
+  });
+
+  const totalBudgetMinutes = categorySummaries.reduce((sum, item) => sum + item.budgetMinutes, 0);
+  const totalActualMinutes = categorySummaries.reduce((sum, item) => sum + item.actualMinutes, 0);
+  const compliance = calculateGoalComplianceScore(categorySummaries);
+  const differenceMinutes = totalActualMinutes - totalBudgetMinutes;
+  const status = totalBudgetMinutes <= 0
+    ? (totalActualMinutes > 0 ? 'unbudgeted' : 'remaining')
+    : (differenceMinutes > 0 ? 'exceeded' : differenceMinutes === 0 ? 'exact' : 'remaining');
+  return {
+    totalBudgetMinutes,
+    totalActualMinutes,
+    goalComplianceScore: compliance.score,
+    goalComplianceStatus: compliance.status,
+    percentage: compliance.score,
+    differenceMinutes,
+    status,
+    recordDays: recordDays.size,
+    dailyAverageMinutes: recordDays.size ? Math.round(totalActualMinutes / recordDays.size) : 0,
+    categorySummaries,
+  };
+}
