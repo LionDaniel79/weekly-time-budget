@@ -11,7 +11,8 @@ test('시간 예산 기능은 날짜별 활성 함수를 사용한다', () => {
 });
 
 test('주간·일간 대시보드는 날짜별 기간 요약을 사용한다', () => {
-  assert.match(feature, /summarizeWeeklyBudgetPeriod/);
+  assert.match(feature, /summarizeWeeklyEffectiveCategories/);
+  assert.match(feature, /summarizeDailyCategories/);
 });
 
 test('현재 주간 스냅숏은 오늘 활성인 대분류만 보충한다', () => {

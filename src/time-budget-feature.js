@@ -1,4 +1,4 @@
-import { getWeekRange, summarizeWeeklyBudgetPeriod, toDateKey } from './domain.js';
+import { getWeekRange, toDateKey } from './domain.js';
 import {
   buildPreviousWeekBudgetDefaults,
   buildWeeklyBudgetSnapshot,
@@ -8,6 +8,7 @@ import {
   nextRecordedDateOrToday,
   recordedDateKeys,
   summarizeDailyCategories,
+  summarizeWeeklyEffectiveCategories,
 } from './time-budget-domain.js';
 import {
   bindDashboardControls,
@@ -211,7 +212,13 @@ function weeklySummary(key) {
   const range = weekRange(key);
   const week = normalizeWeek(key);
   const categories = periodCategories({ start: range.start, end: range.end, weekDocument: week });
-  return summarizeWeeklyBudgetPeriod(state.entries, categories, state.weekly, key);
+  return summarizeWeeklyEffectiveCategories({
+    categories,
+    entries: state.entries,
+    weekStart: key,
+    weekDocument: week,
+    dailyDocuments: state.daily,
+  });
 }
 
 function dashboardRecordedWeekModel() {
