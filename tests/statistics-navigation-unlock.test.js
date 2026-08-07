@@ -10,6 +10,6 @@ test('통계 화면에서 다른 메뉴로 이동하면 통계 기능을 즉시 
   ]);
   assert.match(events, /nav-button\[data-view\]/);
   assert.match(events, /weekly-time-budget:view-changed/);
-  assert.match(bootstrap, /event\.detail\?\.view === 'statistics'[\s\S]*feature\.enter\(\)[\s\S]*else feature\.leave\(\)/);
+  assert.match(bootstrap, /const nextView = event\.detail\?\.view[\s\S]*if \(nextView === currentView\) return;[\s\S]*if \(nextView === 'statistics'\) feature\.enter\(\);[\s\S]*else feature\.leave\(\);/);
   assert.doesNotMatch(bootstrap, /button\.click\(\)|stopImmediatePropagation/);
 });
