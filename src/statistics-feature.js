@@ -282,11 +282,14 @@ export function createStatisticsFeature({
     const weekButton = event.target.closest?.('[data-statistics-week]');
     if (weekButton && root.contains(weekButton)) {
       event.preventDefault();
-      const target = weekButton.dataset.statisticsWeek === 'previous'
-        ? lastModel?.previousWeekStart
-        : lastModel?.nextWeekStart;
+      const direction = weekButton.dataset.statisticsWeek === 'previous' ? 'previous' : 'next';
+      const context = contextFor(state);
+      const target = adjacentWeekStart(state.weekStart, direction, context.currentWeekStart);
       if (!target) return;
-      const next = { ...state, weekStart: target, warning: '', renderError: null };
+      const next = applyStatisticsAction(state, {
+        type: 'select-week',
+        weekStart: target,
+      }, context).state;
       await transition(next);
       return;
     }
