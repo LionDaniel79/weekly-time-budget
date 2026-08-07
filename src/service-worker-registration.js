@@ -1,4 +1,4 @@
-const APP_BUILD = '2026.08.07-stability-v25';
+const APP_BUILD = '2026.08.07-stability-v26';
 const BUILD_KEY = 'weekly-time-budget:active-build';
 const RESET_KEY = `weekly-time-budget:reset:${APP_BUILD}`;
 
