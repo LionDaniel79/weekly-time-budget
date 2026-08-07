@@ -326,7 +326,7 @@ document.addEventListener('weekly-time-budget:entries-changed', async (event) =>
 });
 document.addEventListener('weekly-time-budget:data-changed', async () => {
   if (!state.user) return;
-  try { await loadData(); renderAll(); restoreVisibleState(); }
+  try { await loadData(); renderAll(); }
   catch { await refreshMergedEntries(); publishInfrastructureState(); }
 });
 
