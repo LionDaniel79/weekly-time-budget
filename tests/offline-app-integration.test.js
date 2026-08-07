@@ -77,7 +77,7 @@ test('서비스 워커는 앱 셸과 Firebase 런타임 캐시를 분리한다',
   const [html, serviceWorker] = await Promise.all([read('index.html'), read('service-worker.js')]);
   for (const token of ['./src/service-worker-registration.js', './src/statistics-primary.css', './src/statistics-bootstrap.js', './src/view-change-events.js']) assert.ok(html.includes(token), token);
   assert.doesNotMatch(html, /statistics-offline-rescue|statistics-ui|statistics-session-state|statistics-mobile-overflow/);
-  for (const token of ['weekly-time-budget-shell-v16', 'weekly-time-budget-firebase-v2', 'firebaseCacheFirst', 'shellCacheFirst', 'firestore.googleapis.com', "request.mode === 'navigate'", './src/statistics-feature.js', './src/statistics-bootstrap.js']) assert.ok(serviceWorker.includes(token), token);
+  for (const token of ['weekly-time-budget-shell-${APP_BUILD}', 'weekly-time-budget-firebase-v2', 'firebaseCacheFirst', 'sameOriginNetworkFirst', 'firestore.googleapis.com', "request.mode === 'navigate'", './src/statistics-feature.js', './src/statistics-bootstrap.js']) assert.ok(serviceWorker.includes(token), token);
   assert.doesNotMatch(serviceWorker, /caches\.match\(/);
 });
 

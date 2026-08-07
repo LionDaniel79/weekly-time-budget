@@ -14,6 +14,6 @@ test('시간 기록 입력 화면은 독립 feature가 소유한다', async () =
   await access(new URL('../src/record-feature.js', import.meta.url));
   assert.doesNotMatch(app, /function renderRecord\(/);
   assert.doesNotMatch(app, /#record-view/);
-  assert.match(html, /src="\.\/src\/record-feature\.js"/);
+  assert.match(html, /src="\.\/src\/record-feature\.js(?:\?v=\d+)?"/);
   assert.ok(worker.includes('./src/record-feature.js'));
 });

@@ -31,28 +31,25 @@ jobs:
 
       - name: Validate release modules
         run: |
-          node --check src/category-feature.js
-          node --check src/time-budget-domain.js
-          node --check src/time-budget-ui.js
-          node --check src/time-budget-feature.js
-          node --check src/previous-results-budget-migration.js
+          node --check src/app-shell.js
+          node --check src/statistics-bootstrap.js
           node --check src/statistics-state.js
-          node --check src/statistics-view.js
           node --check src/statistics-feature.js
           node --check src/service-worker-registration.js
           node --check service-worker.js
 
+      - name: Run runtime stability regression tests
+        run: node --test tests/runtime-navigation-statistics-stability.test.js
+
       - name: Verify release source contracts
         run: |
-          grep -q '2026.08.07-runtime-reset-v24' index.html
-          grep -q '2026.08.07-runtime-reset-v24' service-worker.js
-          grep -q '앱 버전 v24' index.html
-          grep -q 'previous-results-v3' src/previous-results-budget-migration.js
-          grep -q '지난주 같은 요일의 실제 기록을 기본으로 불러옵니다' src/time-budget-ui.js
-          grep -q 'nextWeekStart' src/statistics-feature.js
-          ! grep -q '기본 주간 예산(시간)' src/category-feature.js
-          ! grep -q 'name="hours"' src/category-feature.js
-          ! grep -q 'category-bulk-editor.js' index.html
+          grep -q '2026.08.07-stability-v25' index.html
+          grep -q '2026.08.07-stability-v25' service-worker.js
+          grep -q '앱 버전 v25' index.html
+          grep -q 'validWeekStart' src/statistics-state.js
+          ! grep -q 'coerceRecordedPeriodSelection' src/statistics-state.js
+          grep -q 'refreshQueued' src/statistics-bootstrap.js
+          grep -q "closest?.('#mobile-menu')" src/app-shell.js
 
       - name: Prepare Pages artifact
         env:
@@ -67,15 +64,12 @@ jobs:
 
       - name: Verify deployed build contents
         run: |
-          grep -q '2026.08.07-runtime-reset-v24' _site/index.html
-          grep -q '2026.08.07-runtime-reset-v24' _site/service-worker.js
-          grep -q '앱 버전 v24' _site/index.html
-          grep -q 'previous-results-v3' _site/src/previous-results-budget-migration.js
-          grep -q '지난주 같은 요일의 실제 기록을 기본으로 불러옵니다' _site/src/time-budget-ui.js
-          grep -q 'nextWeekStart' _site/src/statistics-feature.js
-          ! grep -q '기본 주간 예산(시간)' _site/src/category-feature.js
-          ! grep -q 'name="hours"' _site/src/category-feature.js
-          ! grep -q 'category-bulk-editor.js' _site/index.html
+          grep -q '2026.08.07-stability-v25' _site/index.html
+          grep -q '2026.08.07-stability-v25' _site/service-worker.js
+          grep -q '앱 버전 v25' _site/index.html
+          grep -q 'validWeekStart' _site/src/statistics-state.js
+          grep -q 'refreshQueued' _site/src/statistics-bootstrap.js
+          grep -q "closest?.('#mobile-menu')" _site/src/app-shell.js
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5

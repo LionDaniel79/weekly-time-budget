@@ -30,10 +30,10 @@ test('통계 데이터는 사용자 ID를 모든 캐시·서버 경로에 전달
 
 test('새 통계 bootstrap과 상태·뷰·feature만 앱 셸에 포함된다', async () => {
   const [html, worker] = await Promise.all([read('index.html'), read('service-worker.js')]);
-  assert.match(html, /src="\.\/src\/statistics-bootstrap\.js"/);
+  assert.match(html, /src="\.\/src\/statistics-bootstrap\.js(?:\?v=\d+)?"/);
   assert.doesNotMatch(html, /recorded-period-navigation|statistics-offline-rescue|statistics-ui|statistics-session-state|statistics-mobile-overflow/);
   for (const file of ['./src/statistics-state.js', './src/statistics-data-source.js', './src/statistics-view.js', './src/statistics-feature.js', './src/statistics-bootstrap.js']) {
     assert.ok(worker.includes(file), file);
   }
-  assert.ok(worker.includes('weekly-time-budget-shell-v16'));
+  assert.ok(worker.includes('weekly-time-budget-shell-${APP_BUILD}'));
 });

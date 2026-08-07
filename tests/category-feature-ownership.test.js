@@ -14,6 +14,6 @@ test('대분류 화면은 독립 feature가 소유한다', async () => {
   await access(new URL('../src/category-feature.js', import.meta.url));
   assert.doesNotMatch(app, /function renderCategories\(/);
   assert.doesNotMatch(app, /#categories-view/);
-  assert.match(html, /src="\.\/src\/category-feature\.js"/);
+  assert.match(html, /src="\.\/src\/category-feature\.js(?:\?v=\d+)?"/);
   assert.ok(worker.includes('./src/category-feature.js'));
 });

@@ -53,16 +53,15 @@ test('통계 화면의 기간 제목은 선택한 통계 기간을 표시한다'
   assert.match(source, /headerText/);
 });
 
-test('대분류는 이름·기본예산·순서를 한 번에 저장한다', async () => {
-  const [indexHtml, editorSource] = await Promise.all([
+test('대분류 관리에서는 이름·목표방식·순서만 관리하고 기본 시간 예산을 노출하지 않는다', async () => {
+  const [indexHtml, categorySource] = await Promise.all([
     read('index.html'),
-    read('src/category-bulk-editor.js'),
+    read('src/category-feature.js'),
   ]);
-  assert.match(indexHtml, /category-bulk-editor\.js/);
-  assert.match(editorSource, />저장<\/button>/);
-  assert.match(editorSource, /writeBatch/);
-  assert.match(editorSource, /defaultBudgetMinutes/);
-  assert.match(editorSource, /order:\s*index\s*\+\s*1/);
+  assert.doesNotMatch(indexHtml, /category-bulk-editor\.js/);
+  assert.doesNotMatch(categorySource, /defaultBudgetMinutes|기본 주간 예산|name="hours"/);
+  assert.match(categorySource, /name="name"/);
+  assert.match(categorySource, /goalType/);
 });
 
 test('수동 입력은 시각 범위와 분 직접 입력 방식을 제공한다', async () => {

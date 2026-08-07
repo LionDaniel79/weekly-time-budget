@@ -1,6 +1,6 @@
 import { cacheModuleGraph } from './src/service-worker-cache.js';
 
-const APP_BUILD = '2026.08.07-runtime-reset-v24';
+const APP_BUILD = '2026.08.07-stability-v25';
 const SHELL_CACHE = `weekly-time-budget-shell-${APP_BUILD}`;
 // const SHELL_CACHE = 'weekly-time-budget-shell-v16';
 const RUNTIME_CACHE = 'weekly-time-budget-firebase-v2';
