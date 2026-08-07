@@ -182,7 +182,7 @@ export function createStatisticsFeature({
     const changed = presentationSignature(state) !== before;
     if (!changed) return false;
     if (modeChanged) diagnostics.modeChanges += 1;
-    render();
+    render({ force: true });
     if (save) await persist();
     return true;
   }
