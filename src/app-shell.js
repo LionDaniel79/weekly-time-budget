@@ -17,15 +17,22 @@ function setSidebarOpen(open) {
   menu?.setAttribute('aria-expanded', String(Boolean(open)));
 }
 
-function switchView(name, { save = true, force = false } = {}) {
+function ensureViewFeedback(name) {
+  const root = document.querySelector(`#${name}-view`);
+  if (!root || root.childElementCount > 0 || root.textContent.trim()) return;
+  root.innerHTML = '<div class="view-loading" role="status" aria-live="polite">불러오는 중…</div>';
+}
+
+function switchView(name, { save = true, force = false, closeSidebar = true } = {}) {
   const safe = views.includes(name) ? name : 'dashboard';
   const alreadyVisible = activeView === safe
     && !document.querySelector(`#${safe}-view`)?.classList.contains('hidden');
   if (alreadyVisible && !force) {
-    setSidebarOpen(false);
+    if (closeSidebar) setSidebarOpen(false);
     return false;
   }
 
+  ensureViewFeedback(safe);
   views.forEach((view) => document.querySelector(`#${view}-view`)?.classList.toggle('hidden', view !== safe));
   document.querySelectorAll('.nav-button').forEach((button) => {
     const selected = button.dataset.view === safe;
@@ -34,7 +41,7 @@ function switchView(name, { save = true, force = false } = {}) {
   });
   const title = document.querySelector('#page-title');
   if (title) title.textContent = titles[safe] || '대시보드';
-  setSidebarOpen(false);
+  if (closeSidebar) setSidebarOpen(false);
   activeView = safe;
   if (save) {
     document.dispatchEvent(new CustomEvent('weekly-time-budget:save-ui-state', {
@@ -51,7 +58,6 @@ document.addEventListener('click', (event) => {
   const menuButton = event.target.closest?.('#mobile-menu');
   if (menuButton) {
     event.preventDefault();
-    event.stopPropagation();
     const sidebar = document.querySelector('.sidebar');
     setSidebarOpen(!sidebar?.classList.contains('open'));
     return;
@@ -60,12 +66,11 @@ document.addEventListener('click', (event) => {
   const button = event.target.closest?.('.nav-button[data-view]');
   if (!button) return;
   event.preventDefault();
-  event.stopPropagation();
   switchView(button.dataset.view);
-}, true);
+});
 
 document.addEventListener('weekly-time-budget:shell-state', (event) => {
-  switchView(event.detail?.activeView || activeView, { save: false });
+  switchView(event.detail?.activeView || activeView, { save: false, closeSidebar: false });
 });
 
 export { switchView };

@@ -1,6 +1,6 @@
 import { cacheModuleGraph } from './src/service-worker-cache.js';
 
-const APP_BUILD = '2026.08.07-stability-v25';
+const APP_BUILD = '2026.08.07-stability-v26';
 const SHELL_CACHE = `weekly-time-budget-shell-${APP_BUILD}`;
 // const SHELL_CACHE = 'weekly-time-budget-shell-v16';
 const RUNTIME_CACHE = 'weekly-time-budget-firebase-v2';
@@ -12,7 +12,7 @@ const SHELL_URLS = [
   './manifest.webmanifest', './firebase-config.js', './icons/apple-touch-icon.png', './icons/icon-192.png', './icons/icon-512.png',
   './src/category-effective-date.js', './src/goal-domain.js', './src/domain.js', './src/manual-entry.js',
   './src/app.js', './src/app-bootstrap.js', './src/app-data-source.js', './src/app-entry-service.js', './src/app-session-state.js',
-  './src/view-change-events.js', './src/auth-login-guard.js', './src/category-selection-memory.js',
+  './src/auth-login-guard.js', './src/category-selection-memory.js',
   './src/category-delete-guard.js', './src/orphan-local-timer-cleanup.js', './src/previous-results-budget-migration.js',
   './src/local-timer-removal-reload.js', './src/countdown-timer-domain.js', './src/time-budget-domain.js',
   './src/time-budget-ui.js', './src/time-budget-feature.js', './src/record-feature.js', './src/history-feature.js',
