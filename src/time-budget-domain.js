@@ -173,10 +173,10 @@ export function calendarMonthCells(year, month, recordedDates, today) {
   const active = new Set(recordedDates);
   const first = new Date(year, month - 1, 1, 12);
   const last = new Date(year, month, 0, 12);
-  const mondayOffset = (first.getDay() + 6) % 7;
+  const sundayOffset = first.getDay();
   const cells = [];
   for (let index = 0; index < 42; index += 1) {
-    const day = index - mondayOffset + 1;
+    const day = index - sundayOffset + 1;
     if (day < 1 || day > last.getDate()) {
       cells.push({ date: null, day: null, active: false, disabled: true });
       continue;
