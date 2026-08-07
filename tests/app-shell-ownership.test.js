@@ -15,6 +15,6 @@ test('화면 전환과 내비게이션 DOM은 독립 app shell이 소유한다',
   assert.doesNotMatch(app, /function switchView\(/);
   assert.doesNotMatch(app, /\.nav-button|#mobile-menu|#page-title|\.sidebar/);
   assert.match(app, /weekly-time-budget:shell-state/);
-  assert.match(html, /src="\.\/src\/app-shell\.js"/);
+  assert.match(html, /src="\.\/src\/app-shell\.js(?:\?v=\d+)?"/);
   assert.ok(worker.includes('./src/app-shell.js'));
 });
