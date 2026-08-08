@@ -163,6 +163,6 @@ test('일간 요약은 절제 목표와 전체 목표 준수를 계산한다', (
   assert.equal(phone.contributionScore, 0);
   assert.deepEqual(phone.progress, { mode: 'overage', fillPercentage: 33 });
   assert.equal(result.goalComplianceScore, 57);
-  assert.equal(result.totalBudgetMinutes, 420);
-  assert.equal(result.totalActualMinutes, 480);
+  assert.equal(result.totalBudgetMinutes, 240);
+  assert.equal(result.totalActualMinutes, 240);
 });

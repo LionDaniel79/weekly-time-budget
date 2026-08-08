@@ -10,6 +10,10 @@ export function normalizeGoalType(value) {
   return value === GOAL_TYPES.RESTRAINT ? GOAL_TYPES.RESTRAINT : GOAL_TYPES.GROWTH;
 }
 
+export function isIncludedInTimeTotals(goalType) {
+  return normalizeGoalType(goalType) !== GOAL_TYPES.RESTRAINT;
+}
+
 export function categoryDisplayName(category = {}) {
   const name = String(category.name || '').trim();
   if (normalizeGoalType(category.goalType) !== GOAL_TYPES.RESTRAINT) return name;

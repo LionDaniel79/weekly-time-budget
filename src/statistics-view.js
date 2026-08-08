@@ -41,10 +41,13 @@ function mergeCategories(data) {
 }
 
 function achievementText(summary) {
-  if ((Number(summary?.totalBudgetMinutes) || 0) === 0
-      && (Number(summary?.totalActualMinutes) || 0) === 0) return '—';
-  if (summary?.goalComplianceStatus === 'excluded') return '계산 제외';
-  return `${summary?.goalComplianceScore ?? 0}점`;
+  if (summary?.goalComplianceStatus === 'excluded') {
+    if ((Number(summary?.totalBudgetMinutes) || 0) === 0
+        && (Number(summary?.totalActualMinutes) || 0) === 0) return '—';
+    return '계산 제외';
+  }
+  if (summary?.goalComplianceScore === null || summary?.goalComplianceScore === undefined) return '—';
+  return `${summary.goalComplianceScore}점`;
 }
 
 function differenceText(item) {
@@ -207,6 +210,10 @@ function noticeHtml(model) {
   return `<div class="statistics-rescue-banner">${message}</div>`;
 }
 
+function timeTotalsNoteHtml() {
+  return '<p class="muted stat-card-note">※ 시간 합계와 평균은 절제 목표를 제외하여 계산합니다.</p>';
+}
+
 function summaryCardsHtml(model) {
   const summary = model.summary;
   if (!summary) return '';
@@ -253,7 +260,7 @@ function comparisonHtml(model) {
 }
 
 export function renderStatisticsHtml(model) {
-  return `<div data-statistics-feature data-statistics-mode="${model.mode}">${tabsHtml(model)}${controlsHtml(model)}${noticeHtml(model)}${summaryCardsHtml(model)}${categoryTableHtml(model)}${comparisonHtml(model)}</div>`;
+  return `<div data-statistics-feature data-statistics-mode="${model.mode}">${tabsHtml(model)}${controlsHtml(model)}${noticeHtml(model)}${timeTotalsNoteHtml()}${summaryCardsHtml(model)}${categoryTableHtml(model)}${comparisonHtml(model)}</div>`;
 }
 
 export function renderStatisticsFailure({ mode, stage, message }) {

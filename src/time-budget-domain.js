@@ -10,6 +10,7 @@ import {
   calculateGoalContribution,
   calculateGoalProgress,
   categoryDisplayName,
+  isIncludedInTimeTotals,
   normalizeGoalType,
 } from './goal-domain.js';
 import { isCategoryActiveOnDate } from './category-effective-date.js';
@@ -37,6 +38,15 @@ function categoryMinutesInRange(entries, categoryId, start, end) {
       && entry.date <= end
       && isUsableEntry(entry))
     .reduce((sum, entry) => sum + Math.max(0, Number(entry.durationMinutes) || 0), 0);
+}
+
+function aggregateTimeTotals(categorySummaries = []) {
+  return categorySummaries
+    .filter((item) => isIncludedInTimeTotals(item.goalType))
+    .reduce((totals, item) => ({
+      totalBudgetMinutes: totals.totalBudgetMinutes + item.budgetMinutes,
+      totalActualMinutes: totals.totalActualMinutes + item.actualMinutes,
+    }), { totalBudgetMinutes: 0, totalActualMinutes: 0 });
 }
 
 export function removeUnknownCategoryReferences(values = {}, knownCategoryIds = new Set()) {
@@ -219,8 +229,7 @@ export function summarizeDailyCategories({ categories, entries, date, weekDocume
       progress: calculateGoalProgress({ goalType, budgetMinutes: budget.minutes, actualMinutes }),
     };
   });
-  const totalBudgetMinutes = categorySummaries.reduce((sum, item) => sum + item.budgetMinutes, 0);
-  const totalActualMinutes = categorySummaries.reduce((sum, item) => sum + item.actualMinutes, 0);
+  const { totalBudgetMinutes, totalActualMinutes } = aggregateTimeTotals(categorySummaries);
   const compliance = calculateGoalComplianceScore(categorySummaries);
   return {
     totalBudgetMinutes,
@@ -303,8 +312,7 @@ export function summarizeWeeklyEffectiveCategories({
     });
   });
 
-  const totalBudgetMinutes = categorySummaries.reduce((sum, item) => sum + item.budgetMinutes, 0);
-  const totalActualMinutes = categorySummaries.reduce((sum, item) => sum + item.actualMinutes, 0);
+  const { totalBudgetMinutes, totalActualMinutes } = aggregateTimeTotals(categorySummaries);
   const compliance = calculateGoalComplianceScore(categorySummaries);
   const differenceMinutes = totalActualMinutes - totalBudgetMinutes;
   const status = totalBudgetMinutes <= 0

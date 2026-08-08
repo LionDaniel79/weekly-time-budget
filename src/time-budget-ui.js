@@ -162,7 +162,7 @@ function renderSummaryCards(summary, budgetLabel) {
     <article class="card"><p class="muted">목표 준수</p><div class="metric">${goalScoreText(summary)}</div></article>
     <article class="card"><p class="muted">${budgetLabel}</p><div class="metric">${formatMinutes(summary.totalBudgetMinutes)}</div></article>
     <article class="card"><p class="muted">실제 기록</p><div class="metric">${formatMinutes(summary.totalActualMinutes)}</div></article>
-  </div>`;
+  </div><p class="muted">※ 시간 합계와 평균은 절제 목표를 제외하여 계산합니다.</p>`;
 }
 
 function renderCategorySummary(summary) {
