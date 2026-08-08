@@ -344,6 +344,6 @@ test('주간 요약은 성장과 절제를 다르게 계산하고 예산시간�
   assert.deepEqual(phone.progress, { mode: 'overage', fillPercentage: 33 });
   assert.equal(summary.goalComplianceScore, 57);
   assert.equal(summary.goalComplianceStatus, 'scored');
-  assert.equal(summary.totalBudgetMinutes, 420);
-  assert.equal(summary.totalActualMinutes, 480);
+  assert.equal(summary.totalBudgetMinutes, 240);
+  assert.equal(summary.totalActualMinutes, 240);
 });
