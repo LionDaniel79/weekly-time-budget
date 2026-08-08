@@ -4,6 +4,7 @@ import {
   calculateGoalContribution,
   calculateGoalProgress,
   categoryDisplayName,
+  isIncludedInTimeTotals,
   normalizeGoalType,
 } from './goal-domain.js';
 import {
@@ -142,6 +143,15 @@ function categoryGoalSummary(category, budgetMinutes, actualMinutes) {
     contributionScore: calculateGoalContribution(achievement),
     progress: calculateGoalProgress({ goalType, budgetMinutes, actualMinutes }),
   };
+}
+
+function aggregateTimeTotals(categorySummaries = []) {
+  return categorySummaries
+    .filter((item) => isIncludedInTimeTotals(item.goalType))
+    .reduce((totals, item) => ({
+      totalBudgetMinutes: totals.totalBudgetMinutes + item.budgetMinutes,
+      totalActualMinutes: totals.totalActualMinutes + item.actualMinutes,
+    }), { totalBudgetMinutes: 0, totalActualMinutes: 0 });
 }
 
 function totalDifferenceStatus(totalBudgetMinutes, totalActualMinutes) {
@@ -295,8 +305,7 @@ function finalizeBudgetSummary(entries, categoryList, categoryById, budgetById, 
     });
   });
 
-  const totalBudgetMinutes = categorySummaries.reduce((sum, item) => sum + item.budgetMinutes, 0);
-  const totalActualMinutes = categorySummaries.reduce((sum, item) => sum + item.actualMinutes, 0);
+  const { totalBudgetMinutes, totalActualMinutes } = aggregateTimeTotals(categorySummaries);
   const compliance = calculateGoalComplianceScore(categorySummaries);
   const difference = totalDifferenceStatus(totalBudgetMinutes, totalActualMinutes);
   const recordDays = days.size;
@@ -387,8 +396,7 @@ function combineBudgetSummaries(summaries, categories, recordDates) {
     actualMinutes: item.actualMinutes,
     ...categoryGoalSummary(item, item.budgetMinutes, item.actualMinutes),
   }));
-  const totalBudgetMinutes = categorySummaries.reduce((sum, item) => sum + item.budgetMinutes, 0);
-  const totalActualMinutes = categorySummaries.reduce((sum, item) => sum + item.actualMinutes, 0);
+  const { totalBudgetMinutes, totalActualMinutes } = aggregateTimeTotals(categorySummaries);
   const compliance = calculateGoalComplianceScore(categorySummaries);
   const difference = totalDifferenceStatus(totalBudgetMinutes, totalActualMinutes);
   const recordDays = recordDates.size;
