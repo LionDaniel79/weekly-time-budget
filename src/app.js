@@ -1,7 +1,7 @@
 import { createAppBootstrap } from './app-bootstrap.js';
 import { createAppEntryService } from './app-entry-service.js';
 import { createAppSessionState } from './app-session-state.js';
-import { getWeekRange, toDateKey } from './domain.js';
+import { getWeekRange, reorderItems, toDateKey } from './domain.js';
 import { MANUAL_INPUT_MODES } from './manual-entry.js';
 import { getOfflineRuntime, stopOfflineRuntime } from './offline-runtime.js';
 import {
@@ -133,6 +133,17 @@ async function saveCategory({ id, name, goalType }) {
       createdDate: toDateKey(new Date()),
     },
   });
+  await loadData();
+  renderAll();
+}
+
+async function moveCategory(id, direction) {
+  const currentIndex = state.categories.findIndex((category) => category.id === id);
+  const targetIndex = currentIndex + Number(direction);
+  if (currentIndex < 0 || targetIndex < 0 || targetIndex >= state.categories.length) return;
+
+  const reordered = reorderItems(state.categories, id, direction);
+  await dataSource.saveCategoryOrder(state.user.uid, reordered.map((category) => category.id));
   await loadData();
   renderAll();
 }
@@ -305,6 +316,7 @@ function publishCategoryState() {
       onArchive: archiveCategory,
       onRestore: restoreCategory,
       onDelete: deleteCategory,
+      onMove: moveCategory,
     },
   }));
 }

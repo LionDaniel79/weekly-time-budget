@@ -94,6 +94,19 @@ export function createAppDataSource({ firebase, db }) {
       return created.id;
     },
 
+    async saveCategoryOrder(userId, orderedCategoryIds = []) {
+      if (!orderedCategoryIds.length) return;
+      const batch = firebase.writeBatch(db);
+      orderedCategoryIds.forEach((categoryId, index) => {
+        batch.set(
+          userDocument(userId, 'categories', categoryId),
+          { order: index + 1 },
+          { merge: true },
+        );
+      });
+      await batch.commit();
+    },
+
     async archiveCategory(userId, categoryId) {
       const activeRef = userDocument(userId, 'categories', categoryId);
       const snapshot = await firebase.getDoc(activeRef);

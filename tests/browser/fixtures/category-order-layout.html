@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar"><div><p class="eyebrow">TIME BUDGET</p><h2>나의 시간 연구</h2></div></aside>
+    <main class="main-content">
+      <section id="categories-view"></section>
+    </main>
+  </div>
+  <template id="empty-template"><div class="empty-state">비어 있음</div></template>
+  <script type="module">
+    import '/src/category-feature.js';
+
+    const categories = [
+      ['prayer', '기도'],
+      ['bible', '성경'],
+      ['exercise', '운동'],
+      ['ministry', '사역'],
+      ['family', '가족'],
+      ['thesis', '논문'],
+      ['spiritual-reading', '영적독서'],
+      ['counseling-reading', '상담독서'],
+      ['general-reading', '일반독서'],
+      ['video', '영상', 'restraint'],
+      ['drawing', '그림'],
+    ].map(([id, name, goalType], index) => ({ id, name, goalType, order: index + 1 }));
+
+    const moves = [];
+    document.dispatchEvent(new CustomEvent('weekly-time-budget:category-state', {
+      detail: {
+        categories,
+        archivedCategories: [],
+        onSave: async () => {},
+        onArchive: async () => {},
+        onRestore: async () => {},
+        onDelete: async () => {},
+        onMove: async (id, direction) => { moves.push({ id, direction }); },
+      },
+    }));
+
+    globalThis.__categoryHarness = {
+      ready: true,
+      moves,
+    };
+  </script>
+</body>
+</html>

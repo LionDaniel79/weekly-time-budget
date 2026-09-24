@@ -56,16 +56,19 @@ h1,h2,h3,p { margin-top: 0; }
 .empty-state { text-align: center; padding: 48px 20px; }
 .category-management-layout { display: grid; grid-template-columns: minmax(0,1fr); gap: 18px; }
 .category-list { display: grid; gap: 10px; }
-.category-item { display: grid; grid-template-columns: minmax(0,1fr) 110px auto; gap: 10px; align-items: center; }
+.category-item { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 10px; align-items: center; }
 .muted { color: #75827d; }
 .section-title { display: flex; justify-content: space-between; align-items: center; gap: 14px; margin-bottom: 14px; }
 .time-fields { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; }
-.category-edit-row { grid-template-columns: minmax(0,1fr) 120px auto; }
+.category-edit-row { grid-template-columns: minmax(220px,1fr) auto; }
 .category-edit-row input { width: 100%; min-width: 0; border: 1px solid #cdd5d0; border-radius: 10px; padding: 10px; background: #fff; }
 .bulk-save-actions { display: flex; justify-content: flex-end; margin-top: 18px; padding-top: 16px; border-top: 1px solid #e5e6df; }
 .bulk-save-actions .primary-button { min-width: 120px; }
-.category-row-actions { display: flex; gap: 8px; align-items: center; white-space: nowrap; }
-.category-row-actions .secondary-button,.category-row-actions .danger-button { padding: 10px 14px; }
+.category-row-actions { display: flex; gap: 8px; align-items: center; justify-content: flex-end; min-width: 0; white-space: nowrap; }
+.category-row-actions .secondary-button,.category-row-actions .danger-button { padding: 10px 12px; }
+.category-order-actions { display: inline-flex; gap: 4px; flex: 0 0 auto; }
+.category-order-button { width: 40px; min-width: 40px; min-height: 40px; border: 1px solid #ccd4cf; border-radius: 12px; padding: 0; background: #fff; color: #173b33; font-weight: 900; cursor: pointer; }
+.category-order-button:disabled { opacity: .35; cursor: not-allowed; }
 .category-update:disabled { opacity: .65; cursor: wait; }
 
 .dashboard-tabs,.time-budget-tabs { margin-bottom: 18px; }
@@ -100,6 +103,10 @@ h1,h2,h3,p { margin-top: 0; }
   .daily-dashboard-layout { grid-template-columns: 1fr; }
   .record-calendar { max-width: 100%; }
 }
+@media(max-width:880px) {
+  .category-edit-row { grid-template-columns: minmax(0,1fr); }
+  .category-row-actions { grid-column: 1; flex-wrap: wrap; }
+}
 @media(max-width:800px) {
   .app-shell { display: block; }
   .sidebar { position: fixed; z-index: 10; width: 250px; transform: translateX(-100%); transition: .2s; }
@@ -111,8 +118,8 @@ h1,h2,h3,p { margin-top: 0; }
   .entry { grid-template-columns: 90px minmax(0,1fr); }
   .entry .entry-actions { grid-column: 2; }
   .login-card { padding: 30px 24px; }
-  .category-item { grid-template-columns: minmax(0,1fr) 90px; }
-  .category-edit-row { grid-template-columns: minmax(0,1fr) 90px; }
+  .category-item { grid-template-columns: minmax(0,1fr) auto; }
+  .category-edit-row { grid-template-columns: minmax(0,1fr); }
   .time-fields { grid-template-columns: 1fr 1fr; }
   .bulk-save-actions { justify-content: stretch; }
   .bulk-save-actions .primary-button { width: 100%; }
